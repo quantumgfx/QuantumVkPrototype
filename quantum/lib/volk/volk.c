@@ -1,36 +1,3 @@
-Skip to content
-Search or jump to…
-
-Pull requests
-Issues
-Marketplace
-Explore
-
-@timith
-zeux
-/
-volk
-27
-413
-34
-Code
-Issues
-Pull requests
-Actions
-Projects
-Wiki
-Security
-Insights
-volk / volk.c
-@zeux
-zeux Update to 1.2.146
-…
-Latest commit 79c7627 28 days ago
-History
-8 contributors
-@zeux@tobine@Valakor@zmichaels11@Themaister@jkunstwald@ibriano@lostgoat
-1901 lines(1869 sloc)  139 KB
-
 /* This file is part of volk library; see volk.h for version/license details */
 /* clang-format off */
 #include "volk.h"
@@ -1932,15 +1899,3 @@ extern "C" {
 }
 #endif
 /* clang-format on */
-© 2020 GitHub, Inc.
-Terms
-Privacy
-Security
-Status
-Help
-Contact GitHub
-Pricing
-API
-Training
-Blog
-About

@@ -9,13 +9,19 @@ project "QuantumVk"
 	
 	includedirs
 	{
-		"quantum"
+		"quantum",
+		"$(VULKAN_SDK)/Include"
 	}
 
 	files
 	{
 		"quantum/**.hpp",
 		"quantum/**.cpp"
+	}
+
+	libdirs
+	{
+		"$(VULKAN_SDK)/Lib"
 	}
 
 	defines "VK_NO_PROTOTYPES"
