@@ -1,0 +1,6 @@
+[submodule "extern/SPIRV-Cross"]
+	path = extern/SPIRV-Cross
+	url = https://github.com/timith/SPIRV-Cross.git
+[submodule "extern/rapidjson"]
+	path = extern/rapidjson
+	url = https://github.com/timith/rapidjson.git

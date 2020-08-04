@@ -2,7 +2,7 @@
 
 // NOTE: The Vulkan symbols are function pointers and are provided by the "volk" project.
 
-#include "lib/volk/volk.h"
+#include "extern/volk/volk.h"
 #include <cstdlib>
 #include <stdexcept>
 

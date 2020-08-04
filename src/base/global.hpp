@@ -1,6 +1,6 @@
 #pragma once
 
-#include <lib/volk/volk.h>
+#include <extern/volk/volk.h>
 
 #include <vector>
 

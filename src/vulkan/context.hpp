@@ -81,7 +81,7 @@ namespace Vulkan
 	// - Setting up VkQueues for graphics, compute and transfer.
 	// - Setting up validation layers.
 	// - Creating debug callbacks.
-	class Context 
+	class Context
 	{
 	public:
 
@@ -101,9 +101,10 @@ namespace Vulkan
 			ContextCreationFlags flags = 0);
 
 
-		Context() = default;
 		Context(const Context&) = delete;
 		void operator=(const Context&) = delete;
+
+		Context();
 
 		~Context();
 
@@ -179,7 +180,7 @@ namespace Vulkan
 
 		const DeviceFeatures& GetEnabledDeviceFeatures() const
 		{
-			return ext;
+			return *ext;
 		}
 
 		static const VkApplicationInfo& GetApplicationInfo(bool supports_vulkan_11_instance, bool supports_vulkan_12_instance);
@@ -199,7 +200,7 @@ namespace Vulkan
 
 		const VolkDeviceTable& GetDeviceTable() const
 		{
-			return device_table;
+			return *device_table;
 		}
 
 	private:
@@ -207,7 +208,6 @@ namespace Vulkan
 		VkDevice device = VK_NULL_HANDLE;
 		VkInstance instance = VK_NULL_HANDLE;
 		VkPhysicalDevice gpu = VK_NULL_HANDLE;
-		VolkDeviceTable device_table = {};
 
 		VkPhysicalDeviceProperties gpu_props = {};
 		VkPhysicalDeviceMemoryProperties mem_props = {};
@@ -221,6 +221,10 @@ namespace Vulkan
 		uint32_t timestamp_valid_bits = 0;
 		unsigned num_thread_indices = 1;
 
+		//These classes are simply too big to contain within context
+		VolkDeviceTable* device_table;
+		DeviceFeatures* ext;
+
 		bool CreateInstance(const char** instance_ext, uint32_t instance_ext_count);
 		bool CreateDevice(VkPhysicalDevice gpu_, VkSurfaceKHR surface, const char** required_device_extensions,
 			unsigned num_required_device_extensions, const char** required_device_layers,
@@ -229,7 +233,6 @@ namespace Vulkan
 
 		bool owned_instance = false;
 		bool owned_device = false;
-		DeviceFeatures ext;
 
 #ifdef VULKAN_DEBUG
 		VkDebugReportCallbackEXT debug_callback = VK_NULL_HANDLE;
@@ -240,7 +243,6 @@ namespace Vulkan
 		void Destroy();
 		void CheckDescriptorIndexFeatures();
 		bool force_no_validation = false;
-
 
 	};
 }
