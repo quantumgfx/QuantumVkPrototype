@@ -1,8 +1,6 @@
-
 #include <quantumvk.hpp>
 
 #include <iostream>
-
 
 int main() 
 {
@@ -15,6 +13,5 @@ int main()
 		Vulkan::Context context;
 
 		context.InitInstanceAndDevice(nullptr, 0, nullptr, 0);
-		//Vulkan::Tester test;
 	}
 }

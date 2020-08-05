@@ -2,8 +2,6 @@
 
 #include "utils/intrusive.hpp"
 
-#pragma once
-
 #include "utils/intrusive.hpp"
 #include "utils/object_pool.hpp"
 #include "utils/intrusive_hash_map.hpp"

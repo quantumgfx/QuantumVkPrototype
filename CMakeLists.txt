@@ -33,6 +33,10 @@ macro(set_sln_folder target folder)
 	endif()
 endmacro()
 
+macro(override_option setting value)
+	set(${setting} ${value} CACHE INTERNAL "" FORCE)
+endmacro()
+
 # global project stuff
 # put cmake build stuff in there own groups
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -47,9 +51,14 @@ if (${CMAKE_VERSION} VERSION_GREATER "3.13.0")
    cmake_policy(SET CMP0077 NEW)
 endif()
 
+# Get Default vulkan sdk directory
+set(DEFAULT_VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
+# set(QM_VULKAN_FOSSILIZE ON)
+
 # Options
 option(QM_VULKAN_MT "Make QuantumVk thread-safe." ON)
-# option(QM_VULKAN_FOSSILIZE "Enable support for Fossilize." OFF)
+option(QM_VULKAN_FOSSILIZE "Enable fossilize" ON)
+set(VULKAN_SDK_DIR ${DEFAULT_VULKAN_SDK_DIR} CACHE PATH "Directory of vulkan SDK")
 # ------------------------------
 
 # -----------Volk---------------
@@ -60,8 +69,8 @@ if (NOT WIN32)
 endif()
 
 target_include_directories(volk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/extern/volk)
-target_include_directories(volk PUBLIC "$ENV{VULKAN_SDK}/Include")
-set_target_properties(volk PROPERTIES FOLDER Dependencies)
+target_include_directories(volk PUBLIC "${VULKAN_SDK_DIR}/Include")
+set_sln_folder(volk Dependencies)
 
 if (WIN32)
     target_compile_definitions(volk PRIVATE VK_USE_PLATFORM_WIN32_KHR)
@@ -70,40 +79,39 @@ endif()
 
 # --------SPIRV-Cross------------
 # override spirv settings
-set(SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS OFF CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_SHARED OFF CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_STATIC ON CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_CLI OFF CACHE INTERNAL "" FORCE)
+override_option(SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS OFF)
+override_option(SPIRV_CROSS_SHARED OFF)
+override_option(SPIRV_CROSS_STATIC ON)
+override_option(SPIRV_CROSS_CLI OFF)
 
-set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_ENABLE_GLSL ON CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_ENABLE_HLSL ON CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_ENABLE_MSL ON CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_ENABLE_CPP ON CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_ENABLE_REFLECT ON CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_ENABLE_C_API OFF CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_ENABLE_UTIL ON CACHE INTERNAL "" FORCE)
+override_option(SPIRV_CROSS_ENABLE_TESTS OFF)
+override_option(SPIRV_CROSS_ENABLE_GLSL ON)
+override_option(SPIRV_CROSS_ENABLE_HLSL ON)
+override_option(SPIRV_CROSS_ENABLE_MSL ON)
+override_option(SPIRV_CROSS_ENABLE_CPP ON)
+override_option(SPIRV_CROSS_ENABLE_REFLECT ON)
+override_option(SPIRV_CROSS_ENABLE_C_API OFF)
+override_option(SPIRV_CROSS_ENABLE_UTIL ON)
 
-set(SPIRV_CROSS_SANITIZE_ADDRESS OFF CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_SANITIZE_MEMORY OFF CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_SANITIZE_THREADS OFF CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_SANITIZE_UNDEFINED OFF CACHE INTERNAL "" FORCE)
+override_option(SPIRV_CROSS_SANITIZE_ADDRESS OFF)
+override_option(SPIRV_CROSS_SANITIZE_MEMORY OFF)
+override_option(SPIRV_CROSS_SANITIZE_THREADS OFF)
+override_option(SPIRV_CROSS_SANITIZE_UNDEFINED OFF)
 
-set(SPIRV_CROSS_NAMESPACE_OVERRIDE "" CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_FORCE_STL_TYPES OFF CACHE INTERNAL "" FORCE)
+override_option(SPIRV_CROSS_NAMESPACE_OVERRIDE "")
+override_option(SPIRV_CROSS_FORCE_STL_TYPES OFF)
 
-set(SPIRV_CROSS_SKIP_INSTALL ON CACHE INTERNAL "" FORCE)
+override_option(SPIRV_CROSS_SKIP_INSTALL ON)
 
-set(SPIRV_CROSS_WERROR OFF CACHE INTERNAL "" FORCE)
-set(SPIRV_CROSS_MISC_WARNINGS OFF CACHE INTERNAL "" FORCE)
-
-set(SPIRV_CROSS_FORCE_PIC OFF CACHE INTERNAL "" FORCE)
+override_option(SPIRV_CROSS_WERROR OFF)
+override_option(SPIRV_CROSS_MISC_WARNINGS OFF)
+override_option(SPIRV_CROSS_FORCE_PIC OFF)
 
 # Sets to not found. These are only used if testing is enabled, which it isn't.
-set(spirv-cross-glslang "NOTFOUND" CACHE INTERNAL "" FORCE)
-set(spirv-cross-spirv-as "NOTFOUND" CACHE INTERNAL "" FORCE)
-set(spirv-cross-spirv-val "NOTFOUND" CACHE INTERNAL "" FORCE)
-set(spirv-cross-spirv-opt "NOTFOUND" CACHE INTERNAL "" FORCE)
+override_option(spirv-cross-glslang "NOTFOUND")
+override_option(spirv-cross-spirv-as "NOTFOUND")
+override_option(spirv-cross-spirv-val "NOTFOUND")
+override_option(spirv-cross-spirv-opt "NOTFOUND")
 
 add_subdirectory(extern/SPIRV-Cross EXCLUDE_FROM_ALL)
 
@@ -115,7 +123,23 @@ set_sln_folder(spirv-cross-hlsl SPIRV-Cross)
 set_sln_folder(spirv-cross-msl SPIRV-Cross)
 set_sln_folder(spirv-cross-reflect SPIRV-Cross)
 set_sln_folder(spirv-cross-util SPIRV-Cross)
-# set_target_properties(spirv-cross-core PROPERTIES FOLDER Dependencies)
+# -------------------------------
+
+# ---------Fossilize-------------
+if (QM_VULKAN_FOSSILIZE)
+	override_option(FOSSILIZE_MSVC_ANALYZE OFF)
+	override_option(FOSSILIZE_ENABLE_EXCEPTIONS OFF)
+	override_option(FOSSILIZE_SANITIZE_ADDRESS OFF)
+	override_option(FOSSILIZE_SANITIZE_THREADS OFF)
+	override_option(FOSSILIZE_VULKAN_LAYER OFF)
+	override_option(FOSSILIZE_RAPIDJSON_INCLUDE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/extern/rapidjson/include")
+	override_option(FOSSILIZE_VULKAN_INCLUDE_PATH "${VULKAN_SDK_DIR}/Include/vulkan")
+	override_option(FOSSILIZE_CLI OFF)
+	override_option(FOSSILIZE_TESTS OFF)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/extern/fossilize EXCLUDE_FROM_ALL)
+	set_sln_folder(fossilize Dependencies)
+	set_sln_folder(miniz Dependencies)
+endif()
 # -------------------------------
 
 set(QM_VK_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -124,15 +148,16 @@ set(QM_VK_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_library(QuantumVk STATIC)
 set_static_lib_output_dir(QuantumVk ${CMAKE_CURRENT_SOURCE_DIR}/bin/QuantumVk)
 # Include Directories
-target_include_directories(QuantumVk PUBLIC "$ENV{VULKAN_SDK}/Include")
+target_include_directories(QuantumVk PUBLIC "${VULKAN_SDK_DIR}/Include")
 target_include_directories(QuantumVk PUBLIC ${QM_VK_INCLUDE_DIR})
 target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/extern)
 
 # target_compile_options(QuantumVk PRIVATE ${QM_CXX_FLAGS})
 
 # libraries that QuantumVk links to
-target_link_libraries(QuantumVk PUBLIC volk PRIVATE spirv-cross-core)
-# target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
+target_link_libraries(QuantumVk PUBLIC volk)
+target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
 
 # Src Directories
 set(QM_BASE_DIR src/base)
@@ -186,6 +211,12 @@ if (QM_VULKAN_MT)
 	target_sources(QuantumVk PRIVATE ${QM_VK_DIR}/thread_id.hpp ${QM_VK_DIR}/thread_id.cpp)
 endif()
 
+if (QM_VULKAN_FOSSILIZE)
+    target_compile_definitions(QuantumVk PUBLIC QM_VULKAN_FOSSILIZE)
+    # target_sources(QuantumVk PRIVATE vulkan/device_fossilize.cpp)
+	target_link_libraries(QuantumVk PUBLIC fossilize)
+endif()
+
 if (${CMAKE_BUILD_TYPE} MATCHES "Debug")
     target_compile_definitions(QuantumVk PUBLIC VULKAN_DEBUG)
 endif()
@@ -195,6 +226,7 @@ if (WIN32)
 	target_compile_definitions(QuantumVk PRIVATE VK_USE_PLATFORM_WIN32_KHR)
 endif()
 	
+target_compile_options(QuantumVk PRIVATE ${QM_CXX_FLAGS})
 # --------------------------------
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/tests/example)
