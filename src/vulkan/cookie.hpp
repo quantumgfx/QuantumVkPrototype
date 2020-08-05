@@ -8,6 +8,7 @@ namespace Vulkan
 {
 	class Device;
 
+	//Allows Object to be hashed/comparied easily I think
 	class Cookie
 	{
 	public:

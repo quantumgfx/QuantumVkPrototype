@@ -597,18 +597,18 @@ namespace Vulkan
 		if (compute_queue_family == VK_QUEUE_FAMILY_IGNORED)
 		{
 			compute_queue_family = graphics_queue_family;
-			compute_queue_index = queue_props[graphics_queue_family].queueCount - 1 < universal_queue_index ? queue_props[graphics_queue_family].queueCount - 1 : universal_queue_index;
+			compute_queue_index = std::min(queue_props[graphics_queue_family].queueCount - 1, universal_queue_index);
 			universal_queue_index++;
 		}
 
 		if (transfer_queue_family == VK_QUEUE_FAMILY_IGNORED)
 		{
 			transfer_queue_family = graphics_queue_family;
-			transfer_queue_index = queue_props[graphics_queue_family].queueCount - 1 < universal_queue_index ? queue_props[graphics_queue_family].queueCount - 1 : universal_queue_index;
+			transfer_queue_index = std::min(queue_props[graphics_queue_family].queueCount - 1, universal_queue_index);
 			universal_queue_index++;
 		}
 		else if (transfer_queue_family == compute_queue_family)
-			transfer_queue_index = queue_props[compute_queue_family].queueCount - 1 < 1u ? queue_props[compute_queue_family].queueCount - 1 : 1u;
+			transfer_queue_index = std::min(queue_props[compute_queue_family].queueCount - 1, 1u);
 
 		static const float graphics_queue_prio = 0.5f;
 		static const float compute_queue_prio = 1.0f;
@@ -623,7 +623,8 @@ namespace Vulkan
 
 		queue_info[queue_family_count].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queue_info[queue_family_count].queueFamilyIndex = graphics_queue_family;
-		queue_info[queue_family_count].queueCount = universal_queue_index < queue_props[graphics_queue_family].queueCount ? universal_queue_index : queue_props[graphics_queue_family].queueCount;
+		//Make sure queueCount doesn't excede max queueCount
+		queue_info[queue_family_count].queueCount = std::min(universal_queue_index, queue_props[graphics_queue_family].queueCount);
 		queue_info[queue_family_count].pQueuePriorities = prio;
 		queue_family_count++;
 
@@ -631,8 +632,7 @@ namespace Vulkan
 		{
 			queue_info[queue_family_count].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 			queue_info[queue_family_count].queueFamilyIndex = compute_queue_family;
-			uint32_t prefferedQueueCount = transfer_queue_family == compute_queue_family ? 2u : 1u;
-			queue_info[queue_family_count].queueCount = prefferedQueueCount < queue_props[compute_queue_family].queueCount ? prefferedQueueCount : queue_props[compute_queue_family].queueCount;
+			queue_info[queue_family_count].queueCount = std::min(compute_queue_family ? 2u : 1u, queue_props[compute_queue_family].queueCount);
 			queue_info[queue_family_count].pQueuePriorities = prio + 1;
 			queue_family_count++;
 		}

@@ -172,6 +172,7 @@ target_sources(QuantumVk PRIVATE
 	
 	${QM_UTILS_DIR}/aligned_alloc.cpp
 	${QM_UTILS_DIR}/aligned_alloc.hpp
+	${QM_UTILS_DIR}/bitops.hpp
 	${QM_UTILS_DIR}/compile_time_hash.hpp
 	${QM_UTILS_DIR}/enum_cast.hpp
 	${QM_UTILS_DIR}/hash.hpp
@@ -190,6 +191,7 @@ target_sources(QuantumVk PRIVATE
 	${QM_UTILS_DIR}/timer.hpp
 	${QM_UTILS_DIR}/variant.hpp
 	
+	${QM_VK_DIR}/buffer.hpp
 	${QM_VK_DIR}/context.cpp
 	${QM_VK_DIR}/context.hpp
 	${QM_VK_DIR}/command_pool.hpp
@@ -197,12 +199,22 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/device.hpp
 	${QM_VK_DIR}/fence.hpp
 	${QM_VK_DIR}/format.hpp
+	${QM_VK_DIR}/image.hpp
 	${QM_VK_DIR}/limits.hpp
+	${QM_VK_DIR}/memory_allocator.hpp
+	${QM_VK_DIR}/pipeline_event.hpp
+	${QM_VK_DIR}/query_pool.hpp
+	${QM_VK_DIR}/sampler.hpp
+	${QM_VK_DIR}/semaphore.hpp
+	${QM_VK_DIR}/shader.hpp
 	${QM_VK_DIR}/quirks.hpp
 	${QM_VK_DIR}/texture_format.cpp
 	${QM_VK_DIR}/texture_format.hpp
 	${QM_VK_DIR}/vulkan_common.hpp
 	${QM_VK_DIR}/vulkan_headers.hpp
+	
+	${QM_VK_DIR}/managers/fence_manager.hpp
+	${QM_VK_DIR}/managers/semaphore_manager.hpp
 	
 	src/quantumvk.hpp)
 	
