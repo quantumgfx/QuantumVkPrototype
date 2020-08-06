@@ -163,6 +163,7 @@ target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
 set(QM_BASE_DIR src/base)
 set(QM_UTILS_DIR src/utils)
 set(QM_VK_DIR src/vulkan)
+set(QM_THREADING_DIR src/threading)
 
 target_sources(QuantumVk PRIVATE 
 	${QM_BASE_DIR}/base.cpp
@@ -192,11 +193,14 @@ target_sources(QuantumVk PRIVATE
 	${QM_UTILS_DIR}/variant.hpp
 	
 	${QM_VK_DIR}/buffer.hpp
+	${QM_VK_DIR}/buffer_pool.hpp
 	${QM_VK_DIR}/context.cpp
 	${QM_VK_DIR}/context.hpp
+	${QM_VK_DIR}/command_buffer.hpp
 	${QM_VK_DIR}/command_pool.hpp
 	${QM_VK_DIR}/cookie.hpp
 	${QM_VK_DIR}/device.hpp
+	${QM_VK_DIR}/descriptor_set.hpp
 	${QM_VK_DIR}/fence.hpp
 	${QM_VK_DIR}/format.hpp
 	${QM_VK_DIR}/image.hpp
@@ -204,6 +208,7 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/memory_allocator.hpp
 	${QM_VK_DIR}/pipeline_event.hpp
 	${QM_VK_DIR}/query_pool.hpp
+	${QM_VK_DIR}/render_pass.hpp
 	${QM_VK_DIR}/sampler.hpp
 	${QM_VK_DIR}/semaphore.hpp
 	${QM_VK_DIR}/shader.hpp
@@ -213,6 +218,7 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/vulkan_common.hpp
 	${QM_VK_DIR}/vulkan_headers.hpp
 	
+	${QM_VK_DIR}/managers/event_manager.hpp
 	${QM_VK_DIR}/managers/fence_manager.hpp
 	${QM_VK_DIR}/managers/semaphore_manager.hpp
 	
@@ -220,12 +226,12 @@ target_sources(QuantumVk PRIVATE
 	
 if (QM_VULKAN_MT)
     target_compile_definitions(QuantumVk PUBLIC QM_VULKAN_MT)
-	target_sources(QuantumVk PRIVATE ${QM_VK_DIR}/thread_id.hpp ${QM_VK_DIR}/thread_id.cpp)
+	target_sources(QuantumVk PRIVATE ${QM_THREADING_DIR}/thread_id.hpp ${QM_THREADING_DIR}/thread_id.cpp)
 endif()
 
 if (QM_VULKAN_FOSSILIZE)
     target_compile_definitions(QuantumVk PUBLIC QM_VULKAN_FOSSILIZE)
-    # target_sources(QuantumVk PRIVATE vulkan/device_fossilize.cpp)
+    target_sources(QuantumVk PRIVATE ${QM_VK_DIR}/device_fossilize.cpp ${QM_THREADING_DIR}/thread_group.hpp ${QM_THREADING_DIR}/thread_group.cpp)
 	target_link_libraries(QuantumVk PUBLIC fossilize)
 endif()
 
