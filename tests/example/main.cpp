@@ -10,8 +10,8 @@ int main()
 		std::cout << "Initing Vulkan loader usuccessful\n";
 
 	{
-		Vulkan::Context context;
+		Vulkan::ContextHandle context = Vulkan::Context::Create();
 
-		context.InitInstanceAndDevice(nullptr, 0, nullptr, 0);
+		context->InitInstanceAndDevice(nullptr, 0, nullptr, 0);
 	}
 }

@@ -420,6 +420,13 @@ namespace Vulkan
 		General
 	};
 
+	class Image;
+
+	struct ImageDeleter
+	{
+		void operator()(Image* image);
+	};
+
 	//Ref counted vkImage and vmaAllocation wrapper
 	class Image : public Util::IntrusivePtrEnabled<Image, ImageDeleter, HandleCounter>, public Cookie, public InternalSyncEnabled
 	{
@@ -601,8 +608,7 @@ namespace Vulkan
 
 	private:
 		friend class Util::ObjectPool<LinearHostImage>;
-		LinearHostImage(Device* device, ImageHandle gpu_image, Util::IntrusivePtr<Buffer> cpu_image,
-			VkPipelineStageFlags stages);
+		LinearHostImage(Device* device, ImageHandle gpu_image, Util::IntrusivePtr<Buffer> cpu_image, VkPipelineStageFlags stages);
 		Device* device;
 		ImageHandle gpu_image;
 		Util::IntrusivePtr<Buffer> cpu_image;

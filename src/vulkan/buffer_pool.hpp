@@ -7,9 +7,12 @@
 
 namespace Vulkan
 {
+	//Forward declare device
 	class Device;
+	//Forward declare buffer
 	class Buffer;
 
+	//A suballocation into a BufferBlock
 	struct BufferBlockAllocation
 	{
 		uint8_t* host;
@@ -17,6 +20,7 @@ namespace Vulkan
 		VkDeviceSize padded_size;
 	};
 
+	//A buffer visible on both the cpu and gpu that can be suballocated from
 	struct BufferBlock
 	{
 		~BufferBlock();
@@ -28,7 +32,8 @@ namespace Vulkan
 		VkDeviceSize spill_size = 0;
 		uint8_t* mapped = nullptr;
 
-		BufferBlockAllocation allocate(VkDeviceSize allocate_size)
+		//Suballocate from buffer block
+		BufferBlockAllocation Allocate(VkDeviceSize allocate_size)
 		{
 			auto aligned_offset = (offset + alignment - 1) & ~(alignment - 1);
 			if (aligned_offset + allocate_size <= size)
@@ -46,6 +51,7 @@ namespace Vulkan
 		}
 	};
 
+	//A Pool of BufferBlocks
 	class BufferPool
 	{
 	public:
@@ -63,7 +69,9 @@ namespace Vulkan
 			return block_size;
 		}
 
+		//Request a new block of a certain size
 		BufferBlock request_block(VkDeviceSize minimum_size);
+		//Recycle an old unused block
 		void recycle_block(BufferBlock&& block);
 
 	private:

@@ -34,40 +34,46 @@ namespace Vulkan
 
 	struct DeviceAllocation
 	{
-		VmaAllocation vmaAllocation = VK_NULL_HANDLE;
+		VmaAllocation vma_allocation = VK_NULL_HANDLE;
+		VkDeviceSize size = 0;
+		uint32_t mem_type = 0;
+		mutable uint8_t* host_base = nullptr;
+		bool persistantly_mapped = false;
 	};
+
+	inline bool HasMemoryPropertyFlags(const DeviceAllocation& alloc, const VkPhysicalDeviceMemoryProperties& mem_props, VkMemoryPropertyFlags flags)
+	{
+		return mem_props.memoryTypes[alloc.mem_type].propertyFlags & flags;
+	}
 
 	class DeviceAllocator
 	{
 	public:
 
+		//Inits and creates the device allocator
 		void Init(Device* device);
-
+		//Cleans up the device allocator
 		~DeviceAllocator();
 
 		//Allocate Memory for new buffer, create the buffer and bind the memory to it
 		bool AllocateBuffer(const VkBufferCreateInfo& buffer_create_info, const VmaAllocationCreateInfo& mem_alloc_create_info, VkBuffer* buffer, DeviceAllocation* allocation);
 		//Allocate Memory for new image, create the image, and bind the memory to it
-		bool AllocateImage(const VkImageCreateInfo& buffer_create_info, const VmaAllocationCreateInfo& mem_alloc_create_info, VkImage* image, DeviceAllocation* allocation);
+		bool AllocateImage(VkDeviceSize size, const VkImageCreateInfo& image_create_info, const VmaAllocationCreateInfo& mem_alloc_create_info, VkImage* image, DeviceAllocation* allocation);
 
 		//Destroy and Free Buffer
-		void FreeBuffer(VkBuffer buffer, DeviceAllocation allocation);
+		void FreeBuffer(VkBuffer buffer, const DeviceAllocation& allocation);
 		//Destroy and Free Image
-		void FreeImage(VkImage image, DeviceAllocation allocation);
+		void FreeImage(VkImage image, const DeviceAllocation& allocation);
 
 		//Map Allocation memory
-		void MapMemory(const DeviceAllocation& alloc, void** p_data);
+		void* MapMemory(const DeviceAllocation& alloc, MemoryAccessFlags flags);
 		//Unmap Allocation memory
-		void UnmapMemory(const DeviceAllocation& alloc);
-
-		//Invalidate memory
-		void InvalidateMemory(const DeviceAllocation& alloc, VkDeviceSize offset, VkDeviceSize size);
-		//Flush memory
-		void FlushMemory(const DeviceAllocation& alloc, VkDeviceSize offset, VkDeviceSize size);
+		void UnmapMemory(const DeviceAllocation& alloc, MemoryAccessFlags flags);
 
 	private:
 
-		VmaAllocator allocator;
+		VmaAllocator allocator = VK_NULL_HANDLE;
+		VkPhysicalDeviceMemoryProperties mem_props{};
 #ifdef QM_VULKAN_MT
 		std::mutex m_mutex;
 #endif

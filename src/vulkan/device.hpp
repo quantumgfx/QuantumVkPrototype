@@ -38,11 +38,13 @@
 
 #ifdef QM_VULKAN_FOSSILIZE
 #include "fossilize.hpp"
-#include "threading/thread_group.hpp"
 #endif
+
+#include "threading/thread_group.hpp"
 
 #include "quirks.hpp"
 #include "utils/small_vector.hpp"
+#include "utils/retained_heap_data.hpp"
 
 namespace Vulkan
 {
@@ -84,8 +86,7 @@ namespace Vulkan
 			int32_t s32;
 			float f32;
 		};
-		virtual void message(const std::string& tag, uint32_t x, uint32_t y, uint32_t z,
-			uint32_t code, uint32_t word_count, const Word* words) = 0;
+		virtual void message(const std::string& tag, uint32_t x, uint32_t y, uint32_t z, uint32_t code, uint32_t word_count, const Word* words) = 0;
 	};
 
 	class Device
@@ -139,7 +140,9 @@ namespace Vulkan
 		Device(Device&&) = delete;
 
 		// Only called by main thread, during setup phase.
-		void SetContext(const Context& context);
+		void SetContext(const ContextHandle& context);
+		void SetContext(const ContextHandle& context, void* pipeline_state_data, size_t pipeline_state_size);
+
 		void InitSwapchain(const std::vector<VkImage>& swapchain_images, unsigned width, unsigned height, VkFormat format);
 		void InitExternalSwapchain(const std::vector<ImageHandle>& swapchain_images);
 		void InitFrameContexts(unsigned count);
@@ -183,33 +186,46 @@ namespace Vulkan
 
 		void Submit(CommandBufferHandle& cmd, Fence* fence = nullptr, unsigned semaphore_count = 0, Semaphore* semaphore = nullptr);
 		void SubmitEmpty(CommandBuffer::Type type,  Fence* fence = nullptr,unsigned semaphore_count = 0, Semaphore* semaphore = nullptr);
+		//Adds a wait semaphore to the next submit
 		void AddWaitSemaphore(CommandBuffer::Type type, Semaphore semaphore, VkPipelineStageFlags stages, bool flush);
 		CommandBuffer::Type GetPhysicalQueueType(CommandBuffer::Type queue_type) const;
 		void RegisterTimeInterval(std::string tid, QueryPoolHandle start_ts, QueryPoolHandle end_ts, std::string tag, std::string extra = {});
 
-		// Request shaders and programs. These objects are owned by the Device.
+		//All request commands either create a new object if it has never been created before, or retrieve it via hashing
+
+		// Creates a shader with code and size. If shader has already been created this just returns that
 		Shader* RequestShader(const uint32_t* code, size_t size);
+		// Requests an already created shader using its hash
 		Shader* RequestShaderByHash(Util::Hash hash);
-		Program* RequestProgram(const uint32_t* vertex_data, size_t vertex_size, const uint32_t* fragment_data,
-								 size_t fragment_size);
+		// Creates a program with a vertex sahder and fragment shader. Also hashing
+		Program* RequestProgram(const uint32_t* vertex_data, size_t vertex_size, const uint32_t* fragment_data, size_t fragment_size);
+		// Creates a program with a compute shader. Also hashing.
 		Program* RequestProgram(const uint32_t* compute_data, size_t compute_size);
+		// Creates a program from a vertex and fragment shader
 		Program* RequestProgram(Shader* vertex, Shader* fragment);
+		// Creates a progam from a compute shader
 		Program* RequestProgram(Shader* compute);
 
 		// Map and unmap buffer objects.
 		void* MapHostBuffer(const Buffer& buffer, MemoryAccessFlags access);
 		void UnmapHostBuffer(const Buffer& buffer, MemoryAccessFlags access);
-		void* MapHostBuffer(const Buffer& buffer, MemoryAccessFlags access, VkDeviceSize offset, VkDeviceSize length);
-		void UnmapHostBuffer(const Buffer& buffer, MemoryAccessFlags access, VkDeviceSize offset, VkDeviceSize length);
 
+		// Map Linear Host image
 		void* MapLinearHostImage(const LinearHostImage& image, MemoryAccessFlags access);
 		void UnmapLinearHostImageAndSync(const LinearHostImage& image, MemoryAccessFlags access);
+
+		//Return whether allocation has certain memory flags
+		bool AllocationHasMemoryPropertyFlags(DeviceAllocation& alloc, VkMemoryPropertyFlags flags)
+		{
+			return HasMemoryPropertyFlags(alloc, mem_props, flags);
+		}
 
 		// Create buffers and images.
 		BufferHandle CreateBuffer(const BufferCreateInfo& info, const void* initial = nullptr);
 		BufferHandle CreateImportedHostBuffer(const BufferCreateInfo& info, VkExternalMemoryHandleTypeFlagBits type, void* host_buffer);
 		ImageHandle CreateImage(const ImageCreateInfo& info, const ImageInitialData* initial = nullptr);
 		ImageHandle CreateImageFromStagingBuffer(const ImageCreateInfo& info, const InitialImageBuffer* buffer);
+		// Essentially an image that can be sampled on the GPU as a vk image, but it also has a vkbuffer conterpart on the cpu
 		LinearHostImageHandle CreateLinearHostImage(const LinearHostImageCreateInfo& info);
 
 		// Create staging buffers for images.
@@ -243,13 +259,20 @@ namespace Vulkan
 											unsigned index = 0, unsigned samples = 1, unsigned layers = 1);
 		RenderPassInfo GetSwapchainRenderPass(SwapchainRenderPass style);
 
-		// Request legacy (non-timeline) semaphores.
 		// Timeline semaphores are only used internally to reduce handle bloat.
+		// Creates and returns a non timeline semaphore
 		Semaphore RequestLegacySemaphore();
+		// Turns an externally created semaphore into a QM semaphore. signalled controls whether semaphore is initially signalled or not.
 		Semaphore RequestExternalSemaphore(VkSemaphore semaphore, bool signalled);
+
 	/*#ifndef _WIN32
 		Semaphore request_imported_semaphore(int fd, VkExternalSemaphoreHandleTypeFlagBitsKHR handle_type);
 	#endif*/
+
+		VkInstance GetInstance() const
+		{
+			return instance;
+		}
 
 		VkDevice GetDevice() const
 		{
@@ -291,7 +314,7 @@ namespace Vulkan
 
 		const DeviceFeatures& GetDeviceFeatures() const
 		{
-			return ext;
+			return *ext;
 		}
 
 		bool SwapchainTouched() const;
@@ -301,6 +324,9 @@ namespace Vulkan
 		QueryPoolHandle WriteCalibratedTimestamp();
 
 	private:
+		//Hold on to a reference to context
+		ContextHandle context;
+
 		VkInstance instance = VK_NULL_HANDLE;
 		VkPhysicalDevice gpu = VK_NULL_HANDLE;
 		VkDevice device = VK_NULL_HANDLE;
@@ -311,7 +337,7 @@ namespace Vulkan
 		uint32_t timestamp_valid_bits = 0;
 		unsigned num_thread_indices = 1;
 
-	#ifdef GRANITE_VULKAN_MT
+	#ifdef QM_VULKAN_MT
 		std::atomic<uint64_t> cookie;
 	#else
 		uint64_t cookie = 0;
@@ -338,7 +364,8 @@ namespace Vulkan
 		VkPhysicalDeviceMemoryProperties mem_props;
 		VkPhysicalDeviceProperties gpu_props;
 
-		DeviceFeatures ext;
+		const DeviceFeatures* ext;
+		//Creates every type of stock sampler (by creating 1 sampler for each enum type)
 		void init_stock_samplers();
 		void init_timeline_semaphores();
 		void init_bindless();
@@ -384,7 +411,13 @@ namespace Vulkan
 			BufferPool vbo, ibo, ubo, staging;
 			TimestampIntervalManager timestamps;
 		};
+
 		Managers managers;
+
+#ifdef QM_VULKAN_MT
+		Quantum::ThreadGroup thread_group;
+		std::mutex thread_group_mutex;
+#endif
 
 		struct
 		{
@@ -639,36 +672,53 @@ namespace Vulkan
 
 	#ifdef QM_VULKAN_FOSSILIZE
 		Fossilize::StateRecorder state_recorder;
+		//Create sampler with hash
 		bool enqueue_create_sampler(Fossilize::Hash hash, const VkSamplerCreateInfo* create_info, VkSampler* sampler) override;
+		//Emmits dummy index
 		bool enqueue_create_descriptor_set_layout(Fossilize::Hash hash, const VkDescriptorSetLayoutCreateInfo* create_info, VkDescriptorSetLayout* layout) override;
+		//Emmits dummy index
 		bool enqueue_create_pipeline_layout(Fossilize::Hash hash, const VkPipelineLayoutCreateInfo* create_info, VkPipelineLayout* layout) override;
+		//Create shader module with hash
 		bool enqueue_create_shader_module(Fossilize::Hash hash, const VkShaderModuleCreateInfo* create_info, VkShaderModule* module) override;
+		//Create render_pass with hash
 		bool enqueue_create_render_pass(Fossilize::Hash hash, const VkRenderPassCreateInfo* create_info, VkRenderPass* render_pass) override;
+		//Same as enqueue_create_graphics_pipeline but with compute pipelines
 		bool enqueue_create_compute_pipeline(Fossilize::Hash hash, const VkComputePipelineCreateInfo* create_info, VkPipeline* pipeline) override;
+		//If multithreading is enabled this queues fossilize_create_graphics_pipeline on another thread
 		bool enqueue_create_graphics_pipeline(Fossilize::Hash hash, const VkGraphicsPipelineCreateInfo* create_info, VkPipeline* pipeline) override;
 		void notify_replayed_resources_for_type() override;
+		//Create graphics pipeline using fossilize cache
 		VkPipeline fossilize_create_graphics_pipeline(Fossilize::Hash hash, VkGraphicsPipelineCreateInfo& info);
+		//Create compute pipeline using fossilize cache
 		VkPipeline fossilize_create_compute_pipeline(Fossilize::Hash hash, VkComputePipelineCreateInfo& info);
 
+		//Resgiesters a graphics pipeline to fossilize to be cached
 		void register_graphics_pipeline(Fossilize::Hash hash, const VkGraphicsPipelineCreateInfo& info);
+		//Resgiesters a comput pipeline to fossilize to be cached
 		void register_compute_pipeline(Fossilize::Hash hash, const VkComputePipelineCreateInfo& info);
+		//Resgiesters a render pass to fossilize to be cached
 		void register_render_pass(VkRenderPass render_pass, Fossilize::Hash hash, const VkRenderPassCreateInfo& info);
+		//Resgiesters a descriptor set layout to fossilize to be cached
 		void register_descriptor_set_layout(VkDescriptorSetLayout layout, Fossilize::Hash hash, const VkDescriptorSetLayoutCreateInfo& info);
+		//Resgiesters a pipelinelayout to fossilize to be cached
 		void register_pipeline_layout(VkPipelineLayout layout, Fossilize::Hash hash, const VkPipelineLayoutCreateInfo& info);
+		//Resgiesters a shader module to fossilize to be cached
 		void register_shader_module(VkShaderModule module, Fossilize::Hash hash, const VkShaderModuleCreateInfo& info);
+		//Resgiesters a sampler to fossilize to be cached
 		void register_sampler(VkSampler sampler, Fossilize::Hash hash, const VkSamplerCreateInfo& info);
 
 		struct
 		{
 			std::unordered_map<VkShaderModule, Shader*> shader_map;
 			std::unordered_map<VkRenderPass, RenderPass*> render_pass_map;
-	#ifdef GRANITE_VULKAN_MT
-			Granite::TaskGroup pipeline_group;
+	#ifdef QM_VULKAN_MT
+			Quantum::TaskGroup pipeline_group;
 	#endif
 		} replayer_state;
-
-		void init_pipeline_state();
-		void flush_pipeline_state();
+		
+		//Init fossilize cache using data from previous runs
+		void init_pipeline_state(void* fossilize_pipeline_state_data, size_t fossilize_pipeline_state_size);
+		Util::RetainedHeapData<HandleCounter> flush_pipeline_state();
 	#endif
 
 		ImplementationWorkarounds workarounds;

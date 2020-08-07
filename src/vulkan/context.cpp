@@ -1090,4 +1090,9 @@ namespace Vulkan
 			ext->supports_descriptor_indexing = true;
 		}
 	}
+
+	void ContextDeleter::operator()(Context* context)
+	{
+		delete context;
+	}
 }

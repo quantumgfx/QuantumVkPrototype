@@ -105,21 +105,25 @@ namespace Vulkan
 		friend struct BufferDeleter;
 		~Buffer();
 
+		//Return the buffer's VkBuffer
 		VkBuffer GetBuffer() const
 		{
 			return buffer;
 		}
 
+		//Return the buffer's create info
 		const BufferCreateInfo& GetCreateInfo() const
 		{
 			return info;
 		}
 
+		//Return the buffer's memory allocation
 		DeviceAllocation& GetAllocation()
 		{
 			return alloc;
 		}
 
+		//Return the buffers memory alloction
 		const DeviceAllocation& GetAllocation() const
 		{
 			return alloc;
@@ -127,7 +131,7 @@ namespace Vulkan
 
 	private:
 		friend class Util::ObjectPool<Buffer>;
-		Buffer(Device* device, VkBuffer buffer, const BufferCreateInfo& info);
+		Buffer(Device* device, VkBuffer buffer, const DeviceAllocation& alloc, const BufferCreateInfo& info);
 
 		Device* device;
 		VkBuffer buffer;
@@ -155,16 +159,19 @@ namespace Vulkan
 		friend struct BufferViewDeleter;
 		~BufferView();
 
+		//Get the VkBufferView
 		VkBufferView GetView() const
 		{
 			return view;
 		}
 
+		//Get the bufferViewCreateInfo
 		const BufferViewCreateInfo& GetCreateInfo()
 		{
 			return info;
 		}
 
+		//Get the buffer the buffer view belongs to
 		const Buffer& GetBuffer() const
 		{
 			return *info.buffer;

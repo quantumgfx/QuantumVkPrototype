@@ -183,6 +183,7 @@ target_sources(QuantumVk PRIVATE
 	${QM_UTILS_DIR}/logging.hpp
 	${QM_UTILS_DIR}/object_pool.hpp
 	${QM_UTILS_DIR}/read_write_lock.hpp
+	${QM_UTILS_DIR}/retained_heap_data.hpp
 	${QM_UTILS_DIR}/small_vector.hpp
 	${QM_UTILS_DIR}/stack_allocator.hpp
 	${QM_UTILS_DIR}/string_helpers.cpp
@@ -192,20 +193,19 @@ target_sources(QuantumVk PRIVATE
 	${QM_UTILS_DIR}/timer.hpp
 	${QM_UTILS_DIR}/variant.hpp
 	
-	${QM_VK_DIR}/buffer.hpp
-	${QM_VK_DIR}/buffer_pool.hpp
-	${QM_VK_DIR}/context.cpp
-	${QM_VK_DIR}/context.hpp
-	${QM_VK_DIR}/command_buffer.hpp
+	${QM_VK_DIR}/buffer.hpp ${QM_VK_DIR}/buffer.cpp
+	${QM_VK_DIR}/buffer_pool.hpp ${QM_VK_DIR}/buffer_pool.cpp
+	${QM_VK_DIR}/context.hpp ${QM_VK_DIR}/context.cpp
+	${QM_VK_DIR}/command_buffer.hpp ${QM_VK_DIR}/command_buffer.cpp
 	${QM_VK_DIR}/command_pool.hpp
 	${QM_VK_DIR}/cookie.hpp
-	${QM_VK_DIR}/device.hpp
+	${QM_VK_DIR}/device.hpp ${QM_VK_DIR}/device.cpp
 	${QM_VK_DIR}/descriptor_set.hpp
 	${QM_VK_DIR}/fence.hpp
 	${QM_VK_DIR}/format.hpp
 	${QM_VK_DIR}/image.hpp
 	${QM_VK_DIR}/limits.hpp
-	${QM_VK_DIR}/memory_allocator.hpp
+	${QM_VK_DIR}/memory_allocator.hpp ${QM_VK_DIR}/memory_allocator.cpp
 	${QM_VK_DIR}/pipeline_event.hpp
 	${QM_VK_DIR}/query_pool.hpp
 	${QM_VK_DIR}/render_pass.hpp
@@ -213,8 +213,8 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/semaphore.hpp
 	${QM_VK_DIR}/shader.hpp
 	${QM_VK_DIR}/quirks.hpp
-	${QM_VK_DIR}/texture_format.cpp
-	${QM_VK_DIR}/texture_format.hpp
+	${QM_VK_DIR}/texture_format.hpp ${QM_VK_DIR}/texture_format.cpp
+	${QM_VK_DIR}/type_to_string.hpp
 	${QM_VK_DIR}/vulkan_common.hpp
 	${QM_VK_DIR}/vulkan_headers.hpp
 	
@@ -222,16 +222,18 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/managers/fence_manager.hpp
 	${QM_VK_DIR}/managers/semaphore_manager.hpp
 	
+	${QM_THREADING_DIR}/thread_group.hpp ${QM_THREADING_DIR}/thread_group.cpp
+	${QM_THREADING_DIR}/thread_id.hpp ${QM_THREADING_DIR}/thread_id.cpp
+	
 	src/quantumvk.hpp)
 	
 if (QM_VULKAN_MT)
     target_compile_definitions(QuantumVk PUBLIC QM_VULKAN_MT)
-	target_sources(QuantumVk PRIVATE ${QM_THREADING_DIR}/thread_id.hpp ${QM_THREADING_DIR}/thread_id.cpp)
 endif()
 
 if (QM_VULKAN_FOSSILIZE)
     target_compile_definitions(QuantumVk PUBLIC QM_VULKAN_FOSSILIZE)
-    target_sources(QuantumVk PRIVATE ${QM_VK_DIR}/device_fossilize.cpp ${QM_THREADING_DIR}/thread_group.hpp ${QM_THREADING_DIR}/thread_group.cpp)
+    target_sources(QuantumVk PRIVATE ${QM_VK_DIR}/device_fossilize.cpp)
 	target_link_libraries(QuantumVk PUBLIC fossilize)
 endif()
 

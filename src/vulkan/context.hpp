@@ -1,6 +1,9 @@
 #pragma once
 
 #include "vulkan_headers.hpp"
+#include "vulkan_common.hpp"
+
+#include "utils/intrusive.hpp"
 #include <memory>
 #include <functional>
 
@@ -75,13 +78,22 @@ namespace Vulkan
 	};
 	using ContextCreationFlags = uint32_t;
 
+	class Context;
+
+	struct ContextDeleter
+	{
+		void operator()(Context* context);
+	};
+
+	using ContextHandle = Util::IntrusivePtr<Context>;
+
 	// The context is responsible for:
 	// - Creating VkInstance
 	// - Creating VkDevice
 	// - Setting up VkQueues for graphics, compute and transfer.
 	// - Setting up validation layers.
 	// - Creating debug callbacks.
-	class Context
+	class Context : public Util::IntrusivePtrEnabled<Context, std::default_delete<Context>, HandleCounter>
 	{
 	public:
 
@@ -103,8 +115,6 @@ namespace Vulkan
 
 		Context(const Context&) = delete;
 		void operator=(const Context&) = delete;
-
-		Context();
 
 		~Context();
 
@@ -203,7 +213,14 @@ namespace Vulkan
 			return *device_table;
 		}
 
+		static ContextHandle Create()
+		{
+			return ContextHandle(new Context());
+		}
+
 	private:
+
+		Context();
 
 		VkDevice device = VK_NULL_HANDLE;
 		VkInstance instance = VK_NULL_HANDLE;

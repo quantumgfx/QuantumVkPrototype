@@ -282,7 +282,7 @@ namespace Quantum
 
 	ThreadGroup::ThreadGroup()
 	{
-#ifdef GRANITE_VULKAN_MT
+#ifdef QM_VULKAN_MT
 		Vulkan::register_thread_index(0);
 #endif
 		total_tasks.store(0);
