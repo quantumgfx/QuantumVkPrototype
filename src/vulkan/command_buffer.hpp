@@ -16,6 +16,7 @@ namespace Vulkan
 {
 	class DebugChannelInterface;
 
+	//Contains a list of wait has been changed, or what parts of the pipeline state are "dirty"
 	enum CommandBufferDirtyBits
 	{
 		COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT = 1 << 0,
@@ -208,14 +209,12 @@ namespace Vulkan
 			return cmd;
 		}
 
-		void BeginRegion(const char* name, const float* color = nullptr);
-		void EndRegion();
-
 		Device& GetDevice()
 		{
 			return *device;
 		}
 
+		//Returns whether the command buffer uses a renderpass that involves the swapchain
 		bool SwapchainTouched() const
 		{
 			return uses_swapchain;
@@ -355,23 +354,26 @@ namespace Vulkan
 		// Prepares an image to have its mipmap generated.
 		// Puts the top-level into TRANSFER_SRC_OPTIMAL, and all other levels are invalidated with an UNDEFINED -> TRANSFER_DST_OPTIMAL.
 		void BarrierPrepareGenerateMipmap(const Image& image, VkImageLayout base_level_layout, VkPipelineStageFlags src_stage, VkAccessFlags src_access, bool need_top_level_barrier = true);
-
 		// The image must have been transitioned with BarrierPrepareGenerateMipmap before calling this function.
 		// After calling this function, the image will be entirely in TRANSFER_SRC_OPTIMAL layout.
 		// Wait for TRANSFER stage to drain before transitioning away from TRANSFER_SRC_OPTIMAL.
 		void GenerateMipmap(const Image& image);
-
+		//Begins a new renderpass, described by renderpassinfo. Retrieves the framebuffer and creates any uncreated attachment
 		void BeginRenderPass(const RenderPassInfo& info, VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE);
+		//Start Next subpass
 		void NextSubpass(VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE);
+		//End a renderpass
 		void EndRenderPass();
+		//Submit a secondary command
 		void SubmitSecondary(Util::IntrusivePtr<CommandBuffer> secondary);
+		//Returns the current subpassindex
 		inline unsigned GetCurrentSubpass() const
 		{
 			return pipeline_state.subpass_index;
 		}
+
 		Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(unsigned thread_index, unsigned subpass);
-		static Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(Device& device,
-			const RenderPassInfo& rp, unsigned thread_index, unsigned subpass);
+		static Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(Device& device, const RenderPassInfo& rp, unsigned thread_index, unsigned subpass);
 
 		void SetProgram(Program* program);
 
@@ -380,6 +382,7 @@ namespace Vulkan
 		void set_program(const std::string& vertex, const std::string& fragment, const std::vector<std::pair<std::string, int>>& defines = {});
 		void set_program(const std::string& compute, const std::vector<std::pair<std::string, int>>& defines = {});
 #endif
+		//-------------------Setting Uniforms----------------------------
 
 		void SetBufferView(unsigned set, unsigned binding, const BufferView& view);
 		void SetInputAttachments(unsigned set, unsigned start_binding);
@@ -392,54 +395,72 @@ namespace Vulkan
 		void SetSampler(unsigned set, unsigned binding, const Sampler& sampler);
 		void SetSampler(unsigned set, unsigned binding, StockSampler sampler);
 		void SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer);
-		void SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset,
-			VkDeviceSize range);
+		void SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range);
 		void SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer);
-		void SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset,
-			VkDeviceSize range);
+		void SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range);
 
 		void SetBindless(unsigned set, VkDescriptorSet desc_set);
 
 		void PushConstants(const void* data, VkDeviceSize offset, VkDeviceSize range);
 
-		void* AllocateConstantData(unsigned set, unsigned binding, VkDeviceSize size);
+		//-----------------------------------------------------------------
 
+		//Allocates a uniform buffer from the command buffers internal pool. Binds it to the set and binding, than returns it's mapped data.
+		void* AllocateConstantData(unsigned set, unsigned binding, VkDeviceSize size);
+		//Allocates a uniform buffer from the command buffers internal pool. Binds it to the set and binding, than returns it's mapped data.
 		template <typename T>
 		T* AllocateTypedConstantData(unsigned set, unsigned binding, unsigned count)
 		{
 			return static_cast<T*>(AllocateConstantData(set, binding, count * sizeof(T)));
 		}
-
+		//Allocates a vertex buffer from the command buffers internal pool. Binds it to the binding than returns it's mapped data.
 		void* AllocateVertexData(unsigned binding, VkDeviceSize size, VkDeviceSize stride, VkVertexInputRate step_rate = VK_VERTEX_INPUT_RATE_VERTEX);
+		//Allocates an index buffer from the command buffers internal pool. Binds then returns it's mapped data.
 		void* AllocateIndexData(VkDeviceSize size, VkIndexType index_type);
-
+		//Allocates a staging buffer from the command buffers internal pool. Returns a pointer to this staging buffer
+		//Adds a CopyBuffer(staging, buffer) to the command buffer. Meaning that any memory writes to the host buffer (the
+		//returned void*) must happen before the command is submitted (and cannot happen while its executing). Wait on 
+		//TRANSFER stage to make writes to the image visible to other stages.
 		void* UpdateBuffer(const Buffer& buffer, VkDeviceSize offset, VkDeviceSize size);
-		void* UpdateImage(const Image& image, const VkOffset3D& offset, const VkExtent3D& extent, uint32_t row_length,
-			uint32_t image_height, const VkImageSubresourceLayers& subresource);
+		//Allocates a staging buffer from command buffer's internal pool. Returns a pointer to this staging buffer.
+		//Adds a CopyBufferToImage to the command buffer. Meaning that any memory writes to the host buffer (the
+		//returned void*) must happen before the command is submitted (and cannot happen while its executing). 
+		//Wait on TRANSFER stage to make writes to the image visible to other stages.
+		void* UpdateImage(const Image& image, const VkOffset3D& offset, const VkExtent3D& extent, uint32_t row_length, uint32_t image_height, const VkImageSubresourceLayers& subresource);
+		//Allocates a staging buffer from command buffer's internal pool. Returns a pointer to this staging buffer.
+		//Adds a CopyBufferToImage to the command buffer. Meaning that any memory writes to the host buffer (the
+		//returned void*) must happen before the command is submitted. Wait on TRANSFER stage to make writes to 
+		//the image visible to other stages.
 		void* UpdateImage(const Image& image, uint32_t row_length = 0, uint32_t image_height = 0);
-
+		//Sets the viewport. Viewports and scissors are always dynamic, so this won't rereate the graphics pipeline
 		void SetViewport(const VkViewport& viewport);
-		const VkViewport& get_viewport() const;
+		const VkViewport& GetViewport() const;
+		//Sets the scissor. Viewports and scissors are always dynamic, so this won't rereate the graphics pipeline
 		void SetScissor(const VkRect2D& rect);
-
+		//Sets a vertex attrbute to a specify format and size
 		void SetVertexAttrib(uint32_t attrib, uint32_t binding, VkFormat format, VkDeviceSize offset);
+		//Binds a buffer to a vertex binding
 		void SetVertexBinding(uint32_t binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize stride, VkVertexInputRate step_rate = VK_VERTEX_INPUT_RATE_VERTEX);
+		//Bind an index buffer
 		void SetIndexBuffer(const Buffer& buffer, VkDeviceSize offset, VkIndexType index_type);
-
+		//Submit a draw call
 		void Draw(uint32_t vertex_count, uint32_t instance_count = 1, uint32_t first_vertex = 0, uint32_t first_instance = 0);
 		void DrawIndexed(uint32_t index_count, uint32_t instance_count = 1, uint32_t first_index = 0, int32_t vertex_offset = 0, uint32_t first_instance = 0);
 
 		void Dispatch(uint32_t groups_x, uint32_t groups_y, uint32_t groups_z);
+		void DispatchIndirect(const Buffer& buffer, uint32_t offset);
 
 		void DrawIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride);
 		void DrawIndexedIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride);
 		void DrawMultiIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride, const Buffer& count, uint32_t count_offset);
 		void DrawIndexedMultiIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride, const Buffer& count, uint32_t count_offset);
-		void dispatch_indirect(const Buffer& buffer, uint32_t offset);
-
+		//Culls back bit, disables blending, enables depth testing, triangle list topology.
 		void SetOpaqueState();
+		//No culling, disables blending, disables depth testing, triangle strip topology.
 		void SetQuadState();
+		//No culling, disables blending, enables depth testing, triangle strip topology.
 		void SetOpaqueSpriteState();
+		//No culling, src alpha blending, enables depth testing, triangle strip topology.
 		void SetTransparentSpriteState();
 
 		void SaveState(CommandBufferSaveStateFlags flags, CommandBufferSavedState& state);
@@ -663,16 +684,7 @@ namespace Vulkan
 			return type;
 		}
 
-		QueryPoolHandle WriteTimestamp(VkPipelineStageFlagBits stage);
-		void AddCheckpoint(const char* tag);
-		void SetBacktraceCheckpoint();
-
 		void End();
-		void EnableProfiling();
-		bool HasProfiling() const;
-
-		void BeginDebugChannel(DebugChannelInterface* iface, const char* tag, VkDeviceSize size);
-		void EndDebugChannel();
 
 		void ExtractPipelineState(DeferredPipelineCompile& compile) const;
 		static VkPipeline BuildGraphicsPipeline(Device* device, const DeferredPipelineCompile& compile);
@@ -726,6 +738,7 @@ namespace Vulkan
 			dirty |= flags;
 		}
 
+		//Return which Flags are dirty (have been changed) clear the dirty mask.
 		CommandBufferDirtyFlags get_and_clear(CommandBufferDirtyFlags flags)
 		{
 			auto mask = dirty & flags;
@@ -740,16 +753,16 @@ namespace Vulkan
 			"Hashable pipeline state is not large enough!");
 #endif
 
-		bool flush_render_state(bool synchronous);
-		bool flush_compute_state(bool synchronous);
-		void clear_render_state();
+		bool FlushRenderState(bool synchronous);
+		bool FlushComputeState(bool synchronous);
+		void ClearRenderState();
 
-		bool flush_graphics_pipeline(bool synchronous);
-		bool flush_compute_pipeline(bool synchronous);
-		void flush_descriptor_sets();
+		bool FlushGraphicsPipeline(bool synchronous);
+		bool FlushComputePipeline(bool synchronous);
+		void FlushDescriptorSets();
 		void BeginGraphics();
-		void flush_descriptor_set(uint32_t set);
-		void rebind_descriptor_set(uint32_t set);
+		void FlushDescriptorSet(uint32_t set);
+		void RebindDescriptorSet(uint32_t set);
 		void BeginCompute();
 		void BeginContext();
 
@@ -758,17 +771,14 @@ namespace Vulkan
 		BufferBlock ubo_block;
 		BufferBlock staging_block;
 
-		void set_texture(unsigned set, unsigned binding, VkImageView float_view, VkImageView integer_view, VkImageLayout layout, uint64_t cookie);
+		void SetTexture(unsigned set, unsigned binding, VkImageView float_view, VkImageView integer_view, VkImageLayout layout, uint64_t cookie);
 
 		void InitViewportScissor(const RenderPassInfo& info, const Framebuffer* framebuffer);
 
-		bool profiling = false;
-		std::string debug_channel_tag;
-		Vulkan::BufferHandle debug_channel_buffer;
-		DebugChannelInterface* debug_channel_interface = nullptr;
-
-		static void update_hash_graphics_pipeline(DeferredPipelineCompile& compile, uint32_t& active_vbos);
-		static void update_hash_compute_pipeline(DeferredPipelineCompile& compile);
+		//Recalculates a graphics pipeline's hash
+		static void UpdateHashGraphicsPipeline(DeferredPipelineCompile& compile, uint32_t& active_vbos);
+		//Recalculates a compute pipeline's hash
+		static void UpdateHashComputePipeline(DeferredPipelineCompile& compile);
 	};
 
 #ifdef QM_VULKAN_FILESYSTEM

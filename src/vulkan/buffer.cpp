@@ -15,15 +15,9 @@ namespace Vulkan
 	Buffer::~Buffer()
 	{
 		if (internal_sync)
-		{
-			device->destroy_buffer_nolock(buffer);
-			device->free_memory_nolock(alloc);
-		}
+			device->DestroyBufferNolock(buffer, alloc);
 		else
-		{
-			device->destroy_buffer(buffer);
-			device->free_memory(alloc);
-		}
+			device->DestroyBuffer(buffer, alloc);
 	}
 
 	void BufferDeleter::operator()(Buffer* buffer)
@@ -44,9 +38,9 @@ namespace Vulkan
 		if (view != VK_NULL_HANDLE)
 		{
 			if (internal_sync)
-				device->destroy_buffer_view_nolock(view);
+				device->DestroyBufferViewNolock(view);
 			else
-				device->destroy_buffer_view(view);
+				device->DestroyBufferView(view);
 		}
 	}
 

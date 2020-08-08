@@ -186,23 +186,24 @@ namespace Vulkan
 		return true;
 	}
 
-	void Device::init_pipeline_state(void* fossilize_pipeline_state_data, size_t fossilize_pipeline_state_size)
+	bool Device::InitFossilizePipeline(const uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size)
 	{
 		state_recorder.init_recording_thread(nullptr);
 
-		if (!fossilize_pipeline_state_data)
+		if (!fossilize_pipeline_data || fossilize_pipeline_size == 0)
 			return;
 
 		QM_LOG_INFO("Replaying cached state.\n");
 		Fossilize::StateReplayer replayer;
 		auto start = Util::get_current_time_nsecs();
-		replayer.parse(*this, nullptr, static_cast<const char*>(fossilize_pipeline_state_data), fossilize_pipeline_state_size);
+		bool success = replayer.parse(*this, nullptr, fossilize_pipeline_data, fossilize_pipeline_size);
 		auto end = Util::get_current_time_nsecs();
 		QM_LOG_INFO("Completed replaying cached state in %.3f ms.\n", (end - start) * 1e-6);
 		replayer_state = {};
+		return success;
 	}
 
-	Util::RetainedHeapData<HandleCounter> Device::flush_pipeline_state()
+	Util::RetainedHeapData Device::GetFossilizePipelineData()
 	{
 		uint8_t* serialized = nullptr;
 		size_t serialized_size = 0;
@@ -211,7 +212,7 @@ namespace Vulkan
 			QM_LOG_INFO("Failed to serialize Fossilize state.\n");
 		}
 
-		Util::RetainedHeapData<HandleCounter> fossilize_pipeline_state_data = Util::CreateRetainedHeapData<HandleCounter>(serialized, serialized_size);
+		Util::RetainedHeapData fossilize_pipeline_state_data = Util::CreateRetainedHeapData(serialized, serialized_size);
 
 		state_recorder.free_serialized(serialized);
 

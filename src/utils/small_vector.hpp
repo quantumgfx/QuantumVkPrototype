@@ -240,6 +240,7 @@ namespace Util
 				resize(this->buffer_size - 1);
 		}
 
+		//Constructs a new object at the back of the vector
 		template <typename... Ts>
 		void emplace_back(Ts&&... ts)
 		{
@@ -261,8 +262,7 @@ namespace Util
 				while (target_capacity < count)
 					target_capacity <<= 1u;
 
-				T* new_buffer =
-					target_capacity > N ? static_cast<T*>(malloc(target_capacity * sizeof(T))) : stack_storage.data();
+				T* new_buffer = target_capacity > N ? static_cast<T*>(malloc(target_capacity * sizeof(T))) : stack_storage.data();
 
 				if (!new_buffer)
 					std::terminate();

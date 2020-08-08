@@ -81,7 +81,7 @@ namespace Vulkan
 		return false;
 	}
 
-	bool DeviceAllocator::AllocateImage(VkDeviceSize size, const VkImageCreateInfo& image_create_info, const VmaAllocationCreateInfo& mem_alloc_create_info, VkImage* image, DeviceAllocation* allocation)
+	bool DeviceAllocator::AllocateImage(const VkImageCreateInfo& image_create_info, const VmaAllocationCreateInfo& mem_alloc_create_info, VkImage* image, DeviceAllocation* allocation)
 	{
 #ifdef QM_VULKAN_MT
 		std::lock_guard lock(m_mutex);
@@ -91,9 +91,10 @@ namespace Vulkan
 
 		if (vmaCreateImage(allocator, &image_create_info, &mem_alloc_create_info, image, &allocation->vma_allocation, &alloc_info) == VK_SUCCESS)
 		{
-			allocation->size = size;
+			allocation->size = alloc_info.size;
 			allocation->mem_type = alloc_info.memoryType;
 			allocation->host_base = (uint8_t*)alloc_info.pMappedData;
+			allocation->persistantly_mapped = (mem_alloc_create_info.flags & VMA_ALLOCATION_CREATE_MAPPED_BIT);
 			return true;
 		}
 		return false;

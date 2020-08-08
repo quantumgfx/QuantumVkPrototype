@@ -8,8 +8,7 @@ namespace Util
 {
 
 	//Represents data on the heap, contains a size and size bytes of data which are cleaned up when this goes out of scope
-	template <typename ReferenceOps>
-	class HeapData : public IntrusivePtrEnabled<HeapData<ReferenceOps>, std::default_delete<HeapData<ReferenceOps>>, ReferenceOps>
+	class HeapData : public IntrusivePtrEnabled<HeapData, std::default_delete<HeapData>, MultiThreadCounter>
 	{
 	public:
 
@@ -43,13 +42,11 @@ namespace Util
 	};
 
 	//Ref counted heap data. As long as the handle is retained, memory will remain valid (useful for passing memory allocated with new out of a function)
-	template<typename ReferenceOps>
-	using RetainedHeapData = IntrusivePtr<HeapData<ReferenceOps>>;
+	using RetainedHeapData = IntrusivePtr<HeapData>;
 
-	template<typename ReferenceOps>
-	RetainedHeapData<ReferenceOps> CreateRetainedHeapData(void* inital_data, size_t initial_size)
+	RetainedHeapData CreateRetainedHeapData(void* inital_data, size_t initial_size)
 	{
-		return RetainedHeapData<ReferenceOps>(new HeapData<ReferenceOps>(inital_data, initial_size));
+		return RetainedHeapData(new HeapData(inital_data, initial_size));
 	}
 
 }

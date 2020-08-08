@@ -55,11 +55,8 @@ namespace Vulkan
 	{
 		Device, // Device local. Probably not visible from CPU.
 		LinkedDeviceHost, // On desktop, directly mapped VRAM over PCI.
-		LinkedDeviceHostPreferDevice, // Prefer device local of host visible.
-		Host, // Host-only, needs to be synced to GPU. Might be device local as well on iGPUs.
-		CachedHost,
-		CachedCoherentHostPreferCoherent, // Aim for both cached and coherent, but prefer COHERENT
-		CachedCoherentHostPreferCached, // Aim for both cached and coherent, but prefer CACHED
+		Host, // Host-only, needs to be synced to GPU. Prefer coherent Might be device local as well on iGPUs.
+		CachedHost, //Host visible and host cached
 	};
 
 	//Flags for BufferCreateInfo
@@ -83,6 +80,12 @@ namespace Vulkan
 		BufferMiscFlags misc = 0;
 	};
 
+	struct BufferAllocation
+	{
+		VkBuffer buffer = VK_NULL_HANDLE;
+		DeviceAllocation alloc;
+	};
+
 	//Forward declaration of buffer
 	class Buffer;
 	//Buffer deletion functor
@@ -103,6 +106,7 @@ namespace Vulkan
 	{
 	public:
 		friend struct BufferDeleter;
+		//Delays the deletion of the buffer/freeing of memory until current frame context is finished or device is destroyed
 		~Buffer();
 
 		//Return the buffer's VkBuffer

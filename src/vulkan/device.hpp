@@ -24,6 +24,7 @@
 #include <functional>
 #include <unordered_map>
 #include <stdio.h>
+#include <utility>
 
 #ifdef QM_VULKAN_FILESYSTEM
 #include "shader_manager.hpp"
@@ -36,9 +37,7 @@
 #include <condition_variable>
 #endif
 
-#ifdef QM_VULKAN_FOSSILIZE
 #include "fossilize.hpp"
-#endif
 
 #include "threading/thread_group.hpp"
 
@@ -61,6 +60,7 @@ namespace Vulkan
 		std::vector<VkBufferImageCopy> blits;
 	};
 
+	//Object containing all of the object pools that device uses to allocate handles
 	struct HandlePool
 	{
 		VulkanObjectPool<Buffer> buffers;
@@ -77,7 +77,7 @@ namespace Vulkan
 		VulkanObjectPool<BindlessDescriptorPool> bindless_descriptor_pool;
 	};
 
-	class DebugChannelInterface
+	/*class DebugChannelInterface
 	{
 	public:
 		union Word
@@ -87,12 +87,129 @@ namespace Vulkan
 			float f32;
 		};
 		virtual void message(const std::string& tag, uint32_t x, uint32_t y, uint32_t z, uint32_t code, uint32_t word_count, const Word* words) = 0;
+	};*/
+
+	struct FossilizeReplayer
+	{
+		std::unordered_map<VkShaderModule, Shader*> shader_map;
+		std::unordered_map<VkRenderPass, RenderPass*> render_pass_map;
+#ifdef QM_VULKAN_MT
+		Quantum::TaskGroup pipeline_group;
+#endif
 	};
 
-	class Device
-#ifdef QM_VULKAN_FOSSILIZE
-		: public Fossilize::StateCreatorInterface
+	// Pending buffers which need to be copied from CPU to GPU before submitting graphics or compute work.
+	struct DmaQueues
+	{
+		std::vector<BufferBlock> vbo;
+		std::vector<BufferBlock> ibo;
+		std::vector<BufferBlock> ubo;
+	};
+
+	struct WSIData
+	{
+		Semaphore acquire;
+		Semaphore release;
+		bool touched = false;
+		bool consumed = false;
+		std::vector<ImageHandle> swapchain;
+		unsigned index = 0;
+	};
+
+	//Contains data about a queue
+	struct QueueData
+	{
+		Util::SmallVector<Semaphore> wait_semaphores;
+		Util::SmallVector<VkPipelineStageFlags> wait_stages;
+		bool need_fence = false;
+
+		VkSemaphore timeline_semaphore = VK_NULL_HANDLE;
+		uint64_t current_timeline = 0;
+		PerformanceQueryPool performance_query_pool;
+	};
+
+	//Fence used internally by device
+	struct InternalFence
+	{
+		VkFence fence;
+		VkSemaphore timeline;
+		uint64_t value;
+	};
+
+	//Various manager classes the device uses
+	struct DeviceManagers
+	{
+		DeviceAllocator memory;
+		FenceManager fence;
+		SemaphoreManager semaphore;
+		EventManager event;
+		BufferPool vbo, ibo, ubo, staging;
+		//TimestampIntervalManager timestamps;
+	};
+
+	struct DeviceLock
+	{
+#ifdef QM_VULKAN_MT
+		std::mutex lock;
+		std::condition_variable cond;
 #endif
+		unsigned counter = 0;
+	};
+
+	struct PerFrame
+	{
+		PerFrame(Device* device, unsigned index);
+		~PerFrame();
+		void operator=(const PerFrame&) = delete;
+		PerFrame(const PerFrame&) = delete;
+
+		void Begin();
+
+		//Reference to device
+		Device& device;
+		//Frame index
+		unsigned frame_index;
+		//Reference to device table
+		const VolkDeviceTable& table;
+		//Reference to managers
+		DeviceManagers& managers;
+		std::vector<CommandPool> graphics_cmd_pool;
+		std::vector<CommandPool> compute_cmd_pool;
+		std::vector<CommandPool> transfer_cmd_pool;
+
+		std::vector<BufferBlock> vbo_blocks;
+		std::vector<BufferBlock> ibo_blocks;
+		std::vector<BufferBlock> ubo_blocks;
+		std::vector<BufferBlock> staging_blocks;
+
+		VkSemaphore graphics_timeline_semaphore;
+		VkSemaphore compute_timeline_semaphore;
+		VkSemaphore transfer_timeline_semaphore;
+		uint64_t timeline_fence_graphics = 0;
+		uint64_t timeline_fence_compute = 0;
+		uint64_t timeline_fence_transfer = 0;
+
+		std::vector<VkFence> wait_fences;
+		std::vector<VkFence> recycle_fences;
+
+		std::vector<VkFramebuffer> destroyed_framebuffers;
+		std::vector<VkSampler> destroyed_samplers;
+		std::vector<VkPipeline> destroyed_pipelines;
+		std::vector<VkImageView> destroyed_image_views;
+		std::vector<VkBufferView> destroyed_buffer_views;
+		std::vector<std::pair<VkImage, DeviceAllocation>> destroyed_images;
+		std::vector<std::pair<VkBuffer, DeviceAllocation>> destroyed_buffers;
+		std::vector<VkDescriptorPool> destroyed_descriptor_pools;
+		Util::SmallVector<CommandBufferHandle> graphics_submissions;
+		Util::SmallVector<CommandBufferHandle> compute_submissions;
+		Util::SmallVector<CommandBufferHandle> transfer_submissions;
+		std::vector<VkSemaphore> recycled_semaphores;
+		std::vector<VkEvent> recycled_events;
+		std::vector<VkSemaphore> destroyed_semaphores;
+		std::vector<ImageHandle> keep_alive_images;
+	};
+
+	class Device : public Fossilize::StateCreatorInterface
 	{
 	public:
 		// Device-based objects which need to poke at internal data structures when their lifetimes end.
@@ -131,6 +248,7 @@ namespace Vulkan
 		friend class DescriptorSetAllocator;
 		friend class Shader;
 		friend class ImageResourceHolder;
+		friend struct PerFrame;
 
 		Device();
 		~Device();
@@ -140,20 +258,12 @@ namespace Vulkan
 		Device(Device&&) = delete;
 
 		// Only called by main thread, during setup phase.
-		void SetContext(const ContextHandle& context);
-		void SetContext(const ContextHandle& context, void* pipeline_state_data, size_t pipeline_state_size);
+		// Sets context and initializes device
+		void SetContext(const ContextHandle& context, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size);
 
 		void InitSwapchain(const std::vector<VkImage>& swapchain_images, unsigned width, unsigned height, VkFormat format);
 		void InitExternalSwapchain(const std::vector<ImageHandle>& swapchain_images);
 		void InitFrameContexts(unsigned count);
-		const VolkDeviceTable& GetDeviceTable() const;
-
-		// Profiling
-		bool InitPerformanceCounters(const std::vector<std::string>& names);
-		bool AcquireProfiling();
-		void ReleaseProfiling();
-		void QueryAvailablePerformanceCounters(CommandBuffer::Type type, uint32_t* count, const VkPerformanceCounterKHR** counters, const VkPerformanceCounterDescriptionKHR** desc);
-		bool InitTimestampTrace(const char* path);
 
 		ImageView& GetSwapchainView();
 		ImageView& GetSwapchainView(unsigned index);
@@ -162,36 +272,29 @@ namespace Vulkan
 		unsigned GetSwapchainIndex() const;
 		unsigned GetCurrentFrameContext() const;
 
-		size_t GetPipelineCacheSize();
-		bool GetPipelineCacheData(uint8_t* data, size_t size);
-		bool InitPipelineCache(const uint8_t* data, size_t size);
+		// Retrieves the pipeline cache data. This should be stored in a file (before device is destroyed) by the client and loaded up in SetContext.
+		Util::RetainedHeapData GetPipelineCacheData(size_t override_max_size = 0);
+		// Retrieves fossilize pipeline data.
+		Util::RetainedHeapData GetFossilizePipelineData();
 
 		// Frame-pushing interface.
 		void NextFrameContext();
 		void WaitIdle();
 		void EndFrameContext();
 
-		// Set names for objects for debuggers and profilers.
-		void SetName(const Buffer& buffer, const char* name);
-		void SetName(const Image& image, const char* name);
-		void SetName(const CommandBuffer& cmd, const char* name);
-
 		// Submission interface, may be called from any thread at any time.
 		void FlushFrame();
 		CommandBufferHandle RequestCommandBuffer(CommandBuffer::Type type = CommandBuffer::Type::Generic);
 		CommandBufferHandle RequestCommandBufferForThread(unsigned thread_index, CommandBuffer::Type type = CommandBuffer::Type::Generic);
 
-		CommandBufferHandle RequestProfiledCommandBuffer(CommandBuffer::Type type = CommandBuffer::Type::Generic);
-		CommandBufferHandle RequestProfiledCommandBufferForThread(unsigned thread_index, CommandBuffer::Type type = CommandBuffer::Type::Generic);
-
 		void Submit(CommandBufferHandle& cmd, Fence* fence = nullptr, unsigned semaphore_count = 0, Semaphore* semaphore = nullptr);
 		void SubmitEmpty(CommandBuffer::Type type,  Fence* fence = nullptr,unsigned semaphore_count = 0, Semaphore* semaphore = nullptr);
-		//Adds a wait semaphore to the next submit
+		//Adds a wait semaphore and wait stages to the next queue submit of a certain type
 		void AddWaitSemaphore(CommandBuffer::Type type, Semaphore semaphore, VkPipelineStageFlags stages, bool flush);
 		CommandBuffer::Type GetPhysicalQueueType(CommandBuffer::Type queue_type) const;
-		void RegisterTimeInterval(std::string tid, QueryPoolHandle start_ts, QueryPoolHandle end_ts, std::string tag, std::string extra = {});
+		//void RegisterTimeInterval(std::string tid, QueryPoolHandle start_ts, QueryPoolHandle end_ts, std::string tag, std::string extra = {});
 
-		//All request commands either create a new object if it has never been created before, or retrieve it via hashing
+		//"Requests" essentially hash the object, check if it exists in the cache and if not creates a new object
 
 		// Creates a shader with code and size. If shader has already been created this just returns that
 		Shader* RequestShader(const uint32_t* code, size_t size);
@@ -222,7 +325,6 @@ namespace Vulkan
 
 		// Create buffers and images.
 		BufferHandle CreateBuffer(const BufferCreateInfo& info, const void* initial = nullptr);
-		BufferHandle CreateImportedHostBuffer(const BufferCreateInfo& info, VkExternalMemoryHandleTypeFlagBits type, void* host_buffer);
 		ImageHandle CreateImage(const ImageCreateInfo& info, const ImageInitialData* initial = nullptr);
 		ImageHandle CreateImageFromStagingBuffer(const ImageCreateInfo& info, const InitialImageBuffer* buffer);
 		// Essentially an image that can be sampled on the GPU as a vk image, but it also has a vkbuffer conterpart on the cpu
@@ -231,14 +333,6 @@ namespace Vulkan
 		// Create staging buffers for images.
 		InitialImageBuffer CreateImageStagingBuffer(const ImageCreateInfo& info, const ImageInitialData* initial);
 		InitialImageBuffer CreateImageStagingBuffer(const TextureFormatLayout& layout);
-
-	/*#ifndef _WIN32
-		ImageHandle create_imported_image(int fd,
-										  VkDeviceSize size,
-										  uint32_t memory_type,
-										  VkExternalMemoryHandleTypeFlagBitsKHR handle_type,
-										  const ImageCreateInfo& create_info);
-	#endif*/
 
 		// Create image view, buffer views and samplers.
 		ImageViewHandle CreateImageView(const ImageViewCreateInfo& view_info);
@@ -253,7 +347,7 @@ namespace Vulkan
 		bool GetImageFormatProperties(VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags,
 										 VkImageFormatProperties* properties);
 
-		VkFormat GetDefaultDepthStencil_format() const;
+		VkFormat GetDefaultDepthStencilFormat() const;
 		VkFormat GetDefaultDepthFormat() const;
 		ImageView& GetTransientAttachment(unsigned width, unsigned height, VkFormat format,
 											unsigned index = 0, unsigned samples = 1, unsigned layers = 1);
@@ -264,10 +358,6 @@ namespace Vulkan
 		Semaphore RequestLegacySemaphore();
 		// Turns an externally created semaphore into a QM semaphore. signalled controls whether semaphore is initially signalled or not.
 		Semaphore RequestExternalSemaphore(VkSemaphore semaphore, bool signalled);
-
-	/*#ifndef _WIN32
-		Semaphore request_imported_semaphore(int fd, VkExternalSemaphoreHandleTypeFlagBitsKHR handle_type);
-	#endif*/
 
 		VkInstance GetInstance() const
 		{
@@ -292,6 +382,11 @@ namespace Vulkan
 		const VkPhysicalDeviceProperties& GetGPUProperties() const
 		{
 			return gpu_props;
+		}
+
+		const VolkDeviceTable& GetDeviceTable() const
+		{
+			return *table;
 		}
 
 		const Sampler& GetStockSampler(StockSampler sampler) const;
@@ -319,10 +414,6 @@ namespace Vulkan
 
 		bool SwapchainTouched() const;
 
-		double ConvertTimestampDelta(uint64_t start_ticks, uint64_t end_ticks) const;
-		// Writes a timestamp on host side, which is calibrated to the GPU timebase.
-		QueryPoolHandle WriteCalibratedTimestamp();
-
 	private:
 		//Hold on to a reference to context
 		ContextHandle context;
@@ -343,214 +434,65 @@ namespace Vulkan
 		uint64_t cookie = 0;
 	#endif
 
-		uint64_t allocate_cookie();
-		void bake_program(Program& program);
+		uint64_t AllocateCookie();
+		void BakeProgram(Program& program);
 
-		void request_vertex_block(BufferBlock& block, VkDeviceSize size);
-		void request_index_block(BufferBlock& block, VkDeviceSize size);
-		void request_uniform_block(BufferBlock& block, VkDeviceSize size);
-		void request_staging_block(BufferBlock& block, VkDeviceSize size);
+		void RequestVertexBlock(BufferBlock& block, VkDeviceSize size);
+		void RequestIndexBlock(BufferBlock& block, VkDeviceSize size);
+		void RequestUniformBlock(BufferBlock& block, VkDeviceSize size);
+		void RequestStagingBlock(BufferBlock& block, VkDeviceSize size);
 
-		QueryPoolHandle write_timestamp(VkCommandBuffer cmd, VkPipelineStageFlagBits stage);
+		void SetAcquireSemaphore(unsigned index, Semaphore acquire);
+		Semaphore ConsumeReleaseSemaphore();
 
-		void set_acquire_semaphore(unsigned index, Semaphore acquire);
-		Semaphore consume_release_semaphore();
-
-		PipelineLayout* request_pipeline_layout(const CombinedResourceLayout& layout);
-		DescriptorSetAllocator* request_descriptor_set_allocator(const DescriptorSetLayout& layout, const uint32_t* stages_for_sets);
-		const Framebuffer& request_framebuffer(const RenderPassInfo& info);
-		const RenderPass& request_render_pass(const RenderPassInfo& info, bool compatible);
+		PipelineLayout* RequestPipelineLayout(const CombinedResourceLayout& layout);
+		DescriptorSetAllocator* RequestDescriptorSetAllocator(const DescriptorSetLayout& layout, const uint32_t* stages_for_sets);
+		const Framebuffer& RequestFramebuffer(const RenderPassInfo& info);
+		const RenderPass& RequestRenderPass(const RenderPassInfo& info, bool compatible);
 
 		VkPhysicalDeviceMemoryProperties mem_props;
 		VkPhysicalDeviceProperties gpu_props;
 
 		const DeviceFeatures* ext;
 		//Creates every type of stock sampler (by creating 1 sampler for each enum type)
-		void init_stock_samplers();
-		void init_timeline_semaphores();
-		void init_bindless();
-		void deinit_timeline_semaphores();
-
-		struct JSONTraceFileDeleter { void operator()(FILE* file); };
-		std::unique_ptr<FILE, JSONTraceFileDeleter> json_trace_file;
-		int64_t json_base_timestamp_value = 0;
-		int64_t json_timestamp_origin = 0;
-		int64_t convert_timestamp_to_absolute_usec(uint64_t ts);
-		uint64_t update_wrapped_base_timestamp(uint64_t ts);
-		void write_json_timestamp_range(unsigned frame_index, const char* tid, const char* name, const char* extra,
-										uint64_t start_ts, uint64_t end_ts,
-										int64_t& min_us, int64_t& max_us);
-		void write_json_timestamp_range_us(unsigned frame_index, const char* tid, const char* name, int64_t start_us, int64_t end_us);
-
-		QueryPoolHandle write_timestamp_nolock(VkCommandBuffer cmd, VkPipelineStageFlagBits stage);
-		QueryPoolHandle write_calibrated_timestamp_nolock();
-		void register_time_interval_nolock(std::string tid, QueryPoolHandle start_ts, QueryPoolHandle end_ts, std::string tag, std::string extra);
+		void InitStockSamplers();
+		void InitTimelineSemaphores();
+		void InitBindless();
+		void DeinitTimelineSemaphores();
 
 		// Make sure this is deleted last.
 		HandlePool handle_pool;
 
-		// Calibrated timestamps.
-		void init_calibrated_timestamps();
-		void recalibrate_timestamps_fallback();
-		void recalibrate_timestamps();
-		bool resample_calibrated_timestamps();
-		VkTimeDomainEXT calibrated_time_domain = VK_TIME_DOMAIN_DEVICE_EXT;
-		int64_t calibrated_timestamp_device = 0;
-		int64_t calibrated_timestamp_host = 0;
-		int64_t last_calibrated_timestamp_host = 0; // To ensure monotonicity after a recalibration.
-		unsigned timestamp_calibration_counter = 0;
-		int64_t get_calibrated_timestamp();
-		Vulkan::QueryPoolHandle frame_context_begin_ts;
-
-		struct Managers
-		{
-			DeviceAllocator memory;
-			FenceManager fence;
-			SemaphoreManager semaphore;
-			EventManager event;
-			BufferPool vbo, ibo, ubo, staging;
-			TimestampIntervalManager timestamps;
-		};
-
-		Managers managers;
+		DeviceManagers managers;
 
 #ifdef QM_VULKAN_MT
 		Quantum::ThreadGroup thread_group;
 		std::mutex thread_group_mutex;
 #endif
 
-		struct
-		{
-	#ifdef QM_VULKAN_MT
-			std::mutex lock;
-			std::condition_variable cond;
-	#endif
-			unsigned counter = 0;
-		} lock;
+		DeviceLock lock;
 
-		struct PerFrame
-		{
-			PerFrame(Device* device, unsigned index);
-			~PerFrame();
-			void operator=(const PerFrame&) = delete;
-			PerFrame(const PerFrame&) = delete;
-
-			void begin();
-
-			Device& device;
-			unsigned frame_index;
-			const VolkDeviceTable& table;
-			Managers& managers;
-			std::vector<CommandPool> graphics_cmd_pool;
-			std::vector<CommandPool> compute_cmd_pool;
-			std::vector<CommandPool> transfer_cmd_pool;
-			QueryPool query_pool;
-
-			std::vector<BufferBlock> vbo_blocks;
-			std::vector<BufferBlock> ibo_blocks;
-			std::vector<BufferBlock> ubo_blocks;
-			std::vector<BufferBlock> staging_blocks;
-
-			VkSemaphore graphics_timeline_semaphore;
-			VkSemaphore compute_timeline_semaphore;
-			VkSemaphore transfer_timeline_semaphore;
-			uint64_t timeline_fence_graphics = 0;
-			uint64_t timeline_fence_compute = 0;
-			uint64_t timeline_fence_transfer = 0;
-
-			std::vector<VkFence> wait_fences;
-			std::vector<VkFence> recycle_fences;
-
-			std::vector<DeviceAllocation> allocations;
-			std::vector<VkFramebuffer> destroyed_framebuffers;
-			std::vector<VkSampler> destroyed_samplers;
-			std::vector<VkPipeline> destroyed_pipelines;
-			std::vector<VkImageView> destroyed_image_views;
-			std::vector<VkBufferView> destroyed_buffer_views;
-			std::vector<VkImage> destroyed_images;
-			std::vector<VkBuffer> destroyed_buffers;
-			std::vector<VkDescriptorPool> destroyed_descriptor_pools;
-			Util::SmallVector<CommandBufferHandle> graphics_submissions;
-			Util::SmallVector<CommandBufferHandle> compute_submissions;
-			Util::SmallVector<CommandBufferHandle> transfer_submissions;
-			std::vector<VkSemaphore> recycled_semaphores;
-			std::vector<VkEvent> recycled_events;
-			std::vector<VkSemaphore> destroyed_semaphores;
-			std::vector<ImageHandle> keep_alive_images;
-
-			struct DebugChannel
-			{
-				DebugChannelInterface* iface;
-				std::string tag;
-				BufferHandle buffer;
-			};
-			std::vector<DebugChannel> debug_channels;
-
-			struct TimestampIntervalHandles
-			{
-				std::string tid;
-				QueryPoolHandle start_ts;
-				QueryPoolHandle end_ts;
-				TimestampInterval* timestamp_tag;
-				std::string extra;
-			};
-			std::vector<TimestampIntervalHandles> timestamp_intervals;
-
-			bool in_destructor = false;
-		};
 		// The per frame structure must be destroyed after
 		// the hashmap data structures below, so it must be declared before.
 		std::vector<std::unique_ptr<PerFrame>> per_frame;
 
-		struct
-		{
-			Semaphore acquire;
-			Semaphore release;
-			bool touched = false;
-			bool consumed = false;
-			std::vector<ImageHandle> swapchain;
-			unsigned index = 0;
-		} wsi;
+		WSIData wsi;
 
-		struct QueueData
-		{
-			Util::SmallVector<Semaphore> wait_semaphores;
-			Util::SmallVector<VkPipelineStageFlags> wait_stages;
-			bool need_fence = false;
-
-			VkSemaphore timeline_semaphore = VK_NULL_HANDLE;
-			uint64_t current_timeline = 0;
-			PerformanceQueryPool performance_query_pool;
-		} graphics, compute, transfer;
-
-		struct InternalFence
-		{
-			VkFence fence;
-			VkSemaphore timeline;
-			uint64_t value;
-		};
+		QueueData graphics, compute, transfer;
 
 		// Pending buffers which need to be copied from CPU to GPU before submitting graphics or compute work.
-		struct
-		{
-			std::vector<BufferBlock> vbo;
-			std::vector<BufferBlock> ibo;
-			std::vector<BufferBlock> ubo;
-		} dma;
-
-		void submit_queue(CommandBuffer::Type type, InternalFence* fence,
-						  unsigned semaphore_count = 0,
-						  Semaphore* semaphore = nullptr,
-						  int profiled_iteration = -1);
-
-		PerFrame& frame()
+		DmaQueues dma;
+		//Flush all pending submission to a certain queue type. 
+		void SubmitQueue(CommandBuffer::Type type, InternalFence* fence,  unsigned semaphore_count = 0, Semaphore* semaphore = nullptr);
+		//Return the current PerFrame object
+		PerFrame& Frame()
 		{
 			VK_ASSERT(frame_context_index < per_frame.size());
 			VK_ASSERT(per_frame[frame_context_index]);
 			return *per_frame[frame_context_index];
 		}
 
-		const PerFrame& frame() const
+		const PerFrame& Frame() const
 		{
 			VK_ASSERT(frame_context_index < per_frame.size());
 			VK_ASSERT(per_frame[frame_context_index]);
@@ -561,11 +503,6 @@ namespace Vulkan
 		uint32_t graphics_queue_family_index = 0;
 		uint32_t compute_queue_family_index = 0;
 		uint32_t transfer_queue_family_index = 0;
-
-		uint32_t find_memory_type(BufferDomain domain, uint32_t mask);
-		uint32_t find_memory_type(ImageDomain domain, uint32_t mask);
-		bool memory_type_is_device_optimal(uint32_t type) const;
-		bool memory_type_is_host_visible(uint32_t type) const;
 
 		SamplerHandle samplers[static_cast<unsigned>(StockSampler::Count)];
 		VkSamplerYcbcrConversion samplers_ycbcr[static_cast<unsigned>(YCbCrFormat::Count)] = {};
@@ -583,94 +520,81 @@ namespace Vulkan
 		TransientAttachmentAllocator transient_allocator;
 		VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
 
-		SamplerHandle create_sampler(const SamplerCreateInfo& info, StockSampler sampler);
-		void init_pipeline_cache();
-		void flush_pipeline_cache();
+		SamplerHandle CreateSampler(const SamplerCreateInfo& info, StockSampler sampler);
+		bool InitPipelineCache(const uint8_t* initial_cache_data, size_t initial_cache_size);
+		bool InitFossilizePipeline(const uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size);
 
-		CommandPool& get_command_pool(CommandBuffer::Type type, unsigned thread);
-		QueueData& get_queue_data(CommandBuffer::Type type);
-		VkQueue get_vk_queue(CommandBuffer::Type type) const;
-		PerformanceQueryPool& get_performance_query_pool(CommandBuffer::Type type);
-		Util::SmallVector<CommandBufferHandle>& get_queue_submissions(CommandBuffer::Type type);
-		void clear_wait_semaphores();
-		void submit_staging(CommandBufferHandle& cmd, VkBufferUsageFlags usage, bool flush);
-		PipelineEvent request_pipeline_event();
+		CommandPool& GetCommandPool(CommandBuffer::Type type, unsigned thread);
+		QueueData& GetQueueData(CommandBuffer::Type type);
+		VkQueue GetVkQueue(CommandBuffer::Type type) const;
+		Util::SmallVector<CommandBufferHandle>& GetQueueSubmission(CommandBuffer::Type type);
+		void ClearWaitSemaphores();
+		//Submit staging buffer commands (basically just vkCmdCopyBuffers) and ensures no queue will use those resources until this submission is compelete
+		void SubmitStaging(CommandBufferHandle& cmd, VkBufferUsageFlags usage, bool flush);
+		PipelineEvent RequestPipelineEvent();
 
 		std::function<void()> queue_lock_callback;
 		std::function<void()> queue_unlock_callback;
-		void flush_frame(CommandBuffer::Type type);
-		void sync_buffer_blocks();
-		void submit_empty_inner(CommandBuffer::Type type, InternalFence* fence,
-								unsigned semaphore_count,
-								Semaphore* semaphore);
 
-		void destroy_buffer(VkBuffer buffer);
-		void destroy_image(VkImage image);
-		void destroy_image_view(VkImageView view);
-		void destroy_buffer_view(VkBufferView view);
-		void destroy_pipeline(VkPipeline pipeline);
-		void destroy_sampler(VkSampler sampler);
-		void destroy_framebuffer(VkFramebuffer framebuffer);
-		void destroy_semaphore(VkSemaphore semaphore);
-		void recycle_semaphore(VkSemaphore semaphore);
-		void destroy_event(VkEvent event);
-		void free_memory(const DeviceAllocation& alloc);
-		void reset_fence(VkFence fence, bool observed_wait);
-		void keep_handle_alive(ImageHandle handle);
-		void destroy_descriptor_pool(VkDescriptorPool desc_pool);
+		//Flushs all pending submission of a certain type for the current frame
+		void FlushFrame(CommandBuffer::Type type);
+		//Flushes all pending DMA staging writes
+		void SyncBufferBlocks();
+		void SubmitEmptyInner(CommandBuffer::Type type, InternalFence* fence, unsigned semaphore_count, Semaphore* semaphore);
 
-		void destroy_buffer_nolock(VkBuffer buffer);
-		void destroy_image_nolock(VkImage image);
-		void destroy_image_view_nolock(VkImageView view);
-		void destroy_buffer_view_nolock(VkBufferView view);
-		void destroy_pipeline_nolock(VkPipeline pipeline);
-		void destroy_sampler_nolock(VkSampler sampler);
-		void destroy_framebuffer_nolock(VkFramebuffer framebuffer);
-		void destroy_semaphore_nolock(VkSemaphore semaphore);
-		void recycle_semaphore_nolock(VkSemaphore semaphore);
-		void destroy_event_nolock(VkEvent event);
-		void free_memory_nolock(const DeviceAllocation& alloc);
-		void destroy_descriptor_pool_nolock(VkDescriptorPool desc_pool);
-		void reset_fence_nolock(VkFence fence, bool observed_wait);
+		void DestroyBuffer(VkBuffer buffer, const DeviceAllocation& allocation);
+		void DestroyImage(VkImage image, const DeviceAllocation& allocation);
+		void DestroyImageView(VkImageView view);
+		void DestroyBufferView(VkBufferView view);
+		void DestroyPipeline(VkPipeline pipeline);
+		void DestroySampler(VkSampler sampler);
+		void DestroyFramebuffer(VkFramebuffer framebuffer);
+		void DestroySemaphore(VkSemaphore semaphore);
+		void RecycleSemaphore(VkSemaphore semaphore);
+		void DestroyEvent(VkEvent event);
+		void ResetFence(VkFence fence, bool observed_wait);
+		void KeepHandleAlive(ImageHandle handle);
+		void DestroyDescriptorPool(VkDescriptorPool desc_pool);
 
-		void flush_frame_nolock();
-		CommandBufferHandle request_command_buffer_nolock(unsigned thread_index, CommandBuffer::Type type, bool profiled);
-		void submit_nolock(CommandBufferHandle cmd, Fence* fence,
-						   unsigned semaphore_count, Semaphore* semaphore);
-		void submit_empty_nolock(CommandBuffer::Type type, Fence* fence,
-								 unsigned semaphore_count,
-								 Semaphore* semaphore, int profiling_iteration);
-		void add_wait_semaphore_nolock(CommandBuffer::Type type, Semaphore semaphore, VkPipelineStageFlags stages,
-									   bool flush);
+		void DestroyBufferNolock(VkBuffer buffer, const DeviceAllocation& allocation);
+		void DestroyImageNolock(VkImage image, const DeviceAllocation& allocation);
+		void DestroyImageViewNolock(VkImageView view);
+		void DestroyBufferViewNolock(VkBufferView view);
+		void DestroyPipelineNolock(VkPipeline pipeline);
+		void DestroySamplerNolock(VkSampler sampler);
+		void DestroyFramebufferNolock(VkFramebuffer framebuffer);
+		void DestroySemaphoreNolock(VkSemaphore semaphore);
+		void RecycleSemaphoreNolock(VkSemaphore semaphore);
+		void DestroyEventNolock(VkEvent event);
+		void DestroyDescriptorPoolNolock(VkDescriptorPool desc_pool);
+		void ResetFenceNolock(VkFence fence, bool observed_wait);
 
-		void request_vertex_block_nolock(BufferBlock& block, VkDeviceSize size);
-		void request_index_block_nolock(BufferBlock& block, VkDeviceSize size);
-		void request_uniform_block_nolock(BufferBlock& block, VkDeviceSize size);
-		void request_staging_block_nolock(BufferBlock& block, VkDeviceSize size);
+		void FlushFrameNolock();
+		CommandBufferHandle RequestCommandBufferNolock(unsigned thread_index, CommandBuffer::Type type, bool profiled);
+		//Ends command buffer. If there is a fence or semaphore to signal, this submits to queue immediately, otherwise deffer submission.
+		void SubmitNolock(CommandBufferHandle cmd, Fence* fence, unsigned semaphore_count, Semaphore* semaphore);
+		void SubmitEmptyNolock(CommandBuffer::Type type, Fence* fence, unsigned semaphore_count, Semaphore* semaphore);
+		void AddWaitSemaphoreNolock(CommandBuffer::Type type, Semaphore semaphore, VkPipelineStageFlags stages, bool flush);
 
-		CommandBufferHandle request_secondary_command_buffer_for_thread(unsigned thread_index,
-																		const Framebuffer* framebuffer,
-																		unsigned subpass,
-																		CommandBuffer::Type type = CommandBuffer::Type::Generic);
-		void add_frame_counter_nolock();
-		void decrement_frame_counter_nolock();
-		void submit_secondary(CommandBuffer& primary, CommandBuffer& secondary);
-		void wait_idle_nolock();
-		void end_frame_nolock();
+		void RequestVertexBlockNolock(BufferBlock& block, VkDeviceSize size);
+		void RequestIndexBlockNolock(BufferBlock& block, VkDeviceSize size);
+		void RequestUniformBlockNolock(BufferBlock& block, VkDeviceSize size);
+		void RequestStagingBlockNolock(BufferBlock& block, VkDeviceSize size);
 
-		void add_debug_channel_buffer(DebugChannelInterface* iface, std::string tag, BufferHandle buffer);
-		void parse_debug_channel(const PerFrame::DebugChannel& channel);
+		CommandBufferHandle RequestSecondaryCommandBufferForThread(unsigned thread_index, const Framebuffer* framebuffer, unsigned subpass, CommandBuffer::Type type = CommandBuffer::Type::Generic);
+		void AddFrameCounterNolock();
+		void DecrementFrameCounterNolock();
+		void SubmitSecondary(CommandBuffer& primary, CommandBuffer& secondary);
+		void WaitIdleNolock();
+		void EndFrameNolock();
 
-		Fence request_legacy_fence();
+		Fence RequestLegacyFence();
 
 	#ifdef QM_VULKAN_FILESYSTEM
 		ShaderManager shader_manager;
 		TextureManager texture_manager;
 	#endif
 
-		std::string get_pipeline_cache_string() const;
-
-	#ifdef QM_VULKAN_FOSSILIZE
 		Fossilize::StateRecorder state_recorder;
 		//Create sampler with hash
 		bool enqueue_create_sampler(Fossilize::Hash hash, const VkSamplerCreateInfo* create_info, VkSampler* sampler) override;
@@ -707,28 +631,12 @@ namespace Vulkan
 		//Resgiesters a sampler to fossilize to be cached
 		void register_sampler(VkSampler sampler, Fossilize::Hash hash, const VkSamplerCreateInfo& info);
 
-		struct
-		{
-			std::unordered_map<VkShaderModule, Shader*> shader_map;
-			std::unordered_map<VkRenderPass, RenderPass*> render_pass_map;
-	#ifdef QM_VULKAN_MT
-			Quantum::TaskGroup pipeline_group;
-	#endif
-		} replayer_state;
-		
-		//Init fossilize cache using data from previous runs
-		void init_pipeline_state(void* fossilize_pipeline_state_data, size_t fossilize_pipeline_state_size);
-		Util::RetainedHeapData<HandleCounter> flush_pipeline_state();
-	#endif
+		FossilizeReplayer replayer_state;
 
 		ImplementationWorkarounds workarounds;
-		void init_workarounds();
-		void report_checkpoints();
+		void InitWorkarounds();
 
-		void fill_buffer_sharing_indices(VkBufferCreateInfo& create_info, uint32_t* sharing_indices);
-
-		bool allocate_image_memory(DeviceAllocation* allocation, const ImageCreateInfo& info,
-								   VkImage image, VkImageTiling tiling);
+		void FillBufferSharingIndices(VkBufferCreateInfo& create_info, uint32_t* sharing_indices);
 	};
 
 }

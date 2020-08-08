@@ -123,9 +123,8 @@ namespace Vulkan
 			buffer.GetBuffer(), num_blits, blits);
 	}
 
-	void CommandBuffer::CopyBufferToImage(const Image& image, const Buffer& src, VkDeviceSize buffer_offset,
-		const VkOffset3D& offset, const VkExtent3D& extent, unsigned row_length,
-		unsigned slice_height, const VkImageSubresourceLayers& subresource)
+	void CommandBuffer::CopyBufferToImage(const Image& image, const Buffer& src, VkDeviceSize buffer_offset, const VkOffset3D& offset, const VkExtent3D& extent,
+		unsigned row_length, unsigned slice_height, const VkImageSubresourceLayers& subresource)
 	{
 		const VkBufferImageCopy region = {
 			buffer_offset,
@@ -325,7 +324,7 @@ namespace Vulkan
 	{
 		VK_ASSERT(!framebuffer);
 		VK_ASSERT(!actual_render_pass);
-		auto event = device->request_pipeline_event();
+		auto event = device->RequestPipelineEvent();
 		if (!device->GetWorkarounds().emulate_event_as_pipeline_barrier)
 			table.vkCmdSetEvent(cmd, event->get_event(), stages);
 		event->set_stages(stages);
@@ -479,9 +478,6 @@ namespace Vulkan
 		memset(bindings.secondary_cookies, 0, sizeof(bindings.secondary_cookies));
 		memset(&index_state, 0, sizeof(index_state));
 		memset(vbo.buffers, 0, sizeof(vbo.buffers));
-
-		if (debug_channel_buffer)
-			SetStorageBuffer(VULKAN_NUM_DESCRIPTOR_SETS - 1, VULKAN_NUM_BINDINGS - 1, *debug_channel_buffer);
 	}
 
 	void CommandBuffer::BeginCompute()
@@ -510,13 +506,13 @@ namespace Vulkan
 
 	CommandBufferHandle CommandBuffer::RequestSecondaryCommandBuffer(Device& device, const RenderPassInfo& info, unsigned thread_index, unsigned subpass)
 	{
-		auto* fb = &device.request_framebuffer(info);
-		auto cmd = device.request_secondary_command_buffer_for_thread(thread_index, fb, subpass);
+		auto* fb = &device.RequestFramebuffer(info);
+		auto cmd = device.RequestSecondaryCommandBufferForThread(thread_index, fb, subpass);
 		cmd->BeginGraphics();
 
 		cmd->framebuffer = fb;
 		cmd->pipeline_state.compatible_render_pass = &fb->get_compatible_render_pass();
-		cmd->actual_render_pass = &device.request_render_pass(info, false);
+		cmd->actual_render_pass = &device.RequestRenderPass(info, false);
 
 		unsigned i;
 		for (i = 0; i < info.num_color_attachments; i++)
@@ -536,7 +532,7 @@ namespace Vulkan
 		VK_ASSERT(framebuffer);
 		VK_ASSERT(!is_secondary);
 
-		auto secondary_cmd = device->request_secondary_command_buffer_for_thread(thread_index_, framebuffer, subpass_);
+		auto secondary_cmd = device->RequestSecondaryCommandBufferForThread(thread_index_, framebuffer, subpass_);
 		secondary_cmd->BeginGraphics();
 
 		secondary_cmd->framebuffer = framebuffer;
@@ -559,7 +555,7 @@ namespace Vulkan
 		VK_ASSERT(pipeline_state.subpass_index == secondary->pipeline_state.subpass_index);
 		VK_ASSERT(current_contents == VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
-		device->submit_secondary(*this, *secondary);
+		device->SubmitSecondary(*this, *secondary);
 	}
 
 	void CommandBuffer::NextSubpass(VkSubpassContents contents)
@@ -580,9 +576,9 @@ namespace Vulkan
 		VK_ASSERT(!pipeline_state.compatible_render_pass);
 		VK_ASSERT(!actual_render_pass);
 
-		framebuffer = &device->request_framebuffer(info);
+		framebuffer = &device->RequestFramebuffer(info);
 		pipeline_state.compatible_render_pass = &framebuffer->get_compatible_render_pass();
-		actual_render_pass = &device->request_render_pass(info, false);
+		actual_render_pass = &device->RequestRenderPass(info, false);
 		pipeline_state.subpass_index = 0;
 
 		memset(framebuffer_attachments, 0, sizeof(framebuffer_attachments));
@@ -653,5 +649,1662 @@ namespace Vulkan
 		pipeline_state.compatible_render_pass = nullptr;
 		BeginCompute();
 	}
+
+	VkPipeline CommandBuffer::BuildComputePipeline(Device* device, const DeferredPipelineCompile& compile)
+	{
+		auto& shader = *compile.program->GetShader(ShaderStage::Compute);
+		VkComputePipelineCreateInfo info = { VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+		info.layout = compile.program->GetPipelineLayout()->GetLayout();
+		info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		info.stage.module = shader.GetModule();
+		info.stage.pName = "main";
+		info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+
+#ifdef GRANITE_SPIRV_DUMP
+		LOGI("Compiling SPIR-V file: (%s) %s\n",
+			Shader::stage_to_name(ShaderStage::Compute),
+			(to_string(shader.get_hash()) + ".spv").c_str());
+#endif
+
+		VkSpecializationInfo spec_info = {};
+		VkSpecializationMapEntry spec_entries[VULKAN_NUM_SPEC_CONSTANTS];
+		auto mask = compile.program->GetPipelineLayout()->GetResourceLayout().combined_spec_constant_mask & compile.potential_static_state.spec_constant_mask;
+
+		uint32_t spec_constants[VULKAN_NUM_SPEC_CONSTANTS];
+
+		if (mask)
+		{
+			info.stage.pSpecializationInfo = &spec_info;
+			spec_info.pData = spec_constants;
+			spec_info.pMapEntries = spec_entries;
+
+			Util::for_each_bit(mask, [&](uint32_t bit) {
+				auto& entry = spec_entries[spec_info.mapEntryCount];
+				entry.offset = sizeof(uint32_t) * spec_info.mapEntryCount;
+				entry.size = sizeof(uint32_t);
+				entry.constantID = bit;
+
+				spec_constants[spec_info.mapEntryCount] = compile.potential_static_state.spec_constants[bit];
+				spec_info.mapEntryCount++;
+				});
+			spec_info.dataSize = spec_info.mapEntryCount * sizeof(uint32_t);
+		}
+
+		VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT subgroup_size_info = {
+			VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT
+		};
+
+		if (compile.static_state.state.subgroup_control_size)
+		{
+			auto& features = device->GetDeviceFeatures();
+
+			if (!features.subgroup_size_control_features.subgroupSizeControl)
+			{
+				QM_LOG_ERROR("Device does not support subgroup size control.\n");
+				return VK_NULL_HANDLE;
+			}
+
+			if (compile.static_state.state.subgroup_full_group)
+			{
+				if (!features.subgroup_size_control_features.computeFullSubgroups)
+				{
+					QM_LOG_ERROR("Device does not support full subgroups.\n");
+					return VK_NULL_HANDLE;
+				}
+
+				info.stage.flags |= VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT;
+			}
+
+			uint32_t min_subgroups = 1u << compile.static_state.state.subgroup_minimum_size_log2;
+			uint32_t max_subgroups = 1u << compile.static_state.state.subgroup_maximum_size_log2;
+			if (min_subgroups <= features.subgroup_size_control_properties.minSubgroupSize &&
+				max_subgroups >= features.subgroup_size_control_properties.maxSubgroupSize)
+			{
+				info.stage.flags |= VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT;
+			}
+			else
+			{
+				// Pick a fixed subgroup size. Prefer smallest subgroup size.
+				if (min_subgroups < features.subgroup_size_control_properties.minSubgroupSize)
+					subgroup_size_info.requiredSubgroupSize = features.subgroup_size_control_properties.minSubgroupSize;
+				else
+					subgroup_size_info.requiredSubgroupSize = min_subgroups;
+
+				info.stage.pNext = &subgroup_size_info;
+
+				if (subgroup_size_info.requiredSubgroupSize < features.subgroup_size_control_properties.minSubgroupSize ||
+					subgroup_size_info.requiredSubgroupSize > features.subgroup_size_control_properties.maxSubgroupSize)
+				{
+					QM_LOG_ERROR("Requested subgroup size is out of range.\n");
+					return VK_NULL_HANDLE;
+				}
+
+				if ((features.subgroup_size_control_properties.requiredSubgroupSizeStages & VK_SHADER_STAGE_COMPUTE_BIT) == 0)
+				{
+					QM_LOG_ERROR("Cannot request specific subgroup size in compute.\n");
+					return VK_NULL_HANDLE;
+				}
+			}
+		}
+
+		VkPipeline compute_pipeline;
+		device->register_compute_pipeline(compile.hash, info);
+
+#ifdef VULKAN_DEBUG
+		QM_LOG_INFO("Creating compute pipeline.\n");
+#endif
+		auto& table = device->GetDeviceTable();
+		if (table.vkCreateComputePipelines(device->GetDevice(), compile.cache, 1, &info, nullptr, &compute_pipeline) != VK_SUCCESS)
+		{
+			QM_LOG_ERROR("Failed to create compute pipeline!\n");
+			return VK_NULL_HANDLE;
+		}
+
+		return compile.program->AddPipeline(compile.hash, compute_pipeline);
+	}
+
+	void CommandBuffer::ExtractPipelineState(DeferredPipelineCompile& compile) const
+	{
+		compile = pipeline_state;
+
+		if (!compile.program)
+		{
+			QM_LOG_ERROR("Attempting to extract pipeline state when no program is bound.\n");
+			return;
+		}
+
+		if (is_compute)
+			UpdateHashComputePipeline(compile);
+		else
+		{
+			uint32_t active_vbo = 0;
+			UpdateHashGraphicsPipeline(compile, active_vbo);
+		}
+	}
+
+	VkPipeline CommandBuffer::BuildGraphicsPipeline(Device* device, const DeferredPipelineCompile& compile)
+	{
+		// Viewport state
+		VkPipelineViewportStateCreateInfo vp = { VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
+		vp.viewportCount = 1;
+		vp.scissorCount = 1;
+
+		// Dynamic state
+		VkPipelineDynamicStateCreateInfo dyn = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+		dyn.dynamicStateCount = 2;
+		VkDynamicState states[7] = {
+			VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_VIEWPORT,
+		};
+		dyn.pDynamicStates = states;
+
+		if (compile.static_state.state.depth_bias_enable)
+			states[dyn.dynamicStateCount++] = VK_DYNAMIC_STATE_DEPTH_BIAS;
+		if (compile.static_state.state.stencil_test)
+		{
+			states[dyn.dynamicStateCount++] = VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK;
+			states[dyn.dynamicStateCount++] = VK_DYNAMIC_STATE_STENCIL_REFERENCE;
+			states[dyn.dynamicStateCount++] = VK_DYNAMIC_STATE_STENCIL_WRITE_MASK;
+		}
+
+		// Blend state
+		VkPipelineColorBlendAttachmentState blend_attachments[VULKAN_NUM_ATTACHMENTS];
+		VkPipelineColorBlendStateCreateInfo blend = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
+		blend.attachmentCount = compile.compatible_render_pass->get_num_color_attachments(compile.subpass_index);
+		blend.pAttachments = blend_attachments;
+		for (unsigned i = 0; i < blend.attachmentCount; i++)
+		{
+			auto& att = blend_attachments[i];
+			att = {};
+
+			if (compile.compatible_render_pass->get_color_attachment(compile.subpass_index, i).attachment != VK_ATTACHMENT_UNUSED && (compile.program->GetPipelineLayout()->GetResourceLayout().render_target_mask & (1u << i)))
+			{
+				att.colorWriteMask = (compile.static_state.state.write_mask >> (4 * i)) & 0xf;
+				att.blendEnable = compile.static_state.state.blend_enable;
+				if (att.blendEnable)
+				{
+					att.alphaBlendOp = static_cast<VkBlendOp>(compile.static_state.state.alpha_blend_op);
+					att.colorBlendOp = static_cast<VkBlendOp>(compile.static_state.state.color_blend_op);
+					att.dstAlphaBlendFactor = static_cast<VkBlendFactor>(compile.static_state.state.dst_alpha_blend);
+					att.srcAlphaBlendFactor = static_cast<VkBlendFactor>(compile.static_state.state.src_alpha_blend);
+					att.dstColorBlendFactor = static_cast<VkBlendFactor>(compile.static_state.state.dst_color_blend);
+					att.srcColorBlendFactor = static_cast<VkBlendFactor>(compile.static_state.state.src_color_blend);
+				}
+			}
+		}
+		memcpy(blend.blendConstants, compile.potential_static_state.blend_constants, sizeof(blend.blendConstants));
+
+		// Depth state
+		VkPipelineDepthStencilStateCreateInfo ds = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+		ds.stencilTestEnable = compile.compatible_render_pass->has_stencil(compile.subpass_index) && compile.static_state.state.stencil_test;
+		ds.depthTestEnable = compile.compatible_render_pass->has_depth(compile.subpass_index) && compile.static_state.state.depth_test;
+		ds.depthWriteEnable = compile.compatible_render_pass->has_depth(compile.subpass_index) && compile.static_state.state.depth_write;
+
+		if (ds.depthTestEnable)
+			ds.depthCompareOp = static_cast<VkCompareOp>(compile.static_state.state.depth_compare);
+
+		if (ds.stencilTestEnable)
+		{
+			ds.front.compareOp = static_cast<VkCompareOp>(compile.static_state.state.stencil_front_compare_op);
+			ds.front.passOp = static_cast<VkStencilOp>(compile.static_state.state.stencil_front_pass);
+			ds.front.failOp = static_cast<VkStencilOp>(compile.static_state.state.stencil_front_fail);
+			ds.front.depthFailOp = static_cast<VkStencilOp>(compile.static_state.state.stencil_front_depth_fail);
+			ds.back.compareOp = static_cast<VkCompareOp>(compile.static_state.state.stencil_back_compare_op);
+			ds.back.passOp = static_cast<VkStencilOp>(compile.static_state.state.stencil_back_pass);
+			ds.back.failOp = static_cast<VkStencilOp>(compile.static_state.state.stencil_back_fail);
+			ds.back.depthFailOp = static_cast<VkStencilOp>(compile.static_state.state.stencil_back_depth_fail);
+		}
+
+		// Vertex input
+		VkPipelineVertexInputStateCreateInfo vi = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+		VkVertexInputAttributeDescription vi_attribs[VULKAN_NUM_VERTEX_ATTRIBS];
+		vi.pVertexAttributeDescriptions = vi_attribs;
+		uint32_t attr_mask = compile.program->GetPipelineLayout()->GetResourceLayout().attribute_mask;
+		uint32_t binding_mask = 0;
+		Util::for_each_bit(attr_mask, [&](uint32_t bit) {
+			auto& attr = vi_attribs[vi.vertexAttributeDescriptionCount++];
+			attr.location = bit;
+			attr.binding = compile.attribs[bit].binding;
+			attr.format = compile.attribs[bit].format;
+			attr.offset = compile.attribs[bit].offset;
+			binding_mask |= 1u << attr.binding;
+			});
+
+		VkVertexInputBindingDescription vi_bindings[VULKAN_NUM_VERTEX_BUFFERS];
+		vi.pVertexBindingDescriptions = vi_bindings;
+		Util::for_each_bit(binding_mask, [&](uint32_t bit) {
+			auto& bind = vi_bindings[vi.vertexBindingDescriptionCount++];
+			bind.binding = bit;
+			bind.inputRate = compile.input_rates[bit];
+			bind.stride = compile.strides[bit];
+			});
+
+		// Input assembly
+		VkPipelineInputAssemblyStateCreateInfo ia = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
+		ia.primitiveRestartEnable = compile.static_state.state.primitive_restart;
+		ia.topology = static_cast<VkPrimitiveTopology>(compile.static_state.state.topology);
+
+		// Multisample
+		VkPipelineMultisampleStateCreateInfo ms = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
+		ms.rasterizationSamples = static_cast<VkSampleCountFlagBits>(compile.compatible_render_pass->get_sample_count(compile.subpass_index));
+
+		if (compile.compatible_render_pass->get_sample_count(compile.subpass_index) > 1)
+		{
+			ms.alphaToCoverageEnable = compile.static_state.state.alpha_to_coverage;
+			ms.alphaToOneEnable = compile.static_state.state.alpha_to_one;
+			ms.sampleShadingEnable = compile.static_state.state.sample_shading;
+			ms.minSampleShading = 1.0f;
+		}
+
+		// Raster
+		VkPipelineRasterizationStateCreateInfo raster = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
+		raster.cullMode = static_cast<VkCullModeFlags>(compile.static_state.state.cull_mode);
+		raster.frontFace = static_cast<VkFrontFace>(compile.static_state.state.front_face);
+		raster.lineWidth = 1.0f;
+		raster.polygonMode = compile.static_state.state.wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+		raster.depthBiasEnable = compile.static_state.state.depth_bias_enable != 0;
+
+		VkPipelineRasterizationConservativeStateCreateInfoEXT conservative_raster = {
+			VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT
+		};
+		if (compile.static_state.state.conservative_raster)
+		{
+			if (device->GetDeviceFeatures().supports_conservative_rasterization)
+			{
+				raster.pNext = &conservative_raster;
+				conservative_raster.conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT;
+			}
+			else
+			{
+				QM_LOG_ERROR("Conservative rasterization is not supported on this device.\n");
+				return VK_NULL_HANDLE;
+			}
+		}
+
+		// Stages
+		VkPipelineShaderStageCreateInfo stages[static_cast<unsigned>(ShaderStage::Count)];
+		unsigned num_stages = 0;
+
+		VkSpecializationInfo spec_info[Util::ecast(ShaderStage::Count)] = {};
+		VkSpecializationMapEntry spec_entries[Util::ecast(ShaderStage::Count)][VULKAN_NUM_SPEC_CONSTANTS];
+		uint32_t spec_constants[static_cast<unsigned>(ShaderStage::Count)][VULKAN_NUM_SPEC_CONSTANTS];
+
+		for (unsigned i = 0; i < static_cast<unsigned>(ShaderStage::Count); i++)
+		{
+			auto stage = static_cast<ShaderStage>(i);
+			if (compile.program->GetShader(stage))
+			{
+				auto& s = stages[num_stages++];
+				s = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+				s.module = compile.program->GetShader(stage)->GetModule();
+#ifdef QM_SPIRV_DUMP
+				LOGI("Compiling SPIR-V file: (%s) %s\n",
+					Shader::stage_to_name(stage),
+					(to_string(compile.program->get_shader(stage)->get_hash()) + ".spv").c_str());
+#endif
+				s.pName = "main";
+				s.stage = static_cast<VkShaderStageFlagBits>(1u << i);
+
+				auto mask = compile.program->GetPipelineLayout()->GetResourceLayout().spec_constant_mask[i] & compile.potential_static_state.spec_constant_mask;
+
+				if (mask)
+				{
+					s.pSpecializationInfo = &spec_info[i];
+					spec_info[i].pData = spec_constants[i];
+					spec_info[i].pMapEntries = spec_entries[i];
+
+					Util::for_each_bit(mask, [&](uint32_t bit) {
+						auto& entry = spec_entries[i][spec_info[i].mapEntryCount];
+						entry.offset = sizeof(uint32_t) * spec_info[i].mapEntryCount;
+						entry.size = sizeof(uint32_t);
+						entry.constantID = bit;
+						spec_constants[i][spec_info[i].mapEntryCount] = compile.potential_static_state.spec_constants[bit];
+						spec_info[i].mapEntryCount++;
+						});
+					spec_info[i].dataSize = spec_info[i].mapEntryCount * sizeof(uint32_t);
+				}
+			}
+		}
+
+		VkGraphicsPipelineCreateInfo pipe = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
+		pipe.layout = compile.program->GetPipelineLayout()->GetLayout();
+		pipe.renderPass = compile.compatible_render_pass->get_render_pass();
+		pipe.subpass = compile.subpass_index;
+
+		pipe.pViewportState = &vp;
+		pipe.pDynamicState = &dyn;
+		pipe.pColorBlendState = &blend;
+		pipe.pDepthStencilState = &ds;
+		pipe.pVertexInputState = &vi;
+		pipe.pInputAssemblyState = &ia;
+		pipe.pMultisampleState = &ms;
+		pipe.pRasterizationState = &raster;
+		pipe.pStages = stages;
+		pipe.stageCount = num_stages;
+
+		VkPipeline pipeline;
+#ifdef QM_VULKAN_FOSSILIZE
+		device->register_graphics_pipeline(compile.hash, pipe);
+#endif
+
+#ifdef VULKAN_DEBUG
+		QM_LOG_INFO("Creating graphics pipeline.\n");
+#endif
+		auto& table = device->GetDeviceTable();
+		VkResult res = table.vkCreateGraphicsPipelines(device->GetDevice(), compile.cache, 1, &pipe, nullptr, &pipeline);
+		if (res != VK_SUCCESS)
+		{
+			QM_LOG_ERROR("Failed to create graphics pipeline!\n");
+			return VK_NULL_HANDLE;
+		}
+
+		return compile.program->AddPipeline(compile.hash, pipeline);
+	}
+
+	bool CommandBuffer::FlushComputePipeline(bool synchronous)
+	{
+		UpdateHashComputePipeline(pipeline_state);
+		current_pipeline = pipeline_state.program->GetPipeline(pipeline_state.hash);
+		if (current_pipeline == VK_NULL_HANDLE && synchronous)
+			current_pipeline = BuildComputePipeline(device, pipeline_state);
+
+		return current_pipeline != VK_NULL_HANDLE;
+	}
+
+	bool CommandBuffer::FlushGraphicsPipeline(bool synchronous)
+	{
+		UpdateHashGraphicsPipeline(pipeline_state, active_vbos);
+		current_pipeline = pipeline_state.program->GetPipeline(pipeline_state.hash);
+
+		if (current_pipeline == VK_NULL_HANDLE && synchronous)
+			current_pipeline = BuildGraphicsPipeline(device, pipeline_state);
+
+		return current_pipeline != VK_NULL_HANDLE;
+	}
+
+	void CommandBuffer::UpdateHashComputePipeline(DeferredPipelineCompile& compile)
+	{
+		Util::Hasher h;
+		h.u64(compile.program->get_hash());
+
+		// Spec constants.
+		auto& layout = compile.program->GetPipelineLayout()->GetResourceLayout();
+		uint32_t combined_spec_constant = layout.combined_spec_constant_mask;
+		combined_spec_constant &= compile.potential_static_state.spec_constant_mask;
+		h.u32(combined_spec_constant);
+		Util::for_each_bit(combined_spec_constant, [&](uint32_t bit) {
+			h.u32(compile.potential_static_state.spec_constants[bit]);
+			});
+
+		if (compile.static_state.state.subgroup_control_size)
+		{
+			h.s32(1);
+			h.u32(compile.static_state.state.subgroup_minimum_size_log2);
+			h.u32(compile.static_state.state.subgroup_maximum_size_log2);
+			h.s32(compile.static_state.state.subgroup_full_group);
+		}
+		else
+			h.s32(0);
+
+		compile.hash = h.get();
+	}
+
+	void CommandBuffer::UpdateHashGraphicsPipeline(DeferredPipelineCompile& compile, uint32_t& active_vbos)
+	{
+		Util::Hasher h;
+		active_vbos = 0;
+		auto& layout = compile.program->GetPipelineLayout()->GetResourceLayout();
+		Util::for_each_bit(layout.attribute_mask, [&](uint32_t bit) {
+			h.u32(bit);
+			active_vbos |= 1u << compile.attribs[bit].binding;
+			h.u32(compile.attribs[bit].binding);
+			h.u32(compile.attribs[bit].format);
+			h.u32(compile.attribs[bit].offset);
+			});
+
+		Util::for_each_bit(active_vbos, [&](uint32_t bit) {
+			h.u32(compile.input_rates[bit]);
+			h.u32(compile.strides[bit]);
+			});
+
+		h.u64(compile.compatible_render_pass->get_hash());
+		h.u32(compile.subpass_index);
+		h.u64(compile.program->get_hash());
+		h.data(compile.static_state.words, sizeof(compile.static_state.words));
+
+		if (compile.static_state.state.blend_enable)
+		{
+			const auto needs_blend_constant = [](VkBlendFactor factor) {
+				return factor == VK_BLEND_FACTOR_CONSTANT_COLOR || factor == VK_BLEND_FACTOR_CONSTANT_ALPHA;
+			};
+			bool b0 = needs_blend_constant(static_cast<VkBlendFactor>(compile.static_state.state.src_color_blend));
+			bool b1 = needs_blend_constant(static_cast<VkBlendFactor>(compile.static_state.state.src_alpha_blend));
+			bool b2 = needs_blend_constant(static_cast<VkBlendFactor>(compile.static_state.state.dst_color_blend));
+			bool b3 = needs_blend_constant(static_cast<VkBlendFactor>(compile.static_state.state.dst_alpha_blend));
+			if (b0 || b1 || b2 || b3)
+				h.data(reinterpret_cast<const uint32_t*>(compile.potential_static_state.blend_constants),
+					sizeof(compile.potential_static_state.blend_constants));
+		}
+
+		// Spec constants.
+		uint32_t combined_spec_constant = layout.combined_spec_constant_mask;
+		combined_spec_constant &= compile.potential_static_state.spec_constant_mask;
+		h.u32(combined_spec_constant);
+		Util::for_each_bit(combined_spec_constant, [&](uint32_t bit) {
+			h.u32(compile.potential_static_state.spec_constants[bit]);
+			});
+
+		compile.hash = h.get();
+	}
+
+	bool CommandBuffer::FlushComputeState(bool synchronous)
+	{
+		if (!pipeline_state.program)
+			return false;
+		VK_ASSERT(current_layout);
+
+		if (current_pipeline == VK_NULL_HANDLE)
+			set_dirty(COMMAND_BUFFER_DIRTY_PIPELINE_BIT);
+
+		if (get_and_clear(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT | COMMAND_BUFFER_DIRTY_PIPELINE_BIT))
+		{
+			VkPipeline old_pipe = current_pipeline;
+			if (!FlushComputePipeline(synchronous))
+				return false;
+
+			if (old_pipe != current_pipeline)
+				table.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline);
+		}
+
+		if (current_pipeline == VK_NULL_HANDLE)
+			return false;
+
+		FlushDescriptorSets();
+
+		if (get_and_clear(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT))
+		{
+			auto& range = current_layout->GetResourceLayout().push_constant_range;
+			if (range.stageFlags != 0)
+			{
+				VK_ASSERT(range.offset == 0);
+				table.vkCmdPushConstants(cmd, current_pipeline_layout, range.stageFlags,
+					0, range.size,
+					bindings.push_constant_data);
+			}
+		}
+
+		return true;
+	}
+
+	bool CommandBuffer::FlushRenderState(bool synchronous)
+	{
+		if (!pipeline_state.program)
+			return false;
+		VK_ASSERT(current_layout);
+
+		if (current_pipeline == VK_NULL_HANDLE)
+			set_dirty(COMMAND_BUFFER_DIRTY_PIPELINE_BIT);
+
+		// We've invalidated pipeline state, update the VkPipeline.
+		if (get_and_clear(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT | COMMAND_BUFFER_DIRTY_PIPELINE_BIT | COMMAND_BUFFER_DIRTY_STATIC_VERTEX_BIT))
+		{
+			VkPipeline old_pipe = current_pipeline;
+			if (!FlushGraphicsPipeline(synchronous))
+				return false;
+
+			if (old_pipe != current_pipeline)
+			{
+				table.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, current_pipeline);
+				set_dirty(COMMAND_BUFFER_DYNAMIC_BITS);
+			}
+		}
+
+		if (current_pipeline == VK_NULL_HANDLE)
+			return false;
+
+		FlushDescriptorSets();
+
+		if (get_and_clear(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT))
+		{
+			auto& range = current_layout->GetResourceLayout().push_constant_range;
+			if (range.stageFlags != 0)
+			{
+				VK_ASSERT(range.offset == 0);
+				table.vkCmdPushConstants(cmd, current_pipeline_layout, range.stageFlags, 0, range.size, bindings.push_constant_data);
+			}
+		}
+
+		if (get_and_clear(COMMAND_BUFFER_DIRTY_VIEWPORT_BIT))
+			table.vkCmdSetViewport(cmd, 0, 1, &viewport);
+		if (get_and_clear(COMMAND_BUFFER_DIRTY_SCISSOR_BIT))
+			table.vkCmdSetScissor(cmd, 0, 1, &scissor);
+		if (pipeline_state.static_state.state.depth_bias_enable && get_and_clear(COMMAND_BUFFER_DIRTY_DEPTH_BIAS_BIT))
+			table.vkCmdSetDepthBias(cmd, dynamic_state.depth_bias_constant, 0.0f, dynamic_state.depth_bias_slope);
+		if (pipeline_state.static_state.state.stencil_test && get_and_clear(COMMAND_BUFFER_DIRTY_STENCIL_REFERENCE_BIT))
+		{
+			table.vkCmdSetStencilCompareMask(cmd, VK_STENCIL_FACE_FRONT_BIT, dynamic_state.front_compare_mask);
+			table.vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_BIT, dynamic_state.front_reference);
+			table.vkCmdSetStencilWriteMask(cmd, VK_STENCIL_FACE_FRONT_BIT, dynamic_state.front_write_mask);
+			table.vkCmdSetStencilCompareMask(cmd, VK_STENCIL_FACE_BACK_BIT, dynamic_state.back_compare_mask);
+			table.vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_BACK_BIT, dynamic_state.back_reference);
+			table.vkCmdSetStencilWriteMask(cmd, VK_STENCIL_FACE_BACK_BIT, dynamic_state.back_write_mask);
+		}
+
+		uint32_t update_vbo_mask = dirty_vbos & active_vbos;
+		Util::for_each_bit_range(update_vbo_mask, [&](uint32_t binding, uint32_t binding_count) {
+#ifdef VULKAN_DEBUG
+			for (unsigned i = binding; i < binding + binding_count; i++)
+				VK_ASSERT(vbo.buffers[i] != VK_NULL_HANDLE);
+#endif
+			table.vkCmdBindVertexBuffers(cmd, binding, binding_count, vbo.buffers + binding, vbo.offsets + binding);
+			});
+		dirty_vbos &= ~update_vbo_mask;
+
+		return true;
+	}
+
+	bool CommandBuffer::FlushPipelineStateWithoutBlocking()
+	{
+		if (is_compute)
+			return FlushComputeState(false);
+		else
+			return FlushRenderState(false);
+	}
+
+	void CommandBuffer::SetVertexAttrib(uint32_t attrib, uint32_t binding, VkFormat format, VkDeviceSize offset)
+	{
+		//Asset that attrib is less than VULKAN_NUM_VERTEX_ATTRIBS
+		VK_ASSERT(attrib < VULKAN_NUM_VERTEX_ATTRIBS);
+		//And that is is called from within a renderpass
+		VK_ASSERT(framebuffer);
+
+		auto& attr = pipeline_state.attribs[attrib];
+
+		//If the attribute is different
+		if (attr.binding != binding || attr.format != format || attr.offset != offset)
+			set_dirty(COMMAND_BUFFER_DIRTY_STATIC_VERTEX_BIT); //Indicate that it has changed
+
+		VK_ASSERT(binding < VULKAN_NUM_VERTEX_BUFFERS);
+
+		attr.binding = binding;
+		attr.format = format;
+		attr.offset = offset;
+	}
+
+	void CommandBuffer::SetIndexBuffer(const Buffer& buffer, VkDeviceSize offset, VkIndexType index_type)
+	{
+		//If index buffer is already set to this, return
+		if (index_state.buffer == buffer.GetBuffer() && index_state.offset == offset && index_state.index_type == index_type)
+			return;
+
+		index_state.buffer = buffer.GetBuffer();
+		index_state.offset = offset;
+		index_state.index_type = index_type;
+		//Bind the index buffer
+		table.vkCmdBindIndexBuffer(cmd, buffer.GetBuffer(), offset, index_type);
+	}
+
+	void CommandBuffer::SetVertexBinding(uint32_t binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize stride, VkVertexInputRate step_rate)
+	{
+		VK_ASSERT(binding < VULKAN_NUM_VERTEX_BUFFERS);
+		VK_ASSERT(framebuffer);
+
+		//Retrive the vkBuffer
+		VkBuffer vkbuffer = buffer.GetBuffer();
+		if (vbo.buffers[binding] != vkbuffer || vbo.offsets[binding] != offset)
+			dirty_vbos |= 1u << binding; //Indicate wich bindings in the vbo are now dirty
+		if (pipeline_state.strides[binding] != stride || pipeline_state.input_rates[binding] != step_rate)
+			set_dirty(COMMAND_BUFFER_DIRTY_STATIC_VERTEX_BIT); //If size or step_rate changes, indicate that the whole vertex_state is dirty.
+
+		vbo.buffers[binding] = vkbuffer;
+		vbo.offsets[binding] = offset;
+		pipeline_state.strides[binding] = stride;
+		pipeline_state.input_rates[binding] = step_rate;
+	}
+
+	void CommandBuffer::SetViewport(const VkViewport& viewport_)
+	{
+		VK_ASSERT(framebuffer);
+		viewport = viewport_;
+		//Indicate that the viewport has changed
+		set_dirty(COMMAND_BUFFER_DIRTY_VIEWPORT_BIT);
+	}
+
+	const VkViewport& CommandBuffer::GetViewport() const
+	{
+		return viewport;
+	}
+
+	void CommandBuffer::SetScissor(const VkRect2D& rect)
+	{
+		VK_ASSERT(framebuffer);
+		VK_ASSERT(rect.offset.x >= 0);
+		VK_ASSERT(rect.offset.y >= 0);
+		scissor = rect;
+		set_dirty(COMMAND_BUFFER_DIRTY_SCISSOR_BIT);
+	}
+
+	void CommandBuffer::PushConstants(const void* data, VkDeviceSize offset, VkDeviceSize range)
+	{
+		VK_ASSERT(offset + range <= VULKAN_PUSH_CONSTANT_SIZE);
+		memcpy(bindings.push_constant_data + offset, data, range);
+		set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
+	}
+
+#ifdef QM_VULKAN_FILESYSTEM
+	void CommandBuffer::set_program(const std::string& compute, const std::vector<std::pair<std::string, int>>& defines)
+	{
+		auto* p = device->get_shader_manager().register_compute(compute);
+		if (p)
+		{
+			unsigned variant = p->register_variant(defines);
+			set_program(p->get_program(variant));
+		}
+		else
+			set_program(nullptr);
+	}
+
+	void CommandBuffer::set_program(const std::string& vertex, const std::string& fragment,
+		const std::vector<std::pair<std::string, int>>& defines)
+	{
+		auto* p = device->get_shader_manager().register_graphics(vertex, fragment);
+		if (p)
+		{
+			unsigned variant = p->register_variant(defines);
+			set_program(p->get_program(variant));
+		}
+		else
+			set_program(nullptr);
+	}
+#endif
+
+	void CommandBuffer::SetProgram(Program* program)
+	{
+		//If this is already set as the program, ignore this call
+		if (pipeline_state.program == program)
+			return;
+
+		//Otherwise set the current program to program
+		pipeline_state.program = program;
+		current_pipeline = VK_NULL_HANDLE;
+		//And indicate that the pipeline and dynamic state have changed
+		set_dirty(COMMAND_BUFFER_DIRTY_PIPELINE_BIT | COMMAND_BUFFER_DYNAMIC_BITS);
+		if (!program)
+			return;
+
+		//Make sure there is at least either a Compute or Vertex shader
+		VK_ASSERT((framebuffer && pipeline_state.program->GetShader(ShaderStage::Vertex)) ||
+			(!framebuffer && pipeline_state.program->GetShader(ShaderStage::Compute)));
+
+		//If the previous pipeline didn't have a layout
+		if (!current_layout)
+		{
+			//Indicate that all sets must be changed
+			dirty_sets = ~0u;
+			//As well as the push constants
+			set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
+			//Set the layout
+			current_layout = program->GetPipelineLayout();
+			current_pipeline_layout = current_layout->GetLayout();
+		}
+		else if (program->GetPipelineLayout()->get_hash() != current_layout->get_hash())
+		{
+			//New layout to switch to
+			auto& new_layout = program->GetPipelineLayout()->GetResourceLayout();
+			//Old layout to switch from
+			auto& old_layout = current_layout->GetResourceLayout();
+
+			// If the push constant layout changes, all descriptor sets
+			// are invalidated.
+			if (new_layout.push_constant_layout_hash != old_layout.push_constant_layout_hash)
+			{
+				dirty_sets = ~0u;
+				set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
+			}
+			else
+			{
+				// Find the first set whose descriptor set layout differs.
+				auto* new_pipe_layout = program->GetPipelineLayout();
+				for (unsigned set = 0; set < VULKAN_NUM_DESCRIPTOR_SETS; set++)
+				{
+					//If the sets differ
+					if (new_pipe_layout->GetAllocator(set) != current_layout->GetAllocator(set))
+					{
+						//Indicate that set must be changed
+						dirty_sets |= ~((1u << set) - 1);
+						break;
+					}
+				}
+			}
+			current_layout = program->GetPipelineLayout();
+			current_pipeline_layout = current_layout->GetLayout();
+		}
+	}
+
+	void* CommandBuffer::AllocateConstantData(unsigned set, unsigned binding, VkDeviceSize size)
+	{
+		VK_ASSERT(size <= VULKAN_MAX_UBO_SIZE);
+		auto data = ubo_block.Allocate(size);
+		if (!data.host)
+		{
+			device->RequestUniformBlock(ubo_block, size);
+			data = ubo_block.Allocate(size);
+		}
+		SetUniformBuffer(set, binding, *ubo_block.gpu, data.offset, data.padded_size);
+		return data.host;
+	}
+
+	void* CommandBuffer::AllocateIndexData(VkDeviceSize size, VkIndexType index_type)
+	{
+		auto data = ibo_block.Allocate(size);
+		if (!data.host)
+		{
+			device->RequestIndexBlock(ibo_block, size);
+			data = ibo_block.Allocate(size);
+		}
+		SetIndexBuffer(*ibo_block.gpu, data.offset, index_type);
+		return data.host;
+	}
+
+	void* CommandBuffer::AllocateVertexData(unsigned binding, VkDeviceSize size, VkDeviceSize stride, VkVertexInputRate step_rate)
+	{
+		auto data = vbo_block.Allocate(size);
+		if (!data.host)
+		{
+			device->RequestVertexBlock(vbo_block, size);
+			data = vbo_block.Allocate(size);
+		}
+
+		SetVertexBinding(binding, *vbo_block.gpu, data.offset, stride, step_rate);
+		return data.host;
+	}
+
+	void* CommandBuffer::UpdateBuffer(const Buffer& buffer, VkDeviceSize offset, VkDeviceSize size)
+	{
+		if (size == 0)
+			return nullptr;
+
+		auto data = staging_block.Allocate(size);
+		if (!data.host)
+		{
+			device->RequestStagingBlock(staging_block, size);
+			data = staging_block.Allocate(size);
+		}
+		CopyBuffer(buffer, offset, *staging_block.cpu, data.offset, size);
+		return data.host;
+	}
+
+	void* CommandBuffer::UpdateImage(const Image& image, const VkOffset3D& offset, const VkExtent3D& extent, uint32_t row_length, uint32_t image_height, const VkImageSubresourceLayers& subresource)
+	{
+		auto& create_info = image.GetCreateInfo();
+		uint32_t width = std::max(image.GetWidth() >> subresource.mipLevel, 1u);
+		uint32_t height = std::max(image.GetHeight() >> subresource.mipLevel, 1u);
+		uint32_t depth = std::max(image.GetDepth() >> subresource.mipLevel, 1u);
+
+		if (!row_length)
+			row_length = width;
+
+		if (!image_height)
+			image_height = height;
+
+		uint32_t blocks_x = row_length;
+		uint32_t blocks_y = image_height;
+		format_num_blocks(create_info.format, blocks_x, blocks_y);
+
+		VkDeviceSize size = TextureFormatLayout::format_block_size(create_info.format, subresource.aspectMask) * subresource.layerCount * depth * blocks_x * blocks_y;
+
+		auto data = staging_block.Allocate(size);
+		if (!data.host)
+		{
+			device->RequestStagingBlock(staging_block, size);
+			data = staging_block.Allocate(size);
+		}
+
+		CopyBufferToImage(image, *staging_block.cpu, data.offset, offset, extent, row_length, image_height, subresource);
+		return data.host;
+	}
+
+	void* CommandBuffer::UpdateImage(const Image& image, uint32_t row_length, uint32_t image_height)
+	{
+		const VkImageSubresourceLayers subresource = {
+			format_to_aspect_mask(image.GetFormat()), 0, 0, 1,
+		};
+		return UpdateImage(image, { 0, 0, 0 }, { image.GetWidth(), image.GetHeight(), image.GetDepth() }, row_length, image_height, subresource);
+	}
+
+	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
+	{
+		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
+		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
+		VK_ASSERT(buffer.GetCreateInfo().usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+		auto& b = bindings.bindings[set][binding];
+
+		if (buffer.get_cookie() == bindings.cookies[set][binding] && b.buffer.range == range)
+		{
+			if (b.dynamic_offset != offset)
+			{
+				//If just the offset changed, indicate that the dynamic set is dirty
+				dirty_sets_dynamic |= 1u << set;
+				b.dynamic_offset = offset;
+			}
+		}
+		else
+		{
+			b.buffer = { buffer.GetBuffer(), 0, range };
+			b.dynamic_offset = offset;
+			bindings.cookies[set][binding] = buffer.get_cookie();
+			bindings.secondary_cookies[set][binding] = 0;
+			//Indicate that a static set is dirty
+			dirty_sets |= 1u << set;
+		}
+	}
+
+	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
+	{
+		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
+		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
+		VK_ASSERT(buffer.GetCreateInfo().usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		auto& b = bindings.bindings[set][binding];
+
+		if (buffer.get_cookie() == bindings.cookies[set][binding] && b.buffer.offset == offset && b.buffer.range == range)
+			return;
+
+		b.buffer = { buffer.GetBuffer(), offset, range };
+		b.dynamic_offset = 0;
+		bindings.cookies[set][binding] = buffer.get_cookie();
+		bindings.secondary_cookies[set][binding] = 0;
+		dirty_sets |= 1u << set;
+	}
+
+	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer)
+	{
+		SetUniformBuffer(set, binding, buffer, 0, buffer.GetCreateInfo().size);
+	}
+
+	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer)
+	{
+		SetStorageBuffer(set, binding, buffer, 0, buffer.GetCreateInfo().size);
+	}
+
+	void CommandBuffer::SetSampler(unsigned set, unsigned binding, const Sampler& sampler)
+	{
+		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
+		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
+		if (sampler.get_cookie() == bindings.secondary_cookies[set][binding])
+			return;
+
+		auto& b = bindings.bindings[set][binding];
+		b.image.fp.sampler = sampler.get_sampler();
+		b.image.integer.sampler = sampler.get_sampler();
+		//Indicate that the set must be updated
+		dirty_sets |= 1u << set;
+		bindings.secondary_cookies[set][binding] = sampler.get_cookie();
+	}
+
+	void CommandBuffer::SetBufferView(unsigned set, unsigned binding, const BufferView& view)
+	{
+		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
+		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
+		VK_ASSERT(view.GetBuffer().GetCreateInfo().usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
+		if (view.get_cookie() == bindings.cookies[set][binding])
+			return;
+		auto& b = bindings.bindings[set][binding];
+		b.buffer_view = view.GetView();
+		bindings.cookies[set][binding] = view.get_cookie();
+		bindings.secondary_cookies[set][binding] = 0;
+		dirty_sets |= 1u << set;
+	}
+
+	void CommandBuffer::SetInputAttachments(unsigned set, unsigned start_binding)
+	{
+		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
+		VK_ASSERT(start_binding + actual_render_pass->get_num_input_attachments(pipeline_state.subpass_index) <= VULKAN_NUM_BINDINGS);
+		unsigned num_input_attachments = actual_render_pass->get_num_input_attachments(pipeline_state.subpass_index);
+		for (unsigned i = 0; i < num_input_attachments; i++)
+		{
+			auto& ref = actual_render_pass->get_input_attachment(pipeline_state.subpass_index, i);
+			if (ref.attachment == VK_ATTACHMENT_UNUSED)
+				continue;
+
+			const ImageView* view = framebuffer_attachments[ref.attachment];
+			VK_ASSERT(view);
+			VK_ASSERT(view->GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+
+			if (view->get_cookie() == bindings.cookies[set][start_binding + i] &&
+				bindings.bindings[set][start_binding + i].image.fp.imageLayout == ref.layout)
+			{
+				continue;
+			}
+
+			auto& b = bindings.bindings[set][start_binding + i];
+			b.image.fp.imageLayout = ref.layout;
+			b.image.integer.imageLayout = ref.layout;
+			b.image.fp.imageView = view->GetFloatView();
+			b.image.integer.imageView = view->GetIntegerView();
+			bindings.cookies[set][start_binding + i] = view->get_cookie();
+			dirty_sets |= 1u << set;
+		}
+	}
+
+	void CommandBuffer::SetTexture(unsigned set, unsigned binding,
+		VkImageView float_view, VkImageView integer_view,
+		VkImageLayout layout,
+		uint64_t cookie)
+	{
+		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
+		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
+
+		if (cookie == bindings.cookies[set][binding] && bindings.bindings[set][binding].image.fp.imageLayout == layout)
+			return;
+
+		auto& b = bindings.bindings[set][binding];
+		b.image.fp.imageLayout = layout;
+		b.image.fp.imageView = float_view;
+		b.image.integer.imageLayout = layout;
+		b.image.integer.imageView = integer_view;
+		bindings.cookies[set][binding] = cookie;
+		dirty_sets |= 1u << set;
+	}
+
+	void CommandBuffer::SetBindless(unsigned set, VkDescriptorSet desc_set)
+	{
+		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
+		bindless_sets[set] = desc_set;
+		dirty_sets |= 1u << set;
+	}
+
+
+	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view)
+	{
+		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
+		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.get_cookie());
+	}
+
+	enum CookieBits
+	{
+		COOKIE_BIT_UNORM = 1 << 0,
+		COOKIE_BIT_SRGB = 1 << 1
+	};
+
+	void CommandBuffer::SetUnormTexture(unsigned set, unsigned binding, const ImageView& view)
+	{
+		VK_ASSERT(view.get_image().get_create_info().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
+		auto unorm_view = view.GetUnormView();
+		VK_ASSERT(unorm_view != VK_NULL_HANDLE);
+		SetTexture(set, binding, unorm_view, unorm_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.get_cookie() | COOKIE_BIT_UNORM);
+	}
+
+	void CommandBuffer::SetSrgbTexture(unsigned set, unsigned binding, const ImageView& view)
+	{
+		VK_ASSERT(view.get_image().get_create_info().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
+		auto srgb_view = view.GetSRGBView();
+		VK_ASSERT(srgb_view != VK_NULL_HANDLE);
+		SetTexture(set, binding, srgb_view, srgb_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.get_cookie() | COOKIE_BIT_SRGB);
+	}
+
+	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view, const Sampler& sampler)
+	{
+		SetSampler(set, binding, sampler);
+		SetTexture(set, binding, view);
+	}
+
+	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view, StockSampler stock)
+	{
+		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
+		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
+		VK_ASSERT(view.get_image().get_create_info().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
+		const auto& sampler = device->GetStockSampler(stock);
+		SetTexture(set, binding, view, sampler);
+	}
+
+	void CommandBuffer::SetSampler(unsigned set, unsigned binding, StockSampler stock)
+	{
+		const auto& sampler = device->GetStockSampler(stock);
+		SetSampler(set, binding, sampler);
+	}
+
+	void CommandBuffer::SetStorageTexture(unsigned set, unsigned binding, const ImageView& view)
+	{
+		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_STORAGE_BIT);
+		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_GENERAL), view.get_cookie());
+	}
+
+	static void UpdateDescriptorSetLegacy(Device& device, VkDescriptorSet desc_set, const DescriptorSetLayout& set_layout, const ResourceBinding* bindings)
+	{
+		//TODO figure out how this works without overflowwing writes
+
+		auto& table = device.GetDeviceTable();
+		//Get the maximum number of bindings
+		uint32_t write_count = 0;
+		VkWriteDescriptorSet writes[VULKAN_NUM_BINDINGS];
+
+		Util::for_each_bit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
+				auto& write = writes[write_count++];
+				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				write.pNext = nullptr;
+				write.descriptorCount = 1;
+				write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+				write.dstArrayElement = i;
+				write.dstBinding = binding;
+				write.dstSet = desc_set;
+				write.pBufferInfo = &bindings[binding + i].buffer;
+			}
+			});
+
+		Util::for_each_bit(set_layout.storage_buffer_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
+				auto& write = writes[write_count++];
+				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				write.pNext = nullptr;
+				write.descriptorCount = 1;
+				write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+				write.dstArrayElement = i;
+				write.dstBinding = binding;
+				write.dstSet = desc_set;
+				write.pBufferInfo = &bindings[binding + i].buffer;
+			}
+			});
+
+		Util::for_each_bit(set_layout.sampled_buffer_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
+				auto& write = writes[write_count++];
+				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				write.pNext = nullptr;
+				write.descriptorCount = 1;
+				write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+				write.dstArrayElement = i;
+				write.dstBinding = binding;
+				write.dstSet = desc_set;
+				write.pTexelBufferView = &bindings[binding + i].buffer_view;
+			}
+			});
+
+		Util::for_each_bit(set_layout.sampled_image_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
+				auto& write = writes[write_count++];
+				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				write.pNext = nullptr;
+				write.descriptorCount = 1;
+				write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				write.dstArrayElement = i;
+				write.dstBinding = binding;
+				write.dstSet = desc_set;
+
+				if (set_layout.fp_mask & (1u << binding))
+					write.pImageInfo = &bindings[binding + i].image.fp;
+				else
+					write.pImageInfo = &bindings[binding + i].image.integer;
+			}
+			});
+
+		Util::for_each_bit(set_layout.separate_image_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
+				auto& write = writes[write_count++];
+				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				write.pNext = nullptr;
+				write.descriptorCount = 1;
+				write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+				write.dstArrayElement = i;
+				write.dstBinding = binding;
+				write.dstSet = desc_set;
+
+				if (set_layout.fp_mask & (1u << binding))
+					write.pImageInfo = &bindings[binding + i].image.fp;
+				else
+					write.pImageInfo = &bindings[binding + i].image.integer;
+			}
+			});
+
+		Util::for_each_bit(set_layout.sampler_mask & ~set_layout.immutable_sampler_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
+				auto& write = writes[write_count++];
+				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				write.pNext = nullptr;
+				write.descriptorCount = 1;
+				write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+				write.dstArrayElement = i;
+				write.dstBinding = binding;
+				write.dstSet = desc_set;
+				write.pImageInfo = &bindings[binding + i].image.fp;
+			}
+			});
+
+		Util::for_each_bit(set_layout.storage_image_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
+				auto& write = writes[write_count++];
+				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				write.pNext = nullptr;
+				write.descriptorCount = 1;
+				write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+				write.dstArrayElement = i;
+				write.dstBinding = binding;
+				write.dstSet = desc_set;
+
+				if (set_layout.fp_mask & (1u << binding))
+					write.pImageInfo = &bindings[binding + i].image.fp;
+				else
+					write.pImageInfo = &bindings[binding + i].image.integer;
+			}
+			});
+
+		Util::for_each_bit(set_layout.input_attachment_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
+				auto& write = writes[write_count++];
+				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				write.pNext = nullptr;
+				write.descriptorCount = 1;
+				write.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+				write.dstArrayElement = i;
+				write.dstBinding = binding;
+				write.dstSet = desc_set;
+				if (set_layout.fp_mask & (1u << binding))
+					write.pImageInfo = &bindings[binding + i].image.fp;
+				else
+					write.pImageInfo = &bindings[binding + i].image.integer;
+			}
+			});
+
+		table.vkUpdateDescriptorSets(device.GetDevice(), write_count, writes, 0, nullptr);
+	}
+
+	void CommandBuffer::RebindDescriptorSet(uint32_t set)
+	{
+		auto& layout = current_layout->GetResourceLayout();
+		//Bind any bindless descriptors
+		if (layout.bindless_descriptor_set_mask & (1u << set))
+		{
+			VK_ASSERT(bindless_sets[set]);
+			table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &bindless_sets[set], 0, nullptr);
+			return;
+		}
+
+		auto& set_layout = layout.sets[set];
+		uint32_t num_dynamic_offsets = 0;
+		uint32_t dynamic_offsets[VULKAN_NUM_BINDINGS];
+
+		// UBOs
+		Util::for_each_bit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				VK_ASSERT(num_dynamic_offsets < VULKAN_NUM_BINDINGS);
+				dynamic_offsets[num_dynamic_offsets++] = bindings.bindings[set][binding + i].dynamic_offset;
+			}
+			});
+
+		table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &allocated_sets[set], num_dynamic_offsets, dynamic_offsets);
+	}
+
+	void CommandBuffer::FlushDescriptorSet(uint32_t set)
+	{
+		auto& layout = current_layout->GetResourceLayout();
+		if (layout.bindless_descriptor_set_mask & (1u << set))
+		{
+			VK_ASSERT(bindless_sets[set]);
+			table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
+				current_pipeline_layout, set, 1, &bindless_sets[set], 0, nullptr);
+			return;
+		}
+
+		auto& set_layout = layout.sets[set];
+		uint32_t num_dynamic_offsets = 0;
+		uint32_t dynamic_offsets[VULKAN_NUM_BINDINGS];
+		Util::Hasher h;
+
+		h.u32(set_layout.fp_mask);
+
+		// UBOs
+		Util::for_each_bit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				h.u64(bindings.cookies[set][binding + i]);
+				h.u32(bindings.bindings[set][binding + i].buffer.range);
+				VK_ASSERT(bindings.bindings[set][binding + i].buffer.buffer != VK_NULL_HANDLE);
+
+				VK_ASSERT(num_dynamic_offsets < VULKAN_NUM_BINDINGS);
+				dynamic_offsets[num_dynamic_offsets++] = bindings.bindings[set][binding + i].dynamic_offset;
+			}
+			});
+
+		// SSBOs
+		Util::for_each_bit(set_layout.storage_buffer_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				h.u64(bindings.cookies[set][binding + i]);
+				h.u32(bindings.bindings[set][binding + i].buffer.offset);
+				h.u32(bindings.bindings[set][binding + i].buffer.range);
+				VK_ASSERT(bindings.bindings[set][binding + i].buffer.buffer != VK_NULL_HANDLE);
+			}
+			});
+
+		// Sampled buffers
+		Util::for_each_bit(set_layout.sampled_buffer_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				h.u64(bindings.cookies[set][binding + i]);
+				VK_ASSERT(bindings.bindings[set][binding + i].buffer_view != VK_NULL_HANDLE);
+			}
+			});
+
+		// Sampled images
+		Util::for_each_bit(set_layout.sampled_image_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				h.u64(bindings.cookies[set][binding + i]);
+				if (!HasImmutableSampler(set_layout, binding + i))
+				{
+					h.u64(bindings.secondary_cookies[set][binding + i]);
+					VK_ASSERT(bindings.bindings[set][binding + i].image.fp.sampler != VK_NULL_HANDLE);
+				}
+				h.u32(bindings.bindings[set][binding + i].image.fp.imageLayout);
+				VK_ASSERT(bindings.bindings[set][binding + i].image.fp.imageView != VK_NULL_HANDLE);
+			}
+			});
+
+		// Separate images
+		Util::for_each_bit(set_layout.separate_image_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				h.u64(bindings.cookies[set][binding + i]);
+				h.u32(bindings.bindings[set][binding + i].image.fp.imageLayout);
+				VK_ASSERT(bindings.bindings[set][binding + i].image.fp.imageView != VK_NULL_HANDLE);
+			}
+			});
+
+		// Separate samplers
+		Util::for_each_bit(set_layout.sampler_mask & ~set_layout.immutable_sampler_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				h.u64(bindings.secondary_cookies[set][binding + i]);
+				VK_ASSERT(bindings.bindings[set][binding + i].image.fp.sampler != VK_NULL_HANDLE);
+			}
+			});
+
+		// Storage images
+		Util::for_each_bit(set_layout.storage_image_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				h.u64(bindings.cookies[set][binding + i]);
+				h.u32(bindings.bindings[set][binding + i].image.fp.imageLayout);
+				VK_ASSERT(bindings.bindings[set][binding + i].image.fp.imageView != VK_NULL_HANDLE);
+			}
+			});
+
+		// Input attachments
+		Util::for_each_bit(set_layout.input_attachment_mask, [&](uint32_t binding) {
+			unsigned array_size = set_layout.array_size[binding];
+			for (unsigned i = 0; i < array_size; i++)
+			{
+				h.u64(bindings.cookies[set][binding + i]);
+				h.u32(bindings.bindings[set][binding + i].image.fp.imageLayout);
+				VK_ASSERT(bindings.bindings[set][binding + i].image.fp.imageView != VK_NULL_HANDLE);
+			}
+			});
+
+		Util::Hash hash = h.get();
+		auto allocated = current_layout->GetAllocator(set)->find(thread_index, hash);
+
+		// The descriptor set was not successfully cached, rebuild.
+		if (!allocated.second)
+		{
+			auto update_template = current_layout->GetUpdateTemplate(set);
+
+			if (update_template != VK_NULL_HANDLE)
+			{
+				table.vkUpdateDescriptorSetWithTemplateKHR(device->GetDevice(), allocated.first, update_template, bindings.bindings[set]);
+			}
+			else
+				UpdateDescriptorSetLegacy(*device, allocated.first, layout.sets[set], bindings.bindings[set]);
+		}
+
+		table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &allocated.first, num_dynamic_offsets, dynamic_offsets);
+		allocated_sets[set] = allocated.first;
+	}
+
+	void CommandBuffer::FlushDescriptorSets()
+	{
+		auto& layout = current_layout->GetResourceLayout();
+
+		uint32_t set_update = layout.descriptor_set_mask & dirty_sets;
+		Util::for_each_bit(set_update, [&](uint32_t set) { FlushDescriptorSet(set); });
+		dirty_sets &= ~set_update;
+
+		// If we update a set, we also bind dynamically.
+		dirty_sets_dynamic &= ~set_update;
+
+		// If we only rebound UBOs, we might get away with just rebinding descriptor sets, no hashing and lookup required.
+		uint32_t dynamic_set_update = layout.descriptor_set_mask & dirty_sets_dynamic;
+		Util::for_each_bit(dynamic_set_update, [&](uint32_t set) { RebindDescriptorSet(set); });
+		dirty_sets_dynamic &= ~dynamic_set_update;
+	}
+
+	void CommandBuffer::Draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
+	{
+		VK_ASSERT(!is_compute);
+		if (FlushRenderState(true))
+		{
+			table.vkCmdDraw(cmd, vertex_count, instance_count, first_vertex, first_instance);
+		}
+		else
+			QM_LOG_ERROR("Failed to flush render state, draw call will be dropped.\n");
+	}
+
+	void CommandBuffer::DrawIndexed(uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
+	{
+		VK_ASSERT(!is_compute);
+		VK_ASSERT(index_state.buffer != VK_NULL_HANDLE);
+		if (FlushRenderState(true))
+		{
+			table.vkCmdDrawIndexed(cmd, index_count, instance_count, first_index, vertex_offset, first_instance);
+		}
+		else
+			QM_LOG_ERROR("Failed to flush render state, draw call will be dropped.\n");
+	}
+
+	void CommandBuffer::DrawIndirect(const Vulkan::Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride)
+	{
+		VK_ASSERT(!is_compute);
+		if (FlushRenderState(true))
+		{
+			table.vkCmdDrawIndirect(cmd, buffer.GetBuffer(), offset, draw_count, stride);
+		}
+		else
+			QM_LOG_ERROR("Failed to flush render state, draw call will be dropped.\n");
+	}
+
+	void CommandBuffer::DrawIndexedIndirect(const Vulkan::Buffer& buffer,
+		uint32_t offset, uint32_t draw_count, uint32_t stride)
+	{
+		VK_ASSERT(!is_compute);
+		if (FlushRenderState(true))
+		{
+			table.vkCmdDrawIndexedIndirect(cmd, buffer.GetBuffer(), offset, draw_count, stride);
+		}
+		else
+			QM_LOG_ERROR("Failed to flush render state, draw call will be dropped.\n");
+	}
+
+	void CommandBuffer::DrawMultiIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride, const Buffer& count, uint32_t count_offset)
+	{
+		VK_ASSERT(!is_compute);
+		if (!GetDevice().GetDeviceFeatures().supports_draw_indirect_count)
+		{
+			QM_LOG_ERROR("VK_KHR_draw_indirect_count not supported, dropping draw call.\n");
+			return;
+		}
+
+		if (FlushRenderState(true))
+		{
+			table.vkCmdDrawIndirectCountKHR(cmd, buffer.GetBuffer(), offset,
+				count.GetBuffer(), count_offset,
+				draw_count, stride);
+		}
+		else
+			QM_LOG_ERROR("Failed to flush render state, draw call will be dropped.\n");
+	}
+
+	void CommandBuffer::DrawIndexedMultiIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride, const Buffer& count, uint32_t count_offset)
+	{
+		VK_ASSERT(!is_compute);
+		if (!GetDevice().GetDeviceFeatures().supports_draw_indirect_count)
+		{
+			QM_LOG_ERROR("VK_KHR_draw_indirect_count not supported, dropping draw call.\n");
+			return;
+		}
+
+		if (FlushRenderState(true))
+		{
+			table.vkCmdDrawIndexedIndirectCountKHR(cmd, buffer.GetBuffer(), offset, count.GetBuffer(), count_offset, draw_count, stride);
+		}
+		else
+			QM_LOG_ERROR("Failed to flush render state, draw call will be dropped.\n");
+	}
+
+	void CommandBuffer::Dispatch(uint32_t groups_x, uint32_t groups_y, uint32_t groups_z)
+	{
+		VK_ASSERT(is_compute);
+		if (FlushComputeState(true))
+		{
+			table.vkCmdDispatch(cmd, groups_x, groups_y, groups_z);
+		}
+		else
+			QM_LOG_ERROR("Failed to flush render state, dispatch will be dropped.\n");
+	}
+
+	void CommandBuffer::DispatchIndirect(const Buffer& buffer, uint32_t offset)
+	{
+		VK_ASSERT(is_compute);
+		if (FlushComputeState(true))
+		{
+			table.vkCmdDispatchIndirect(cmd, buffer.GetBuffer(), offset);
+		}
+		else
+			QM_LOG_ERROR("Failed to flush render state, dispatch will be dropped.\n");
+	}
+
+	void CommandBuffer::ClearRenderState()
+	{
+		// Preserve spec constant mask.
+		auto& state = pipeline_state.static_state.state;
+		memset(&state, 0, sizeof(state));
+	}
+
+	void CommandBuffer::SetOpaqueState()
+	{
+		ClearRenderState();
+		auto& state = pipeline_state.static_state.state;
+		state.front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		state.cull_mode = VK_CULL_MODE_BACK_BIT;
+		state.blend_enable = false;
+		state.depth_test = true;
+		state.depth_compare = VK_COMPARE_OP_LESS_OR_EQUAL;
+		state.depth_write = true;
+		state.depth_bias_enable = false;
+		state.primitive_restart = false;
+		state.stencil_test = false;
+		state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		state.write_mask = ~0u;
+		set_dirty(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT);
+	}
+
+
+	void CommandBuffer::SetQuadState()
+	{
+		ClearRenderState();
+		auto& state = pipeline_state.static_state.state;
+		state.front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		state.cull_mode = VK_CULL_MODE_NONE;
+		state.blend_enable = false;
+		state.depth_test = false;
+		state.depth_write = false;
+		state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		state.write_mask = ~0u;
+		set_dirty(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT);
+	}
+
+	void CommandBuffer::SetOpaqueSpriteState()
+	{
+		ClearRenderState();
+		auto& state = pipeline_state.static_state.state;
+		state.front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		state.cull_mode = VK_CULL_MODE_NONE;
+		state.blend_enable = false;
+		state.depth_compare = VK_COMPARE_OP_LESS;
+		state.depth_test = true;
+		state.depth_write = true;
+		state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		state.write_mask = ~0u;
+		set_dirty(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT);
+	}
+
+	void CommandBuffer::SetTransparentSpriteState()
+	{
+		ClearRenderState();
+		auto& state = pipeline_state.static_state.state;
+		state.front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		state.cull_mode = VK_CULL_MODE_NONE;
+		state.blend_enable = true;
+		state.depth_test = true;
+		state.depth_compare = VK_COMPARE_OP_LESS;
+		state.depth_write = false;
+		state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		state.write_mask = ~0u;
+
+		// The alpha layer should start at 1 (fully transparent).
+		// As layers are blended in, the transparency is multiplied with other transparencies (1 - alpha).
+		SetBlendFactors(VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
+		SetBlendOp(VK_BLEND_OP_ADD);
+
+		set_dirty(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT);
+	}
+
+	void CommandBuffer::SaveState(CommandBufferSaveStateFlags flags, CommandBufferSavedState& state)
+	{
+		for (unsigned i = 0; i < VULKAN_NUM_DESCRIPTOR_SETS; i++)
+		{
+			if (flags & (COMMAND_BUFFER_SAVED_BINDINGS_0_BIT << i))
+			{
+				memcpy(state.bindings.bindings[i], bindings.bindings[i], sizeof(bindings.bindings[i]));
+				memcpy(state.bindings.cookies[i], bindings.cookies[i], sizeof(bindings.cookies[i]));
+				memcpy(state.bindings.secondary_cookies[i], bindings.secondary_cookies[i],
+					sizeof(bindings.secondary_cookies[i]));
+			}
+		}
+
+		if (flags & COMMAND_BUFFER_SAVED_VIEWPORT_BIT)
+			state.viewport = viewport;
+		if (flags & COMMAND_BUFFER_SAVED_SCISSOR_BIT)
+			state.scissor = scissor;
+		if (flags & COMMAND_BUFFER_SAVED_RENDER_STATE_BIT)
+		{
+			memcpy(&state.static_state, &pipeline_state.static_state, sizeof(pipeline_state.static_state));
+			state.potential_static_state = pipeline_state.potential_static_state;
+			state.dynamic_state = dynamic_state;
+		}
+
+		if (flags & COMMAND_BUFFER_SAVED_PUSH_CONSTANT_BIT)
+			memcpy(state.bindings.push_constant_data, bindings.push_constant_data, sizeof(bindings.push_constant_data));
+
+		state.flags = flags;
+	}
+
+	void CommandBuffer::RestoreState(const CommandBufferSavedState& state)
+	{
+		auto& static_state = pipeline_state.static_state;
+		auto& potential_static_state = pipeline_state.potential_static_state;
+
+		for (unsigned i = 0; i < VULKAN_NUM_DESCRIPTOR_SETS; i++)
+		{
+			if (state.flags & (COMMAND_BUFFER_SAVED_BINDINGS_0_BIT << i))
+			{
+				if (memcmp(state.bindings.bindings[i], bindings.bindings[i], sizeof(bindings.bindings[i])))
+				{
+					memcpy(bindings.bindings[i], state.bindings.bindings[i], sizeof(bindings.bindings[i]));
+					memcpy(bindings.cookies[i], state.bindings.cookies[i], sizeof(bindings.cookies[i]));
+					memcpy(bindings.secondary_cookies[i], state.bindings.secondary_cookies[i], sizeof(bindings.secondary_cookies[i]));
+					dirty_sets |= 1u << i;
+				}
+			}
+		}
+
+		if (state.flags & COMMAND_BUFFER_SAVED_PUSH_CONSTANT_BIT)
+		{
+			if (memcmp(state.bindings.push_constant_data, bindings.push_constant_data, sizeof(bindings.push_constant_data)) != 0)
+			{
+				memcpy(bindings.push_constant_data, state.bindings.push_constant_data, sizeof(bindings.push_constant_data));
+				set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
+			}
+		}
+
+		if ((state.flags & COMMAND_BUFFER_SAVED_VIEWPORT_BIT) && memcmp(&state.viewport, &viewport, sizeof(viewport)) != 0)
+		{
+			viewport = state.viewport;
+			set_dirty(COMMAND_BUFFER_DIRTY_VIEWPORT_BIT);
+		}
+
+		if ((state.flags & COMMAND_BUFFER_SAVED_SCISSOR_BIT) && memcmp(&state.scissor, &scissor, sizeof(scissor)) != 0)
+		{
+			scissor = state.scissor;
+			set_dirty(COMMAND_BUFFER_DIRTY_SCISSOR_BIT);
+		}
+
+		if (state.flags & COMMAND_BUFFER_SAVED_RENDER_STATE_BIT)
+		{
+			if (memcmp(&state.static_state, &static_state, sizeof(static_state)) != 0)
+			{
+				memcpy(&static_state, &state.static_state, sizeof(static_state));
+				set_dirty(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT);
+			}
+
+			if (memcmp(&state.potential_static_state, &potential_static_state, sizeof(potential_static_state)) != 0)
+			{
+				memcpy(&potential_static_state, &state.potential_static_state, sizeof(potential_static_state));
+				set_dirty(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT);
+			}
+
+			if (memcmp(&state.dynamic_state, &dynamic_state, sizeof(dynamic_state)) != 0)
+			{
+				memcpy(&dynamic_state, &state.dynamic_state, sizeof(dynamic_state));
+				set_dirty(COMMAND_BUFFER_DIRTY_STENCIL_REFERENCE_BIT | COMMAND_BUFFER_DIRTY_DEPTH_BIAS_BIT);
+			}
+		}
+	}
+
+	void CommandBuffer::End()
+	{
+		if (table.vkEndCommandBuffer(cmd) != VK_SUCCESS)
+			QM_LOG_ERROR("Failed to end command buffer.\n");
+
+		if (vbo_block.mapped)
+			device->RequestVertexBlockNolock(vbo_block, 0);
+		if (ibo_block.mapped)
+			device->RequestIndexBlockNolock(ibo_block, 0);
+		if (ubo_block.mapped)
+			device->RequestUniformBlockNolock(ubo_block, 0);
+		if (staging_block.mapped)
+			device->RequestStagingBlockNolock(staging_block, 0);
+	}
+
+	//////////////////////////////////
+	//Command Buffer Deleter//////////
+	//////////////////////////////////
+
+	void CommandBufferDeleter::operator()(Vulkan::CommandBuffer* cmd)
+	{
+		cmd->device->handle_pool.command_buffers.free(cmd);
+	}
+
+
 
 }
