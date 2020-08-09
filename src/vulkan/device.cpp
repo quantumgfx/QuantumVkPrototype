@@ -1,7 +1,6 @@
 #include "device.hpp"
-#include "format.hpp"
-#include "type_to_string.hpp"
-#include "quirks.hpp"
+#include "images/format.hpp"
+#include "misc/type_to_string.hpp"
 #include "utils/timer.hpp"
 #include <algorithm>
 #include <string.h>
@@ -54,7 +53,7 @@ namespace Vulkan
 	{
 		LOCK();
 		//Gets a cleared semaphore
-		auto semaphore = managers.semaphore.request_cleared_semaphore();
+		auto semaphore = managers.semaphore.RequestClearedSemaphore();
 		//allocates the pointer from the object pool
 		Semaphore ptr(handle_pool.semaphores.allocate(this, semaphore, false));
 		//returns the ptr
@@ -88,7 +87,7 @@ namespace Vulkan
 			VK_ASSERT(sem.Get() != semaphore.Get());
 #endif
 
-		semaphore->signal_pending_wait();
+		semaphore->SignalPendingWaits();
 		data.wait_semaphores.push_back(semaphore);
 		data.wait_stages.push_back(stages);
 		data.need_fence = true;
@@ -564,9 +563,9 @@ namespace Vulkan
 #endif
 
 		managers.memory.Init(this);
-		managers.semaphore.init(this);
-		managers.fence.init(this);
-		managers.event.init(this);
+		managers.semaphore.Init(this);
+		managers.fence.Init(this);
+		managers.event.Init(this);
 		managers.vbo.Init(this, 4 * 1024, 16, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, ImplementationQuirks::get().staging_need_device_local);
 		managers.ibo.Init(this, 4 * 1024, 16, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ImplementationQuirks::get().staging_need_device_local);
 		managers.ubo.Init(this, 256 * 1024, std::max<VkDeviceSize>(16u, gpu_props.limits.minUniformBufferOffsetAlignment), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, ImplementationQuirks::get().staging_need_device_local);
@@ -574,15 +573,6 @@ namespace Vulkan
 		managers.staging.Init(this, 64 * 1024, std::max<VkDeviceSize>(16u, gpu_props.limits.optimalBufferCopyOffsetAlignment),
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			false);
-
-		graphics.performance_query_pool.init_device(this, graphics_queue_family_index);
-		if (graphics_queue_family_index != compute_queue_family_index)
-			compute.performance_query_pool.init_device(this, compute_queue_family_index);
-		if (graphics_queue_family_index != transfer_queue_family_index &&
-			compute_queue_family_index != transfer_queue_family_index)
-		{
-			transfer.performance_query_pool.init_device(this, transfer_queue_family_index);
-		}
 
 		InitPipelineCache(initial_cache_data, initiale_cache_size);
 		
@@ -939,7 +929,7 @@ namespace Vulkan
 
 			for (unsigned i = 0; i < semaphore_count; i++)
 			{
-				VkSemaphore cleared_semaphore = managers.semaphore.request_cleared_semaphore();
+				VkSemaphore cleared_semaphore = managers.semaphore.RequestClearedSemaphore();
 				signals.push_back(cleared_semaphore);
 				VK_ASSERT(!semaphores[i]);
 				semaphores[i] = Semaphore(handle_pool.semaphores.allocate(this, cleared_semaphore, true));
@@ -957,16 +947,16 @@ namespace Vulkan
 
 		for (auto& semaphore : data.wait_semaphores)
 		{
-			auto wait = semaphore->consume();
-			if (!semaphore->get_timeline_value())
+			auto wait = semaphore->Consume();
+			if (!semaphore->GetTimelineValue())
 			{
-				if (semaphore->can_recycle())
+				if (semaphore->CanRecycle())
 					Frame().recycled_semaphores.push_back(wait);
 				else
 					Frame().destroyed_semaphores.push_back(wait);
 			}
 			waits.push_back(wait);
-			waits_count.push_back(semaphore->get_timeline_value());
+			waits_count.push_back(semaphore->GetTimelineValue());
 		}
 
 		data.wait_stages.clear();
@@ -984,7 +974,7 @@ namespace Vulkan
 			timeline_info.pWaitSemaphoreValues = waits_count.data();
 		}
 
-		VkFence cleared_fence = fence && !ext->timeline_semaphore_features.timelineSemaphore ? managers.fence.request_cleared_fence() : VK_NULL_HANDLE;
+		VkFence cleared_fence = fence && !ext->timeline_semaphore_features.timelineSemaphore ? managers.fence.RequestClearedFence() : VK_NULL_HANDLE;
 		if (fence)
 			fence->fence = cleared_fence;
 
@@ -1041,7 +1031,7 @@ namespace Vulkan
 
 	Fence Device::RequestLegacyFence()
 	{
-		VkFence fence = managers.fence.request_cleared_fence();
+		VkFence fence = managers.fence.RequestClearedFence();
 		return Fence(handle_pool.fences.allocate(this, fence));
 	}
 
@@ -1207,15 +1197,15 @@ namespace Vulkan
 
 		for (auto& semaphore : data.wait_semaphores)
 		{
-			auto wait = semaphore->consume();
-			if (!semaphore->get_timeline_value())
+			auto wait = semaphore->Consume();
+			if (!semaphore->GetTimelineValue())
 			{
-				if (semaphore->can_recycle())
+				if (semaphore->CanRecycle())
 					Frame().recycled_semaphores.push_back(wait);
 				else
 					Frame().destroyed_semaphores.push_back(wait);
 			}
-			wait_counts[0].push_back(semaphore->get_timeline_value());
+			wait_counts[0].push_back(semaphore->GetTimelineValue());
 			waits[0].push_back(wait);
 		}
 
@@ -1294,21 +1284,21 @@ namespace Vulkan
 			if (wsi.touched && !wsi.consumed)
 			{
 				static const VkFlags wait = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				if (wsi.acquire && wsi.acquire->get_semaphore() != VK_NULL_HANDLE)
+				if (wsi.acquire && wsi.acquire->GetSemaphore() != VK_NULL_HANDLE)
 				{
 					// Then make this submission batch (which has one or more swapchain touching commands buffers) wait for the aquire semaphore.
 					// Basically this batch will wait for vkAquireNextImageKHR to complete before being submitted, as it has commands that depend on the
 					// swapchain image.
-					VK_ASSERT(wsi.acquire->is_signalled());
-					VkSemaphore sem = wsi.acquire->consume();
+					VK_ASSERT(wsi.acquire->IsSignalled());
+					VkSemaphore sem = wsi.acquire->Consume();
 
 					waits[index].push_back(sem);
-					wait_counts[index].push_back(wsi.acquire->get_timeline_value());
+					wait_counts[index].push_back(wsi.acquire->GetTimelineValue());
 					wait_stages[index].push_back(wait);
 
-					if (!wsi.acquire->get_timeline_value())
+					if (!wsi.acquire->GetTimelineValue())
 					{
-						if (wsi.acquire->can_recycle())
+						if (wsi.acquire->CanRecycle())
 							Frame().recycled_semaphores.push_back(sem);
 						else
 							Frame().destroyed_semaphores.push_back(sem);
@@ -1317,10 +1307,10 @@ namespace Vulkan
 					wsi.acquire.Reset();
 				}
 
-				VkSemaphore release = managers.semaphore.request_cleared_semaphore();
+				VkSemaphore release = managers.semaphore.RequestClearedSemaphore();
 				wsi.release = Semaphore(handle_pool.semaphores.allocate(this, release, true));
 				wsi.release->SetInternalSyncObject();
-				signals[index].push_back(wsi.release->get_semaphore());
+				signals[index].push_back(wsi.release->GetSemaphore());
 				signal_counts[index].push_back(0);
 				wsi.consumed = true;
 			}
@@ -1333,7 +1323,7 @@ namespace Vulkan
 		// Batch 1: (N, N, N, N, N) - The first batch doesn't ever use the swapchain, so it doesn't need to wait for it.
 		// Batch 2: (S, N, S, S, N, N) - The second involves the swapchain, so it must wait for VkAquireNextImageKHR to finish.
 
-		VkFence cleared_fence = fence && !ext->timeline_semaphore_features.timelineSemaphore ? managers.fence.request_cleared_fence() : VK_NULL_HANDLE;
+		VkFence cleared_fence = fence && !ext->timeline_semaphore_features.timelineSemaphore ? managers.fence.RequestClearedFence() : VK_NULL_HANDLE;
 
 		if (fence)
 			fence->fence = cleared_fence;
@@ -1368,7 +1358,7 @@ namespace Vulkan
 
 			for (unsigned i = 0; i < semaphore_count; i++)
 			{
-				VkSemaphore cleared_semaphore = managers.semaphore.request_cleared_semaphore();
+				VkSemaphore cleared_semaphore = managers.semaphore.RequestClearedSemaphore();
 				signals[submits.size() - 1].push_back(cleared_semaphore);
 				signal_counts[submits.size() - 1].push_back(0);
 				VK_ASSERT(!semaphores[i]);
@@ -1698,7 +1688,7 @@ namespace Vulkan
 		if (wsi.acquire)
 		{
 			wsi.acquire->SetInternalSyncObject();
-			VK_ASSERT(wsi.acquire->is_signalled());
+			VK_ASSERT(wsi.acquire->IsSignalled());
 		}
 	}
 
@@ -1736,10 +1726,6 @@ namespace Vulkan
 		transient_allocator.clear();
 		for (auto& sampler : samplers)
 			sampler.Reset();
-
-		for (auto& sampler : samplers_ycbcr)
-			if (sampler)
-				table->vkDestroySamplerYcbcrConversion(device, sampler, nullptr);
 
 		DeinitTimelineSemaphores();
 	}
@@ -1839,7 +1825,7 @@ namespace Vulkan
 
 			auto backbuffer = ImageHandle(handle_pool.images.allocate(this, image, image_view, DeviceAllocation{}, info, VK_IMAGE_VIEW_TYPE_2D));
 			backbuffer->SetInternalSyncObject();
-			backbuffer->disown_image();
+			backbuffer->DisownImage();
 			backbuffer->GetView().SetInternalSyncObject();
 			wsi.swapchain.push_back(backbuffer);
 			backbuffer->SetSwapchainLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
@@ -2001,7 +1987,7 @@ namespace Vulkan
 		if (observed_wait)
 		{
 			table->vkResetFences(device, 1, &fence);
-			managers.fence.recycle_fence(fence);
+			managers.fence.RecycleFence(fence);
 		}
 		else
 			Frame().recycle_fences.push_back(fence);
@@ -2088,7 +2074,7 @@ namespace Vulkan
 #endif
 			table.vkResetFences(vkdevice, recycle_fences.size(), recycle_fences.data());
 			for (auto& fence : recycle_fences)
-				managers.fence.recycle_fence(fence);
+				managers.fence.RecycleFence(fence);
 			recycle_fences.clear();
 		}
 
@@ -2122,10 +2108,10 @@ namespace Vulkan
 #if defined(VULKAN_DEBUG) && defined(SUBMIT_DEBUG)
 			QM_LOG_INFO("Recycling semaphore: %llx\n", reinterpret_cast<unsigned long long>(semaphore));
 #endif
-			managers.semaphore.recycle(semaphore);
+			managers.semaphore.RecycleSemaphore(semaphore);
 		}
 		for (auto& event : recycled_events)
-			managers.event.recycle(event);
+			managers.event.RecycleEvent(event);
 
 		for (auto& block : vbo_blocks)
 			managers.vbo.RecycleBlock(move(block));
@@ -2168,17 +2154,17 @@ namespace Vulkan
 
 	PipelineEvent Device::RequestPipelineEvent()
 	{
-		return PipelineEvent(handle_pool.events.allocate(this, managers.event.request_cleared_event()));
+		return PipelineEvent(handle_pool.events.allocate(this, managers.event.RequestClearedEvent()));
 	}
 
 	void Device::ClearWaitSemaphores()
 	{
 		for (auto& sem : graphics.wait_semaphores)
-			table->vkDestroySemaphore(device, sem->consume(), nullptr);
+			table->vkDestroySemaphore(device, sem->Consume(), nullptr);
 		for (auto& sem : compute.wait_semaphores)
-			table->vkDestroySemaphore(device, sem->consume(), nullptr);
+			table->vkDestroySemaphore(device, sem->Consume(), nullptr);
 		for (auto& sem : transfer.wait_semaphores)
-			table->vkDestroySemaphore(device, sem->consume(), nullptr);
+			table->vkDestroySemaphore(device, sem->Consume(), nullptr);
 
 		graphics.wait_semaphores.clear();
 		graphics.wait_stages.clear();
@@ -3082,12 +3068,12 @@ namespace Vulkan
 				handle->GetView().SetAltViews(holder.depth_view, holder.stencil_view);
 				handle->GetView().SetRenderTargetViews(move(holder.rt_views));
 				handle->GetView().SetUnormView(holder.unorm_view);
-				handle->GetView().SetSRBGView(holder.srgb_view);
+				handle->GetView().SetSrgbView(holder.srgb_view);
 			}
 
 			// Set possible dstStage and dstAccess.
 			handle->SetStageFlags(ImageUsageToPossibleStages(info.usage));
-			handle->SetAccessFlags(image_usage_to_possible_access(info.usage));
+			handle->SetAccessFlags(ImageUsageToPossibleAccess(info.usage));
 		}
 
 		// Copy initial data to texture.

@@ -1,16 +1,22 @@
 #pragma once
 
-#include "buffer.hpp"
-#include "buffer_pool.hpp"
 #include "vulkan_headers.hpp"
-#include "image.hpp"
-#include "pipeline_event.hpp"
-#include "query_pool.hpp"
-#include "render_pass.hpp"
-#include "sampler.hpp"
-#include "shader.hpp"
+
 #include "vulkan_common.hpp"
 #include <string.h>
+
+#include "memory/buffer.hpp"
+#include "memory/buffer_pool.hpp"
+
+#include "images/image.hpp"
+#include "images/sampler.hpp"
+
+#include "sync/pipeline_event.hpp"
+
+#include "graphics/render_pass.hpp"
+#include "graphics/shader.hpp"
+
+#include "misc/limits.hpp"
 
 namespace Vulkan
 {

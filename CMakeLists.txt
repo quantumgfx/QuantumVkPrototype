@@ -191,38 +191,44 @@ target_sources(QuantumVk PRIVATE
 	${QM_UTILS_DIR}/timer.hpp
 	${QM_UTILS_DIR}/variant.hpp
 	
-	${QM_VK_DIR}/buffer.hpp ${QM_VK_DIR}/buffer.cpp
-	${QM_VK_DIR}/buffer_pool.hpp ${QM_VK_DIR}/buffer_pool.cpp
+	${QM_THREADING_DIR}/thread_group.hpp ${QM_THREADING_DIR}/thread_group.cpp
+	${QM_THREADING_DIR}/thread_id.hpp ${QM_THREADING_DIR}/thread_id.cpp
+	
+	${QM_VK_DIR}/graphics/descriptor_set.hpp ${QM_VK_DIR}/graphics/descriptor_set.cpp
+	${QM_VK_DIR}/graphics/render_pass.hpp ${QM_VK_DIR}/graphics/render_pass.cpp
+	${QM_VK_DIR}/graphics/shader.hpp ${QM_VK_DIR}/graphics/shader.cpp
+	
+	${QM_VK_DIR}/images/format.hpp
+	${QM_VK_DIR}/images/image.hpp ${QM_VK_DIR}/images/image.cpp
+	${QM_VK_DIR}/images/sampler.hpp ${QM_VK_DIR}/images/sampler.cpp
+	${QM_VK_DIR}/images/texture_format.hpp ${QM_VK_DIR}/images/texture_format.cpp
+	
+	${QM_VK_DIR}/memory/buffer.hpp ${QM_VK_DIR}/memory/buffer.cpp
+	${QM_VK_DIR}/memory/buffer_pool.hpp ${QM_VK_DIR}/memory/buffer_pool.cpp
+	${QM_VK_DIR}/memory/memory_allocator.hpp ${QM_VK_DIR}/memory/memory_allocator.cpp
+	
+	${QM_VK_DIR}/misc/cookie.hpp ${QM_VK_DIR}/misc/cookie.cpp
+	${QM_VK_DIR}/misc/limits.hpp
+	${QM_VK_DIR}/misc/quirks.hpp
+	${QM_VK_DIR}/misc/type_to_string.hpp
+	
+	${QM_VK_DIR}/sync/event_manager.hpp ${QM_VK_DIR}/sync/event_manager.cpp
+	${QM_VK_DIR}/sync/fence.hpp ${QM_VK_DIR}/sync/fence.cpp
+	${QM_VK_DIR}/sync/fence_manager.hpp ${QM_VK_DIR}/sync/fence_manager.cpp
+	${QM_VK_DIR}/sync/pipeline_event.hpp ${QM_VK_DIR}/sync/pipeline_event.cpp
+	${QM_VK_DIR}/sync/semaphore.hpp ${QM_VK_DIR}/sync/semaphore.cpp
+	${QM_VK_DIR}/sync/semaphore_manager.hpp ${QM_VK_DIR}/sync/semaphore_manager.cpp
+	
+	${QM_VK_DIR}/wsi/wsi.hpp ${QM_VK_DIR}/wsi/wsi.cpp
+	${QM_VK_DIR}/wsi/wsi_timing.hpp ${QM_VK_DIR}/wsi/wsi_timing.cpp
+	
 	${QM_VK_DIR}/context.hpp ${QM_VK_DIR}/context.cpp
 	${QM_VK_DIR}/command_buffer.hpp ${QM_VK_DIR}/command_buffer.cpp
 	${QM_VK_DIR}/command_pool.hpp ${QM_VK_DIR}/command_pool.cpp
-	${QM_VK_DIR}/cookie.hpp ${QM_VK_DIR}/cookie.cpp
 	${QM_VK_DIR}/device.hpp ${QM_VK_DIR}/device.cpp
 	${QM_VK_DIR}/device_fossilize.cpp
-	${QM_VK_DIR}/descriptor_set.hpp ${QM_VK_DIR}/descriptor_set.cpp
-	${QM_VK_DIR}/fence.hpp
-	${QM_VK_DIR}/format.hpp
-	${QM_VK_DIR}/image.hpp
-	${QM_VK_DIR}/limits.hpp
-	${QM_VK_DIR}/memory_allocator.hpp ${QM_VK_DIR}/memory_allocator.cpp
-	${QM_VK_DIR}/pipeline_event.hpp
-	${QM_VK_DIR}/query_pool.hpp
-	${QM_VK_DIR}/render_pass.hpp ${QM_VK_DIR}/render_pass.cpp
-	${QM_VK_DIR}/sampler.hpp ${QM_VK_DIR}/sampler.cpp
-	${QM_VK_DIR}/semaphore.hpp
-	${QM_VK_DIR}/shader.hpp ${QM_VK_DIR}/shader.cpp
-	${QM_VK_DIR}/quirks.hpp
-	${QM_VK_DIR}/texture_format.hpp ${QM_VK_DIR}/texture_format.cpp
-	${QM_VK_DIR}/type_to_string.hpp
 	${QM_VK_DIR}/vulkan_common.hpp
 	${QM_VK_DIR}/vulkan_headers.hpp
-	
-	${QM_VK_DIR}/managers/event_manager.hpp
-	${QM_VK_DIR}/managers/fence_manager.hpp
-	${QM_VK_DIR}/managers/semaphore_manager.hpp
-	
-	${QM_THREADING_DIR}/thread_group.hpp ${QM_THREADING_DIR}/thread_group.cpp
-	${QM_THREADING_DIR}/thread_id.hpp ${QM_THREADING_DIR}/thread_id.cpp
 	
 	src/quantumvk.hpp)
 	

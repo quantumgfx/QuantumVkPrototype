@@ -3,22 +3,10 @@
 #include "vulkan_headers.hpp"
 #include "vulkan_common.hpp"
 
-#include "buffer.hpp"
 #include "command_buffer.hpp"
 #include "command_pool.hpp"
-#include "fence.hpp"
-#include "managers/fence_manager.hpp"
-#include "image.hpp"
-#include "memory_allocator.hpp"
-#include "render_pass.hpp"
-#include "sampler.hpp"
-#include "semaphore.hpp"
-#include "managers/semaphore_manager.hpp"
-#include "managers/event_manager.hpp"
-#include "shader.hpp"
 #include "context.hpp"
-#include "query_pool.hpp"
-#include "buffer_pool.hpp"
+
 #include <memory>
 #include <vector>
 #include <functional>
@@ -26,10 +14,22 @@
 #include <stdio.h>
 #include <utility>
 
-#ifdef QM_VULKAN_FILESYSTEM
-#include "shader_manager.hpp"
-#include "texture_manager.hpp"
-#endif
+#include "memory/buffer.hpp"
+#include "memory/buffer_pool.hpp"
+#include "memory/memory_allocator.hpp"
+
+#include "images/image.hpp"
+#include "images/sampler.hpp"
+
+#include "graphics/render_pass.hpp"
+#include "graphics/shader.hpp"
+
+#include "sync/fence.hpp"
+#include "sync/fence_manager.hpp"
+#include "sync/semaphore.hpp"
+#include "sync/semaphore_manager.hpp"
+#include "sync/pipeline_event.hpp"
+#include "sync/event_manager.hpp"
 
 #ifdef QM_VULKAN_MT
 #include <atomic>
@@ -41,7 +41,7 @@
 
 #include "threading/thread_group.hpp"
 
-#include "quirks.hpp"
+#include "misc/quirks.hpp"
 #include "utils/small_vector.hpp"
 #include "utils/retained_heap_data.hpp"
 
@@ -72,22 +72,9 @@ namespace Vulkan
 		VulkanObjectPool<FenceHolder> fences;
 		VulkanObjectPool<SemaphoreHolder> semaphores;
 		VulkanObjectPool<EventHolder> events;
-		VulkanObjectPool<QueryPoolResult> query;
 		VulkanObjectPool<CommandBuffer> command_buffers;
 		VulkanObjectPool<BindlessDescriptorPool> bindless_descriptor_pool;
 	};
-
-	/*class DebugChannelInterface
-	{
-	public:
-		union Word
-		{
-			uint32_t u32;
-			int32_t s32;
-			float f32;
-		};
-		virtual void message(const std::string& tag, uint32_t x, uint32_t y, uint32_t z, uint32_t code, uint32_t word_count, const Word* words) = 0;
-	};*/
 
 	struct FossilizeReplayer
 	{
@@ -125,7 +112,6 @@ namespace Vulkan
 
 		VkSemaphore timeline_semaphore = VK_NULL_HANDLE;
 		uint64_t current_timeline = 0;
-		PerformanceQueryPool performance_query_pool;
 	};
 
 	//Fence used internally by device
@@ -527,7 +513,6 @@ namespace Vulkan
 		uint32_t transfer_queue_family_index = 0;
 
 		SamplerHandle samplers[static_cast<unsigned>(StockSampler::Count)];
-		VkSamplerYcbcrConversion samplers_ycbcr[static_cast<unsigned>(YCbCrFormat::Count)] = {};
 
 		VulkanCache<PipelineLayout> pipeline_layouts;
 		VulkanCache<DescriptorSetAllocator> descriptor_set_allocators;

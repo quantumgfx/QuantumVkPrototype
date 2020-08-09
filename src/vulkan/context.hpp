@@ -4,6 +4,7 @@
 #include "vulkan_common.hpp"
 
 #include "utils/intrusive.hpp"
+
 #include <memory>
 #include <functional>
 
