@@ -57,7 +57,6 @@ set(DEFAULT_VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
 
 # Options
 option(QM_VULKAN_MT "Make QuantumVk thread-safe." ON)
-option(QM_VULKAN_FOSSILIZE "Enable fossilize" ON)
 set(VULKAN_SDK_DIR ${DEFAULT_VULKAN_SDK_DIR} CACHE PATH "Directory of vulkan SDK")
 # ------------------------------
 
@@ -126,20 +125,18 @@ set_sln_folder(spirv-cross-util SPIRV-Cross)
 # -------------------------------
 
 # ---------Fossilize-------------
-if (QM_VULKAN_FOSSILIZE)
-	override_option(FOSSILIZE_MSVC_ANALYZE OFF)
-	override_option(FOSSILIZE_ENABLE_EXCEPTIONS OFF)
-	override_option(FOSSILIZE_SANITIZE_ADDRESS OFF)
-	override_option(FOSSILIZE_SANITIZE_THREADS OFF)
-	override_option(FOSSILIZE_VULKAN_LAYER OFF)
-	override_option(FOSSILIZE_RAPIDJSON_INCLUDE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/extern/rapidjson/include")
-	override_option(FOSSILIZE_VULKAN_INCLUDE_PATH "${VULKAN_SDK_DIR}/Include/vulkan")
-	override_option(FOSSILIZE_CLI OFF)
-	override_option(FOSSILIZE_TESTS OFF)
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/extern/fossilize EXCLUDE_FROM_ALL)
-	set_sln_folder(fossilize Dependencies)
-	set_sln_folder(miniz Dependencies)
-endif()
+override_option(FOSSILIZE_MSVC_ANALYZE OFF)
+override_option(FOSSILIZE_ENABLE_EXCEPTIONS OFF)
+override_option(FOSSILIZE_SANITIZE_ADDRESS OFF)
+override_option(FOSSILIZE_SANITIZE_THREADS OFF)
+override_option(FOSSILIZE_VULKAN_LAYER OFF)
+override_option(FOSSILIZE_RAPIDJSON_INCLUDE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/extern/rapidjson/include")
+override_option(FOSSILIZE_VULKAN_INCLUDE_PATH "${VULKAN_SDK_DIR}/Include/vulkan")
+override_option(FOSSILIZE_CLI OFF)
+override_option(FOSSILIZE_TESTS OFF)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/extern/fossilize EXCLUDE_FROM_ALL)
+set_sln_folder(fossilize Dependencies)
+set_sln_folder(miniz Dependencies)
 # -------------------------------
 
 set(QM_VK_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -158,6 +155,7 @@ target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/extern)
 # libraries that QuantumVk links to
 target_link_libraries(QuantumVk PUBLIC volk)
 target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
+target_link_libraries(QuantumVk PUBLIC fossilize)
 
 # Src Directories
 set(QM_BASE_DIR src/base)
@@ -197,10 +195,11 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/buffer_pool.hpp ${QM_VK_DIR}/buffer_pool.cpp
 	${QM_VK_DIR}/context.hpp ${QM_VK_DIR}/context.cpp
 	${QM_VK_DIR}/command_buffer.hpp ${QM_VK_DIR}/command_buffer.cpp
-	${QM_VK_DIR}/command_pool.hpp
-	${QM_VK_DIR}/cookie.hpp
+	${QM_VK_DIR}/command_pool.hpp ${QM_VK_DIR}/command_pool.cpp
+	${QM_VK_DIR}/cookie.hpp ${QM_VK_DIR}/cookie.cpp
 	${QM_VK_DIR}/device.hpp ${QM_VK_DIR}/device.cpp
-	${QM_VK_DIR}/descriptor_set.hpp
+	${QM_VK_DIR}/device_fossilize.cpp
+	${QM_VK_DIR}/descriptor_set.hpp ${QM_VK_DIR}/descriptor_set.cpp
 	${QM_VK_DIR}/fence.hpp
 	${QM_VK_DIR}/format.hpp
 	${QM_VK_DIR}/image.hpp
@@ -208,10 +207,10 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/memory_allocator.hpp ${QM_VK_DIR}/memory_allocator.cpp
 	${QM_VK_DIR}/pipeline_event.hpp
 	${QM_VK_DIR}/query_pool.hpp
-	${QM_VK_DIR}/render_pass.hpp
-	${QM_VK_DIR}/sampler.hpp
+	${QM_VK_DIR}/render_pass.hpp ${QM_VK_DIR}/render_pass.cpp
+	${QM_VK_DIR}/sampler.hpp ${QM_VK_DIR}/sampler.cpp
 	${QM_VK_DIR}/semaphore.hpp
-	${QM_VK_DIR}/shader.hpp
+	${QM_VK_DIR}/shader.hpp ${QM_VK_DIR}/shader.cpp
 	${QM_VK_DIR}/quirks.hpp
 	${QM_VK_DIR}/texture_format.hpp ${QM_VK_DIR}/texture_format.cpp
 	${QM_VK_DIR}/type_to_string.hpp
@@ -229,12 +228,6 @@ target_sources(QuantumVk PRIVATE
 	
 if (QM_VULKAN_MT)
     target_compile_definitions(QuantumVk PUBLIC QM_VULKAN_MT)
-endif()
-
-if (QM_VULKAN_FOSSILIZE)
-    target_compile_definitions(QuantumVk PUBLIC QM_VULKAN_FOSSILIZE)
-    target_sources(QuantumVk PRIVATE ${QM_VK_DIR}/device_fossilize.cpp)
-	target_link_libraries(QuantumVk PUBLIC fossilize)
 endif()
 
 if (${CMAKE_BUILD_TYPE} MATCHES "Debug")

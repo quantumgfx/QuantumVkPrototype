@@ -57,22 +57,22 @@ namespace Vulkan
 	public:
 
 		~BufferPool();
-		void init(Device* device, VkDeviceSize block_size, VkDeviceSize alignment, VkBufferUsageFlags usage, bool need_device_local);
-		void reset();
+		void Init(Device* device, VkDeviceSize block_size, VkDeviceSize alignment, VkBufferUsageFlags usage, bool need_device_local);
+		void Reset();
 
 		// Used for allocating UBOs, where we want to specify a fixed size for range,
 		// and we need to make sure we don't allocate beyond the block.
-		void set_spill_region_size(VkDeviceSize spill_size);
+		void SetSpillRegionSize(VkDeviceSize spill_size);
 
-		VkDeviceSize get_block_size() const
+		VkDeviceSize GetBlockSize() const
 		{
 			return block_size;
 		}
 
-		//Request a new block of a certain size
-		BufferBlock request_block(VkDeviceSize minimum_size);
-		//Recycle an old unused block
-		void recycle_block(BufferBlock&& block);
+		//Request a new block of a certain size frome the pool
+		BufferBlock RequestBlock(VkDeviceSize minimum_size);
+		//Recycle an old unused block. Release block back to pool
+		void RecycleBlock(BufferBlock&& block);
 
 	private:
 		Device* device = nullptr;
@@ -81,7 +81,7 @@ namespace Vulkan
 		VkDeviceSize spill_size = 0;
 		VkBufferUsageFlags usage = 0;
 		std::vector<BufferBlock> blocks;
-		BufferBlock allocate_block(VkDeviceSize size);
+		BufferBlock AllocateBlock(VkDeviceSize size);
 		bool need_device_local = false;
 	};
 }

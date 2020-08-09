@@ -82,60 +82,60 @@ namespace Vulkan
 		RenderPass(Util::Hash hash, Device* device, const VkRenderPassCreateInfo& create_info);
 		~RenderPass();
 
-		unsigned get_num_subpasses() const
+		unsigned GetNumSubpasses() const
 		{
 			return unsigned(subpasses_info.size());
 		}
 
-		VkRenderPass get_render_pass() const
+		VkRenderPass GetRenderPass() const
 		{
 			return render_pass;
 		}
 
-		uint32_t get_sample_count(unsigned subpass) const
+		uint32_t GetSampleCount(unsigned subpass) const
 		{
 			VK_ASSERT(subpass < subpasses_info.size());
 			return subpasses_info[subpass].samples;
 		}
 
-		unsigned get_num_color_attachments(unsigned subpass) const
+		unsigned GetNumColorAttachments(unsigned subpass) const
 		{
 			VK_ASSERT(subpass < subpasses_info.size());
 			return subpasses_info[subpass].num_color_attachments;
 		}
 
-		unsigned get_num_input_attachments(unsigned subpass) const
+		unsigned GetNumInputAttachments(unsigned subpass) const
 		{
 			VK_ASSERT(subpass < subpasses_info.size());
 			return subpasses_info[subpass].num_input_attachments;
 		}
 
-		const VkAttachmentReference& get_color_attachment(unsigned subpass, unsigned index) const
+		const VkAttachmentReference& GetColorAttachment(unsigned subpass, unsigned index) const
 		{
 			VK_ASSERT(subpass < subpasses_info.size());
 			VK_ASSERT(index < subpasses_info[subpass].num_color_attachments);
 			return subpasses_info[subpass].color_attachments[index];
 		}
 
-		const VkAttachmentReference& get_input_attachment(unsigned subpass, unsigned index) const
+		const VkAttachmentReference& GetInputAttachment(unsigned subpass, unsigned index) const
 		{
 			VK_ASSERT(subpass < subpasses_info.size());
 			VK_ASSERT(index < subpasses_info[subpass].num_input_attachments);
 			return subpasses_info[subpass].input_attachments[index];
 		}
 
-		bool has_depth(unsigned subpass) const
+		bool HasDepth(unsigned subpass) const
 		{
 			VK_ASSERT(subpass < subpasses_info.size());
 			return subpasses_info[subpass].depth_stencil_attachment.attachment != VK_ATTACHMENT_UNUSED &&
-				format_has_depth_aspect(depth_stencil);
+				FormatHasDepthAspect(depth_stencil);
 		}
 
-		bool has_stencil(unsigned subpass) const
+		bool HasStencil(unsigned subpass) const
 		{
 			VK_ASSERT(subpass < subpasses_info.size());
 			return subpasses_info[subpass].depth_stencil_attachment.attachment != VK_ATTACHMENT_UNUSED &&
-				format_has_stencil_aspect(depth_stencil);
+				FormatHasStencilAspect(depth_stencil);
 		}
 
 	private:
@@ -146,10 +146,10 @@ namespace Vulkan
 		VkFormat depth_stencil = VK_FORMAT_UNDEFINED;
 		std::vector<SubpassInfo> subpasses_info;
 
-		void setup_subpasses(const VkRenderPassCreateInfo& create_info);
+		void SetupSubpasses(const VkRenderPassCreateInfo& create_info);
 
-		void fixup_render_pass_workaround(VkRenderPassCreateInfo& create_info, VkAttachmentDescription* attachments);
-		void fixup_wsi_barrier(VkRenderPassCreateInfo& create_info, VkAttachmentDescription* attachments);
+		void FixupRenderPassWorkaround(VkRenderPassCreateInfo& create_info, VkAttachmentDescription* attachments);
+		void FixupWsiBarrier(VkRenderPassCreateInfo& create_info, VkAttachmentDescription* attachments);
 	};
 
 	class Framebuffer : public Cookie, public NoCopyNoMove, public InternalSyncEnabled
@@ -158,26 +158,26 @@ namespace Vulkan
 		Framebuffer(Device* device, const RenderPass& rp, const RenderPassInfo& info);
 		~Framebuffer();
 
-		VkFramebuffer get_framebuffer() const
+		VkFramebuffer GetFramebuffer() const
 		{
 			return framebuffer;
 		}
 
-		static unsigned setup_raw_views(VkImageView* views, const RenderPassInfo& info);
-		static void compute_dimensions(const RenderPassInfo& info, uint32_t& width, uint32_t& height);
-		static void compute_attachment_dimensions(const RenderPassInfo& info, unsigned index, uint32_t& width, uint32_t& height);
+		static unsigned SetupRawViews(VkImageView* views, const RenderPassInfo& info);
+		static void ComputeDimensions(const RenderPassInfo& info, uint32_t& width, uint32_t& height);
+		static void ComputeAttachmentDimensions(const RenderPassInfo& info, unsigned index, uint32_t& width, uint32_t& height);
 
-		uint32_t get_width() const
+		uint32_t GetWidth() const
 		{
 			return width;
 		}
 
-		uint32_t get_height() const
+		uint32_t GetHeight() const
 		{
 			return height;
 		}
 
-		const RenderPass& get_compatible_render_pass() const
+		const RenderPass& GetCompatibleRenderPass() const
 		{
 			return render_pass;
 		}
@@ -198,8 +198,8 @@ namespace Vulkan
 		explicit FramebufferAllocator(Device* device);
 		Framebuffer& request_framebuffer(const RenderPassInfo& info);
 
-		void begin_frame();
-		void clear();
+		void BeginFrame();
+		void Clear();
 
 	private:
 		struct FramebufferNode : Util::TemporaryHashmapEnabled<FramebufferNode>,
@@ -209,7 +209,7 @@ namespace Vulkan
 			FramebufferNode(Device* device_, const RenderPass& rp, const RenderPassInfo& info_)
 				: Framebuffer(device_, rp, info_)
 			{
-				set_internal_sync_object();
+				SetInternalSyncObject();
 			}
 		};
 

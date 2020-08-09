@@ -495,12 +495,12 @@ namespace Vulkan
 	void CommandBuffer::InitViewportScissor(const RenderPassInfo& info, const Framebuffer* fb)
 	{
 		VkRect2D rect = info.render_area;
-		rect.offset.x = std::min(fb->get_width(), uint32_t(rect.offset.x));
-		rect.offset.y = std::min(fb->get_height(), uint32_t(rect.offset.y));
-		rect.extent.width = std::min(fb->get_width() - rect.offset.x, rect.extent.width);
-		rect.extent.height = std::min(fb->get_height() - rect.offset.y, rect.extent.height);
+		rect.offset.x = std::min(fb->GetWidth(), uint32_t(rect.offset.x));
+		rect.offset.y = std::min(fb->GetHeight(), uint32_t(rect.offset.y));
+		rect.extent.width = std::min(fb->GetWidth() - rect.offset.x, rect.extent.width);
+		rect.extent.height = std::min(fb->GetHeight() - rect.offset.y, rect.extent.height);
 
-		viewport = { 0.0f, 0.0f, float(fb->get_width()), float(fb->get_height()), 0.0f, 1.0f };
+		viewport = { 0.0f, 0.0f, float(fb->GetWidth()), float(fb->GetHeight()), 0.0f, 1.0f };
 		scissor = rect;
 	}
 
@@ -511,7 +511,7 @@ namespace Vulkan
 		cmd->BeginGraphics();
 
 		cmd->framebuffer = fb;
-		cmd->pipeline_state.compatible_render_pass = &fb->get_compatible_render_pass();
+		cmd->pipeline_state.compatible_render_pass = &fb->GetCompatibleRenderPass();
 		cmd->actual_render_pass = &device.RequestRenderPass(info, false);
 
 		unsigned i;
@@ -564,7 +564,7 @@ namespace Vulkan
 		VK_ASSERT(pipeline_state.compatible_render_pass);
 		VK_ASSERT(actual_render_pass);
 		pipeline_state.subpass_index++;
-		VK_ASSERT(pipeline_state.subpass_index < actual_render_pass->get_num_subpasses());
+		VK_ASSERT(pipeline_state.subpass_index < actual_render_pass->GetNumSubpasses());
 		table.vkCmdNextSubpass(cmd, contents);
 		current_contents = contents;
 		BeginGraphics();
@@ -577,7 +577,7 @@ namespace Vulkan
 		VK_ASSERT(!actual_render_pass);
 
 		framebuffer = &device->RequestFramebuffer(info);
-		pipeline_state.compatible_render_pass = &framebuffer->get_compatible_render_pass();
+		pipeline_state.compatible_render_pass = &framebuffer->GetCompatibleRenderPass();
 		actual_render_pass = &device->RequestRenderPass(info, false);
 		pipeline_state.subpass_index = 0;
 
@@ -614,8 +614,8 @@ namespace Vulkan
 
 		VkRenderPassBeginInfo begin_info = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 		VkRenderPassAttachmentBeginInfoKHR attachment_info = { VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO_KHR };
-		begin_info.renderPass = actual_render_pass->get_render_pass();
-		begin_info.framebuffer = framebuffer->get_framebuffer();
+		begin_info.renderPass = actual_render_pass->GetRenderPass();
+		begin_info.framebuffer = framebuffer->GetFramebuffer();
 		begin_info.renderArea = scissor;
 		begin_info.clearValueCount = num_clear_values;
 		begin_info.pClearValues = clear_values;
@@ -625,7 +625,7 @@ namespace Vulkan
 		VkImageView immediate_views[VULKAN_NUM_ATTACHMENTS + 1];
 		if (imageless)
 		{
-			attachment_info.attachmentCount = Framebuffer::setup_raw_views(immediate_views, info);
+			attachment_info.attachmentCount = Framebuffer::SetupRawViews(immediate_views, info);
 			attachment_info.pAttachments = immediate_views;
 			begin_info.pNext = &attachment_info;
 		}
@@ -748,6 +748,7 @@ namespace Vulkan
 		}
 
 		VkPipeline compute_pipeline;
+
 		device->register_compute_pipeline(compile.hash, info);
 
 #ifdef VULKAN_DEBUG
@@ -809,14 +810,14 @@ namespace Vulkan
 		// Blend state
 		VkPipelineColorBlendAttachmentState blend_attachments[VULKAN_NUM_ATTACHMENTS];
 		VkPipelineColorBlendStateCreateInfo blend = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-		blend.attachmentCount = compile.compatible_render_pass->get_num_color_attachments(compile.subpass_index);
+		blend.attachmentCount = compile.compatible_render_pass->GetNumColorAttachments(compile.subpass_index);
 		blend.pAttachments = blend_attachments;
 		for (unsigned i = 0; i < blend.attachmentCount; i++)
 		{
 			auto& att = blend_attachments[i];
 			att = {};
 
-			if (compile.compatible_render_pass->get_color_attachment(compile.subpass_index, i).attachment != VK_ATTACHMENT_UNUSED && (compile.program->GetPipelineLayout()->GetResourceLayout().render_target_mask & (1u << i)))
+			if (compile.compatible_render_pass->GetColorAttachment(compile.subpass_index, i).attachment != VK_ATTACHMENT_UNUSED && (compile.program->GetPipelineLayout()->GetResourceLayout().render_target_mask & (1u << i)))
 			{
 				att.colorWriteMask = (compile.static_state.state.write_mask >> (4 * i)) & 0xf;
 				att.blendEnable = compile.static_state.state.blend_enable;
@@ -835,9 +836,9 @@ namespace Vulkan
 
 		// Depth state
 		VkPipelineDepthStencilStateCreateInfo ds = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-		ds.stencilTestEnable = compile.compatible_render_pass->has_stencil(compile.subpass_index) && compile.static_state.state.stencil_test;
-		ds.depthTestEnable = compile.compatible_render_pass->has_depth(compile.subpass_index) && compile.static_state.state.depth_test;
-		ds.depthWriteEnable = compile.compatible_render_pass->has_depth(compile.subpass_index) && compile.static_state.state.depth_write;
+		ds.stencilTestEnable = compile.compatible_render_pass->HasStencil(compile.subpass_index) && compile.static_state.state.stencil_test;
+		ds.depthTestEnable = compile.compatible_render_pass->HasDepth(compile.subpass_index) && compile.static_state.state.depth_test;
+		ds.depthWriteEnable = compile.compatible_render_pass->HasDepth(compile.subpass_index) && compile.static_state.state.depth_write;
 
 		if (ds.depthTestEnable)
 			ds.depthCompareOp = static_cast<VkCompareOp>(compile.static_state.state.depth_compare);
@@ -885,9 +886,9 @@ namespace Vulkan
 
 		// Multisample
 		VkPipelineMultisampleStateCreateInfo ms = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-		ms.rasterizationSamples = static_cast<VkSampleCountFlagBits>(compile.compatible_render_pass->get_sample_count(compile.subpass_index));
+		ms.rasterizationSamples = static_cast<VkSampleCountFlagBits>(compile.compatible_render_pass->GetSampleCount(compile.subpass_index));
 
-		if (compile.compatible_render_pass->get_sample_count(compile.subpass_index) > 1)
+		if (compile.compatible_render_pass->GetSampleCount(compile.subpass_index) > 1)
 		{
 			ms.alphaToCoverageEnable = compile.static_state.state.alpha_to_coverage;
 			ms.alphaToOneEnable = compile.static_state.state.alpha_to_one;
@@ -936,11 +937,6 @@ namespace Vulkan
 				auto& s = stages[num_stages++];
 				s = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 				s.module = compile.program->GetShader(stage)->GetModule();
-#ifdef QM_SPIRV_DUMP
-				LOGI("Compiling SPIR-V file: (%s) %s\n",
-					Shader::stage_to_name(stage),
-					(to_string(compile.program->get_shader(stage)->get_hash()) + ".spv").c_str());
-#endif
 				s.pName = "main";
 				s.stage = static_cast<VkShaderStageFlagBits>(1u << i);
 
@@ -967,7 +963,7 @@ namespace Vulkan
 
 		VkGraphicsPipelineCreateInfo pipe = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
 		pipe.layout = compile.program->GetPipelineLayout()->GetLayout();
-		pipe.renderPass = compile.compatible_render_pass->get_render_pass();
+		pipe.renderPass = compile.compatible_render_pass->GetRenderPass();
 		pipe.subpass = compile.subpass_index;
 
 		pipe.pViewportState = &vp;
@@ -982,9 +978,8 @@ namespace Vulkan
 		pipe.stageCount = num_stages;
 
 		VkPipeline pipeline;
-#ifdef QM_VULKAN_FOSSILIZE
+
 		device->register_graphics_pipeline(compile.hash, pipe);
-#endif
 
 #ifdef VULKAN_DEBUG
 		QM_LOG_INFO("Creating graphics pipeline.\n");
@@ -1290,33 +1285,6 @@ namespace Vulkan
 		set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
 	}
 
-#ifdef QM_VULKAN_FILESYSTEM
-	void CommandBuffer::set_program(const std::string& compute, const std::vector<std::pair<std::string, int>>& defines)
-	{
-		auto* p = device->get_shader_manager().register_compute(compute);
-		if (p)
-		{
-			unsigned variant = p->register_variant(defines);
-			set_program(p->get_program(variant));
-		}
-		else
-			set_program(nullptr);
-	}
-
-	void CommandBuffer::set_program(const std::string& vertex, const std::string& fragment,
-		const std::vector<std::pair<std::string, int>>& defines)
-	{
-		auto* p = device->get_shader_manager().register_graphics(vertex, fragment);
-		if (p)
-		{
-			unsigned variant = p->register_variant(defines);
-			set_program(p->get_program(variant));
-		}
-		else
-			set_program(nullptr);
-	}
-#endif
-
 	void CommandBuffer::SetProgram(Program* program)
 	{
 		//If this is already set as the program, ignore this call
@@ -1478,7 +1446,7 @@ namespace Vulkan
 		VK_ASSERT(buffer.GetCreateInfo().usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 		auto& b = bindings.bindings[set][binding];
 
-		if (buffer.get_cookie() == bindings.cookies[set][binding] && b.buffer.range == range)
+		if (buffer.GetCookie() == bindings.cookies[set][binding] && b.buffer.range == range)
 		{
 			if (b.dynamic_offset != offset)
 			{
@@ -1491,7 +1459,7 @@ namespace Vulkan
 		{
 			b.buffer = { buffer.GetBuffer(), 0, range };
 			b.dynamic_offset = offset;
-			bindings.cookies[set][binding] = buffer.get_cookie();
+			bindings.cookies[set][binding] = buffer.GetCookie();
 			bindings.secondary_cookies[set][binding] = 0;
 			//Indicate that a static set is dirty
 			dirty_sets |= 1u << set;
@@ -1505,12 +1473,12 @@ namespace Vulkan
 		VK_ASSERT(buffer.GetCreateInfo().usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 		auto& b = bindings.bindings[set][binding];
 
-		if (buffer.get_cookie() == bindings.cookies[set][binding] && b.buffer.offset == offset && b.buffer.range == range)
+		if (buffer.GetCookie() == bindings.cookies[set][binding] && b.buffer.offset == offset && b.buffer.range == range)
 			return;
 
 		b.buffer = { buffer.GetBuffer(), offset, range };
 		b.dynamic_offset = 0;
-		bindings.cookies[set][binding] = buffer.get_cookie();
+		bindings.cookies[set][binding] = buffer.GetCookie();
 		bindings.secondary_cookies[set][binding] = 0;
 		dirty_sets |= 1u << set;
 	}
@@ -1529,7 +1497,7 @@ namespace Vulkan
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
-		if (sampler.get_cookie() == bindings.secondary_cookies[set][binding])
+		if (sampler.GetCookie() == bindings.secondary_cookies[set][binding])
 			return;
 
 		auto& b = bindings.bindings[set][binding];
@@ -1537,7 +1505,7 @@ namespace Vulkan
 		b.image.integer.sampler = sampler.get_sampler();
 		//Indicate that the set must be updated
 		dirty_sets |= 1u << set;
-		bindings.secondary_cookies[set][binding] = sampler.get_cookie();
+		bindings.secondary_cookies[set][binding] = sampler.GetCookie();
 	}
 
 	void CommandBuffer::SetBufferView(unsigned set, unsigned binding, const BufferView& view)
@@ -1545,11 +1513,11 @@ namespace Vulkan
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(view.GetBuffer().GetCreateInfo().usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
-		if (view.get_cookie() == bindings.cookies[set][binding])
+		if (view.GetCookie() == bindings.cookies[set][binding])
 			return;
 		auto& b = bindings.bindings[set][binding];
 		b.buffer_view = view.GetView();
-		bindings.cookies[set][binding] = view.get_cookie();
+		bindings.cookies[set][binding] = view.GetCookie();
 		bindings.secondary_cookies[set][binding] = 0;
 		dirty_sets |= 1u << set;
 	}
@@ -1557,11 +1525,11 @@ namespace Vulkan
 	void CommandBuffer::SetInputAttachments(unsigned set, unsigned start_binding)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
-		VK_ASSERT(start_binding + actual_render_pass->get_num_input_attachments(pipeline_state.subpass_index) <= VULKAN_NUM_BINDINGS);
-		unsigned num_input_attachments = actual_render_pass->get_num_input_attachments(pipeline_state.subpass_index);
+		VK_ASSERT(start_binding + actual_render_pass->GetNumInputAttachments(pipeline_state.subpass_index) <= VULKAN_NUM_BINDINGS);
+		unsigned num_input_attachments = actual_render_pass->GetNumInputAttachments(pipeline_state.subpass_index);
 		for (unsigned i = 0; i < num_input_attachments; i++)
 		{
-			auto& ref = actual_render_pass->get_input_attachment(pipeline_state.subpass_index, i);
+			auto& ref = actual_render_pass->GetInputAttachment(pipeline_state.subpass_index, i);
 			if (ref.attachment == VK_ATTACHMENT_UNUSED)
 				continue;
 
@@ -1569,7 +1537,7 @@ namespace Vulkan
 			VK_ASSERT(view);
 			VK_ASSERT(view->GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
 
-			if (view->get_cookie() == bindings.cookies[set][start_binding + i] &&
+			if (view->GetCookie() == bindings.cookies[set][start_binding + i] &&
 				bindings.bindings[set][start_binding + i].image.fp.imageLayout == ref.layout)
 			{
 				continue;
@@ -1580,7 +1548,7 @@ namespace Vulkan
 			b.image.integer.imageLayout = ref.layout;
 			b.image.fp.imageView = view->GetFloatView();
 			b.image.integer.imageView = view->GetIntegerView();
-			bindings.cookies[set][start_binding + i] = view->get_cookie();
+			bindings.cookies[set][start_binding + i] = view->GetCookie();
 			dirty_sets |= 1u << set;
 		}
 	}
@@ -1616,7 +1584,7 @@ namespace Vulkan
 	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view)
 	{
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
-		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.get_cookie());
+		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie());
 	}
 
 	enum CookieBits
@@ -1630,7 +1598,7 @@ namespace Vulkan
 		VK_ASSERT(view.get_image().get_create_info().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
 		auto unorm_view = view.GetUnormView();
 		VK_ASSERT(unorm_view != VK_NULL_HANDLE);
-		SetTexture(set, binding, unorm_view, unorm_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.get_cookie() | COOKIE_BIT_UNORM);
+		SetTexture(set, binding, unorm_view, unorm_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie() | COOKIE_BIT_UNORM);
 	}
 
 	void CommandBuffer::SetSrgbTexture(unsigned set, unsigned binding, const ImageView& view)
@@ -1638,7 +1606,7 @@ namespace Vulkan
 		VK_ASSERT(view.get_image().get_create_info().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
 		auto srgb_view = view.GetSRGBView();
 		VK_ASSERT(srgb_view != VK_NULL_HANDLE);
-		SetTexture(set, binding, srgb_view, srgb_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.get_cookie() | COOKIE_BIT_SRGB);
+		SetTexture(set, binding, srgb_view, srgb_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie() | COOKIE_BIT_SRGB);
 	}
 
 	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view, const Sampler& sampler)
@@ -1665,7 +1633,7 @@ namespace Vulkan
 	void CommandBuffer::SetStorageTexture(unsigned set, unsigned binding, const ImageView& view)
 	{
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_STORAGE_BIT);
-		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_GENERAL), view.get_cookie());
+		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_GENERAL), view.GetCookie());
 	}
 
 	static void UpdateDescriptorSetLegacy(Device& device, VkDescriptorSet desc_set, const DescriptorSetLayout& set_layout, const ResourceBinding* bindings)
@@ -1973,7 +1941,7 @@ namespace Vulkan
 			});
 
 		Util::Hash hash = h.get();
-		auto allocated = current_layout->GetAllocator(set)->find(thread_index, hash);
+		auto allocated = current_layout->GetAllocator(set)->Find(thread_index, hash);
 
 		// The descriptor set was not successfully cached, rebuild.
 		if (!allocated.second)

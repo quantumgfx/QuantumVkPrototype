@@ -88,12 +88,12 @@ namespace Vulkan
 		void operator=(const BindlessDescriptorPool&) = delete;
 		BindlessDescriptorPool(const BindlessDescriptorPool&) = delete;
 
-		bool allocate_descriptors(unsigned count);
-		VkDescriptorSet get_descriptor_set() const;
+		bool AllocateDescriptors(unsigned count);
+		VkDescriptorSet GetDescriptorSet() const;
 
-		void set_texture(unsigned binding, const ImageView& view);
-		void set_texture_unorm(unsigned binding, const ImageView& view);
-		void set_texture_srgb(unsigned binding, const ImageView& view);
+		void SetTexture(unsigned binding, const ImageView& view);
+		void SetTextureUnorm(unsigned binding, const ImageView& view);
+		void SetTextureSrgb(unsigned binding, const ImageView& view);
 
 	private:
 		Device* device;
@@ -101,7 +101,7 @@ namespace Vulkan
 		VkDescriptorPool desc_pool;
 		VkDescriptorSet desc_set = VK_NULL_HANDLE;
 
-		void set_texture(unsigned binding, VkImageView view, VkImageLayout layout);
+		void SetTexture(unsigned binding, VkImageView view, VkImageLayout layout);
 	};
 	using BindlessDescriptorPoolHandle = Util::IntrusivePtr<BindlessDescriptorPool>;
 
@@ -120,25 +120,26 @@ namespace Vulkan
 		void operator=(const DescriptorSetAllocator&) = delete;
 		DescriptorSetAllocator(const DescriptorSetAllocator&) = delete;
 
-		void begin_frame();
-		std::pair<VkDescriptorSet, bool> find(unsigned thread_index, Util::Hash hash);
+		void BeginFrame();
+		std::pair<VkDescriptorSet, bool> Find(unsigned thread_index, Util::Hash hash);
 
-		VkDescriptorSetLayout get_layout() const
+		VkDescriptorSetLayout GetLayout() const
 		{
 			return set_layout;
 		}
 
-		void clear();
+		void Clear();
 
-		bool is_bindless() const
+		bool IsBindless() const
 		{
 			return bindless;
 		}
 
-		VkDescriptorPool allocate_bindless_pool(unsigned num_sets, unsigned num_descriptors);
-		VkDescriptorSet allocate_bindless_set(VkDescriptorPool pool, unsigned num_descriptors);
+		VkDescriptorPool AllocateBindlessPool(unsigned num_sets, unsigned num_descriptors);
+		VkDescriptorSet AllocateBindlessSet(VkDescriptorPool pool, unsigned num_descriptors);
 
 	private:
+
 		struct DescriptorSetNode : Util::TemporaryHashmapEnabled<DescriptorSetNode>, Util::IntrusiveListEnabled<DescriptorSetNode>
 		{
 			explicit DescriptorSetNode(VkDescriptorSet set_)

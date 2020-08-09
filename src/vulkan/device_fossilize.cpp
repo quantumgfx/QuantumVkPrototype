@@ -161,7 +161,7 @@ namespace Vulkan
 	bool Device::enqueue_create_render_pass(Fossilize::Hash hash, const VkRenderPassCreateInfo* create_info, VkRenderPass* render_pass)
 	{
 		auto* ret = render_passes.emplace_yield(hash, hash, this, *create_info);
-		*render_pass = ret->get_render_pass();
+		*render_pass = ret->GetRenderPass();
 		replayer_state.render_pass_map[*render_pass] = ret;
 		return true;
 	}

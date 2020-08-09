@@ -263,13 +263,20 @@ namespace Vulkan
 
 		void InitSwapchain(const std::vector<VkImage>& swapchain_images, unsigned width, unsigned height, VkFormat format);
 		void InitExternalSwapchain(const std::vector<ImageHandle>& swapchain_images);
+		// Creates the frame contexts. This is automatically called by SetContext(). This implementation defaults to 2 frames, but this command can be called to change that
 		void InitFrameContexts(unsigned count);
 
+		// Returns the current image view
 		ImageView& GetSwapchainView();
+		// Returns the swapchain view of a particular index
 		ImageView& GetSwapchainView(unsigned index);
+		// Returns the size of the swapchain
 		unsigned GetNumSwapchainImages() const;
+		// Returns the number of frame contexts
 		unsigned GetNumFrameContexts() const;
+		// Returns the current swapchain index
 		unsigned GetSwapchainIndex() const;
+		// Returns the current frame context index
 		unsigned GetCurrentFrameContext() const;
 
 		// Retrieves the pipeline cache data. This should be stored in a file (before device is destroyed) by the client and loaded up in SetContext.
@@ -278,23 +285,36 @@ namespace Vulkan
 		Util::RetainedHeapData GetFossilizePipelineData();
 
 		// Frame-pushing interface.
+
+		// Move to the next frame context
 		void NextFrameContext();
 		void WaitIdle();
 		void EndFrameContext();
 
 		// Submission interface, may be called from any thread at any time.
-		void FlushFrame();
-		CommandBufferHandle RequestCommandBuffer(CommandBuffer::Type type = CommandBuffer::Type::Generic);
-		CommandBufferHandle RequestCommandBufferForThread(unsigned thread_index, CommandBuffer::Type type = CommandBuffer::Type::Generic);
 
+		// Make sure all pending submits to the current frame are processed
+		void FlushFrame();
+
+		// Command buffers are transient in Granite.
+		// Once you request a command buffer you must submit it in the current frame context before moving to the next one.
+		// More detailed examples of command buffers will follow in future samples.
+		// There are different command buffer types which correspond to general purpose queue, async compute, DMA queue, etc.
+		// Generic is the default, and the argument can be omitted.
+
+		// Returns a new command buffer
+		CommandBufferHandle RequestCommandBuffer(CommandBuffer::Type type = CommandBuffer::Type::Generic);
+		// Returns a command buffer for a specific thread. Thread_index must be less than the context's num thread indices
+		CommandBufferHandle RequestCommandBufferForThread(unsigned thread_index, CommandBuffer::Type type = CommandBuffer::Type::Generic);
+		// Submits a command to be executed. semaphore is an array of semaphores that will be filled with 
+		// signal semaphores (aka semaphores that will cause other commands to wait until submission is complete)
 		void Submit(CommandBufferHandle& cmd, Fence* fence = nullptr, unsigned semaphore_count = 0, Semaphore* semaphore = nullptr);
 		void SubmitEmpty(CommandBuffer::Type type,  Fence* fence = nullptr,unsigned semaphore_count = 0, Semaphore* semaphore = nullptr);
 		//Adds a wait semaphore and wait stages to the next queue submit of a certain type
 		void AddWaitSemaphore(CommandBuffer::Type type, Semaphore semaphore, VkPipelineStageFlags stages, bool flush);
 		CommandBuffer::Type GetPhysicalQueueType(CommandBuffer::Type queue_type) const;
-		//void RegisterTimeInterval(std::string tid, QueryPoolHandle start_ts, QueryPoolHandle end_ts, std::string tag, std::string extra = {});
 
-		//"Requests" essentially hash the object, check if it exists in the cache and if not creates a new object
+		// "Requests" essentially hash the object, check if it exists in the cache and if not creates a new object
 
 		// Creates a shader with code and size. If shader has already been created this just returns that
 		Shader* RequestShader(const uint32_t* code, size_t size);
@@ -323,9 +343,11 @@ namespace Vulkan
 			return HasMemoryPropertyFlags(alloc, mem_props, flags);
 		}
 
-		// Create buffers and images.
+		// Creates and allocates a buffer and images.
 		BufferHandle CreateBuffer(const BufferCreateInfo& info, const void* initial = nullptr);
+		// Creates and allocates an image
 		ImageHandle CreateImage(const ImageCreateInfo& info, const ImageInitialData* initial = nullptr);
+		// Creates an image using a staging buffer
 		ImageHandle CreateImageFromStagingBuffer(const ImageCreateInfo& info, const InitialImageBuffer* buffer);
 		// Essentially an image that can be sampled on the GPU as a vk image, but it also has a vkbuffer conterpart on the cpu
 		LinearHostImageHandle CreateLinearHostImage(const LinearHostImageCreateInfo& info);
@@ -334,23 +356,28 @@ namespace Vulkan
 		InitialImageBuffer CreateImageStagingBuffer(const ImageCreateInfo& info, const ImageInitialData* initial);
 		InitialImageBuffer CreateImageStagingBuffer(const TextureFormatLayout& layout);
 
-		// Create image view, buffer views and samplers.
+		// Create image view
 		ImageViewHandle CreateImageView(const ImageViewCreateInfo& view_info);
+		// Create buffer view
 		BufferViewHandle CreateBufferView(const BufferViewCreateInfo& view_info);
+		// Create sampler
 		SamplerHandle CreateSampler(const SamplerCreateInfo& info);
 
-		BindlessDescriptorPoolHandle CreateBindlessDescriptorPool(BindlessResourceType type,  unsigned num_sets, unsigned num_descriptors);
+		BindlessDescriptorPoolHandle CreateBindlessDescriptorPool(BindlessResourceType type, unsigned num_sets, unsigned num_descriptors);
 
-		// Render pass helpers.
+		// Detects whether a given format supports the format fetures
 		bool ImageFormatIsSupported(VkFormat format, VkFormatFeatureFlags required, VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL) const;
+		// Retrieves the properties of a format
 		void GetFormatProperties(VkFormat format, VkFormatProperties* properties);
-		bool GetImageFormatProperties(VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags,
-										 VkImageFormatProperties* properties);
-
+		// Retrieves the image format properties of an image
+		bool GetImageFormatProperties(VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* properties);
+		// Returns the defualt depth stencil format
 		VkFormat GetDefaultDepthStencilFormat() const;
+		// Returns the default depth format
 		VkFormat GetDefaultDepthFormat() const;
-		ImageView& GetTransientAttachment(unsigned width, unsigned height, VkFormat format,
-											unsigned index = 0, unsigned samples = 1, unsigned layers = 1);
+		// Returns a transiant attachment
+		ImageView& GetTransientAttachment(unsigned width, unsigned height, VkFormat format, unsigned index = 0, unsigned samples = 1, unsigned layers = 1);
+		// Gets the renderpassinfo from a SwapchainRenderPass enum
 		RenderPassInfo GetSwapchainRenderPass(SwapchainRenderPass style);
 
 		// Timeline semaphores are only used internally to reduce handle bloat.
@@ -358,60 +385,55 @@ namespace Vulkan
 		Semaphore RequestLegacySemaphore();
 		// Turns an externally created semaphore into a QM semaphore. signalled controls whether semaphore is initially signalled or not.
 		Semaphore RequestExternalSemaphore(VkSemaphore semaphore, bool signalled);
-
+		// Get the vulkan instance
 		VkInstance GetInstance() const
 		{
 			return instance;
 		}
-
+		// Get the vulkan device (interface with gpu)
 		VkDevice GetDevice() const
 		{
 			return device;
 		}
-
+		// Get the vulkan physical device (the gpu)
 		VkPhysicalDevice GetPhysicalDevice() const
 		{
 			return gpu;
 		}
-
+		// Get the memory properties of the device
 		const VkPhysicalDeviceMemoryProperties& GetMemoryProperties() const
 		{
 			return mem_props;
 		}
-
+		// Get the physical properties of the device
 		const VkPhysicalDeviceProperties& GetGPUProperties() const
 		{
 			return gpu_props;
 		}
-
+		// Get the volk table (vulkan function loader)
 		const VolkDeviceTable& GetDeviceTable() const
 		{
 			return *table;
 		}
-
+		// Get a stock sampler (basically common sampler types held in the StockSampler enum)
 		const Sampler& GetStockSampler(StockSampler sampler) const;
-
-	#ifdef QM_VULKAN_FILESYSTEM
-		ShaderManager& get_shader_manager();
-		TextureManager& get_texture_manager();
-		void init_shader_manager_cache();
-		void flush_shader_manager_cache();
-	#endif
 
 		// For some platforms, the device and queue might be shared, possibly across threads, so need some mechanism to
 		// lock the global device and queue.
-		void SetQueueLock(std::function<void()> lock_callback, std::function<void()> unlock_callback);
 
+		// Set call backs for before and after vkQueueSubmit calls
+		void SetQueueLock(std::function<void()> lock_callback, std::function<void()> unlock_callback);
+		// Get enabled workarounds
 		const ImplementationWorkarounds& GetWorkarounds() const
 		{
 			return workarounds;
 		}
-
+		// Get enabled device fetures
 		const DeviceFeatures& GetDeviceFeatures() const
 		{
 			return *ext;
 		}
-
+		// Return whether the swapchain has been used in this frame
 		bool SwapchainTouched() const;
 
 	private:

@@ -14,7 +14,7 @@ namespace Vulkan
 	public:
 		Cookie(Device* device);
 
-		uint64_t get_cookie() const
+		uint64_t GetCookie() const
 		{
 			return cookie;
 		}
@@ -29,7 +29,7 @@ namespace Vulkan
 	class InternalSyncEnabled
 	{
 	public:
-		void set_internal_sync_object()
+		void SetInternalSyncObject()
 		{
 			internal_sync = true;
 		}

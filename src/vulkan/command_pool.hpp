@@ -10,6 +10,7 @@ namespace Vulkan
 	class CommandPool
 	{
 	public:
+
 		CommandPool(Device* device, uint32_t queue_family_index);
 		~CommandPool();
 
@@ -18,9 +19,13 @@ namespace Vulkan
 		CommandPool(const CommandPool&) = delete;
 		void operator=(const CommandPool&) = delete;
 
+		// Begin a new frame. Reset all command buffers belonging to pool.
 		void Begin();
+		// Returns a new primary command buffer allocated from and belonging to pool.
 		VkCommandBuffer RequestCommandBuffer();
+		// Returns a new secondary command buffer allocated from and belonging to pool.
 		VkCommandBuffer RequestSecondaryCommandBuffer();
+		// Signal that the command bffer has been submitted (debug only function).
 		void SignalSubmitted(VkCommandBuffer cmd);
 
 	private:

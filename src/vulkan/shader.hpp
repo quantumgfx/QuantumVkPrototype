@@ -17,6 +17,7 @@ namespace Vulkan
 {
 	class Device;
 
+	// Different types of shader stages
 	enum class ShaderStage
 	{
 		Vertex = 0,
@@ -28,6 +29,7 @@ namespace Vulkan
 		Count
 	};
 
+	// Specifies the layout of resources in a shader
 	struct ResourceLayout
 	{
 		uint32_t input_mask = 0;
@@ -110,7 +112,7 @@ namespace Vulkan
 		void CreateUpdateTemplates();
 	};
 
-	//Essentially just a vkShaderModule
+	// Essentially just a vkShaderModule
 	class Shader : public HashedObject<Shader>
 	{
 	public:
@@ -137,6 +139,8 @@ namespace Vulkan
 		void UpdateArrayInfo(const spirv_cross::SPIRType& type, unsigned set, unsigned binding);
 	};
 
+	// Represents multiple shaders bound together into a sequence. Contains pipeline layout, shaders and pipeline cache (all the possible different combinations of state info).
+	// The actual pipelines are created in the command buffers
 	class Program : public HashedObject<Program>, public InternalSyncEnabled
 	{
 	public:

@@ -47,7 +47,7 @@ namespace Vulkan
 		}
 	}
 
-	static inline bool format_has_depth_aspect(VkFormat format)
+	static inline bool FormatHasDepthAspect(VkFormat format)
 	{
 		switch (format)
 		{
@@ -64,7 +64,7 @@ namespace Vulkan
 		}
 	}
 
-	static inline bool format_has_stencil_aspect(VkFormat format)
+	static inline bool FormatHasStencilAspect(VkFormat format)
 	{
 		switch (format)
 		{
@@ -81,7 +81,7 @@ namespace Vulkan
 
 	static inline bool format_has_depth_or_stencil_aspect(VkFormat format)
 	{
-		return format_has_depth_aspect(format) || format_has_stencil_aspect(format);
+		return FormatHasDepthAspect(format) || FormatHasStencilAspect(format);
 	}
 
 	static inline VkImageAspectFlags format_to_aspect_mask(VkFormat format)

@@ -567,11 +567,11 @@ namespace Vulkan
 		managers.semaphore.init(this);
 		managers.fence.init(this);
 		managers.event.init(this);
-		managers.vbo.init(this, 4 * 1024, 16, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, ImplementationQuirks::get().staging_need_device_local);
-		managers.ibo.init(this, 4 * 1024, 16, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ImplementationQuirks::get().staging_need_device_local);
-		managers.ubo.init(this, 256 * 1024, std::max<VkDeviceSize>(16u, gpu_props.limits.minUniformBufferOffsetAlignment), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, ImplementationQuirks::get().staging_need_device_local);
-		managers.ubo.set_spill_region_size(VULKAN_MAX_UBO_SIZE);
-		managers.staging.init(this, 64 * 1024, std::max<VkDeviceSize>(16u, gpu_props.limits.optimalBufferCopyOffsetAlignment),
+		managers.vbo.Init(this, 4 * 1024, 16, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, ImplementationQuirks::get().staging_need_device_local);
+		managers.ibo.Init(this, 4 * 1024, 16, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ImplementationQuirks::get().staging_need_device_local);
+		managers.ubo.Init(this, 256 * 1024, std::max<VkDeviceSize>(16u, gpu_props.limits.minUniformBufferOffsetAlignment), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, ImplementationQuirks::get().staging_need_device_local);
+		managers.ubo.SetSpillRegionSize(VULKAN_MAX_UBO_SIZE);
+		managers.staging.Init(this, 64 * 1024, std::max<VkDeviceSize>(16u, gpu_props.limits.optimalBufferCopyOffsetAlignment),
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			false);
 
@@ -587,10 +587,6 @@ namespace Vulkan
 		InitPipelineCache(initial_cache_data, initiale_cache_size);
 		
 		InitFossilizePipeline(fossilize_pipeline_data, fossilize_pipeline_size);
-
-#ifdef QM_VULKAN_FILESYSTEM
-		init_shader_manager_cache();
-#endif
 	}
 
 	void Device::InitBindless()
@@ -714,8 +710,8 @@ namespace Vulkan
 
 		if (block.offset == 0)
 		{
-			if (block.size == pool.get_block_size())
-				pool.recycle_block(move(block));
+			if (block.size == pool.GetBlockSize())
+				pool.RecycleBlock(move(block));
 		}
 		else
 		{
@@ -725,12 +721,12 @@ namespace Vulkan
 				dma->push_back(block);
 			}
 
-			if (block.size == pool.get_block_size())
+			if (block.size == pool.GetBlockSize())
 				recycle.push_back(block);
 		}
 
 		if (size)
-			block = pool.request_block(size);
+			block = pool.RequestBlock(size);
 		else
 			block = {};
 	}
@@ -1323,7 +1319,7 @@ namespace Vulkan
 
 				VkSemaphore release = managers.semaphore.request_cleared_semaphore();
 				wsi.release = Semaphore(handle_pool.semaphores.allocate(this, release, true));
-				wsi.release->set_internal_sync_object();
+				wsi.release->SetInternalSyncObject();
 				signals[index].push_back(wsi.release->get_semaphore());
 				signal_counts[index].push_back(0);
 				wsi.consumed = true;
@@ -1513,8 +1509,8 @@ namespace Vulkan
 		// Kept handles alive until end-of-frame, free now if appropriate.
 		for (auto& image : Frame().keep_alive_images)
 		{
-			image->set_internal_sync_object();
-			image->GetView().set_internal_sync_object();
+			image->SetInternalSyncObject();
+			image->GetView().SetInternalSyncObject();
 		}
 		Frame().keep_alive_images.clear();
 
@@ -1679,7 +1675,7 @@ namespace Vulkan
 		VkCommandBufferInheritanceInfo inherit = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO };
 
 		inherit.framebuffer = VK_NULL_HANDLE;
-		inherit.renderPass = framebuffer->get_compatible_render_pass().get_render_pass();
+		inherit.renderPass = framebuffer->GetCompatibleRenderPass().GetRenderPass();
 		inherit.subpass = subpass;
 		info.pInheritanceInfo = &inherit;
 		info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
@@ -1701,7 +1697,7 @@ namespace Vulkan
 
 		if (wsi.acquire)
 		{
-			wsi.acquire->set_internal_sync_object();
+			wsi.acquire->SetInternalSyncObject();
 			VK_ASSERT(wsi.acquire->is_signalled());
 		}
 	}
@@ -1723,41 +1719,30 @@ namespace Vulkan
 		return wsi.touched;
 	}
 
-	/*Device::~Device()
+	Device::~Device()
 	{
-		wait_idle();
+		WaitIdle();
 
-		managers.timestamps.log_simple();
-
-		wsi.acquire.reset();
-		wsi.release.reset();
+		wsi.acquire.Reset();
+		wsi.release.Reset();
 		wsi.swapchain.clear();
 
 		if (pipeline_cache != VK_NULL_HANDLE)
 		{
-			flush_pipeline_cache();
 			table->vkDestroyPipelineCache(device, pipeline_cache, nullptr);
 		}
 
-#ifdef GRANITE_VULKAN_FILESYSTEM
-		flush_shader_manager_cache();
-#endif
-
-#ifdef GRANITE_VULKAN_FOSSILIZE
-		flush_pipeline_state();
-#endif
-
-		framebuffer_allocator.clear();
+		framebuffer_allocator.Clear();
 		transient_allocator.clear();
 		for (auto& sampler : samplers)
-			sampler.reset();
+			sampler.Reset();
 
 		for (auto& sampler : samplers_ycbcr)
 			if (sampler)
 				table->vkDestroySamplerYcbcrConversion(device, sampler, nullptr);
 
-		deinit_timeline_semaphores();
-	}*/
+		DeinitTimelineSemaphores();
+	}
 
 	void Device::DeinitTimelineSemaphores()
 	{
@@ -1790,7 +1775,7 @@ namespace Vulkan
 		WaitIdleNolock();
 
 		// Clear out caches which might contain stale data from now on.
-		framebuffer_allocator.clear();
+		framebuffer_allocator.Clear();
 		transient_allocator.clear();
 		per_frame.clear();
 
@@ -1815,8 +1800,8 @@ namespace Vulkan
 			wsi.swapchain.push_back(image);
 			if (image)
 			{
-				wsi.swapchain.back()->set_internal_sync_object();
-				wsi.swapchain.back()->GetView().set_internal_sync_object();
+				wsi.swapchain.back()->SetInternalSyncObject();
+				wsi.swapchain.back()->GetView().SetInternalSyncObject();
 			}
 		}
 	}
@@ -1853,9 +1838,9 @@ namespace Vulkan
 				QM_LOG_ERROR("Failed to create view for backbuffer.");
 
 			auto backbuffer = ImageHandle(handle_pool.images.allocate(this, image, image_view, DeviceAllocation{}, info, VK_IMAGE_VIEW_TYPE_2D));
-			backbuffer->set_internal_sync_object();
+			backbuffer->SetInternalSyncObject();
 			backbuffer->disown_image();
-			backbuffer->GetView().set_internal_sync_object();
+			backbuffer->GetView().SetInternalSyncObject();
 			wsi.swapchain.push_back(backbuffer);
 			backbuffer->SetSwapchainLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 		}
@@ -2056,8 +2041,7 @@ namespace Vulkan
 	{
 		VkDevice vkdevice = device.GetDevice();
 
-		if (device.GetDeviceFeatures().timeline_semaphore_features.timelineSemaphore &&
-			graphics_timeline_semaphore && compute_timeline_semaphore && transfer_timeline_semaphore)
+		if (device.GetDeviceFeatures().timeline_semaphore_features.timelineSemaphore && graphics_timeline_semaphore && compute_timeline_semaphore && transfer_timeline_semaphore)
 		{
 			VkSemaphoreWaitInfoKHR info = { VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO_KHR };
 			const VkSemaphore semaphores[3] = { graphics_timeline_semaphore, compute_timeline_semaphore, transfer_timeline_semaphore };
@@ -2144,13 +2128,13 @@ namespace Vulkan
 			managers.event.recycle(event);
 
 		for (auto& block : vbo_blocks)
-			managers.vbo.recycle_block(move(block));
+			managers.vbo.RecycleBlock(move(block));
 		for (auto& block : ibo_blocks)
-			managers.ibo.recycle_block(move(block));
+			managers.ibo.RecycleBlock(move(block));
 		for (auto& block : ubo_blocks)
-			managers.ubo.recycle_block(move(block));
+			managers.ubo.RecycleBlock(move(block));
 		for (auto& block : staging_blocks)
-			managers.staging.recycle_block(move(block));
+			managers.staging.RecycleBlock(move(block));
 
 		vbo_blocks.clear();
 		ibo_blocks.clear();
@@ -2229,10 +2213,10 @@ namespace Vulkan
 		ClearWaitSemaphores();
 
 		// Free memory for buffer pools.
-		managers.vbo.reset();
-		managers.ubo.reset();
-		managers.ibo.reset();
-		managers.staging.reset();
+		managers.vbo.Reset();
+		managers.ubo.Reset();
+		managers.ibo.Reset();
+		managers.staging.Reset();
 		for (auto& frame : per_frame)
 		{
 			frame->vbo_blocks.clear();
@@ -2241,10 +2225,10 @@ namespace Vulkan
 			frame->staging_blocks.clear();
 		}
 
-		framebuffer_allocator.clear();
+		framebuffer_allocator.Clear();
 		transient_allocator.clear();
 		for (auto& allocator : descriptor_set_allocators)
-			allocator.clear();
+			allocator.Clear();
 
 		for (auto& frame : per_frame)
 		{
@@ -2261,10 +2245,10 @@ namespace Vulkan
 		// Flush the frame here as we might have pending staging command buffers from init stage.
 		EndFrameNolock();
 
-		framebuffer_allocator.begin_frame();
+		framebuffer_allocator.BeginFrame();
 		transient_allocator.begin_frame();
 		for (auto& allocator : descriptor_set_allocators)
-			allocator.begin_frame();
+			allocator.BeginFrame();
 
 		VK_ASSERT(!per_frame.empty());
 		frame_context_index++;
@@ -2340,7 +2324,7 @@ namespace Vulkan
 		bool zero_initialize = (create_info.misc & BUFFER_MISC_ZERO_INITIALIZE_BIT) != 0;
 		if (initial && zero_initialize)
 		{
-			QM_LOG_ERROR("Cannot initialize buffer with data and clear.\n");
+			QM_LOG_ERROR("Cannot initialize buffer with data and Clear.\n");
 			return BufferHandle{};
 		}
 
@@ -2370,12 +2354,15 @@ namespace Vulkan
 		{
 			alloc_info.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 			alloc_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+			alloc_info.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 		}
 		else if (create_info.domain == BufferDomain::LinkedDeviceHost)
 		{
 			alloc_info.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+			alloc_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+			alloc_info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 		}
 
 		if(!managers.memory.AllocateBuffer(info, alloc_info, &buffer, &allocation))
@@ -2461,7 +2448,7 @@ namespace Vulkan
 		(void)stock_sampler;
 #endif
 		SamplerHandle handle(handle_pool.samplers.allocate(this, sampler, sampler_info));
-		handle->set_internal_sync_object();
+		handle->SetInternalSyncObject();
 		return handle;
 	}
 
@@ -3035,8 +3022,6 @@ namespace Vulkan
 		}
 		else if (create_info.domain == ImageDomain::Transient)
 		{
-			VK_ASSERT(create_info.usage & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT);
-
 			alloc_info.usage = VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED;
 			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 		}
@@ -3287,7 +3272,7 @@ namespace Vulkan
 
 		VkDescriptorPool pool = VK_NULL_HANDLE;
 		if (allocator)
-			pool = allocator->allocate_bindless_pool(num_sets, num_descriptors);
+			pool = allocator->AllocateBindlessPool(num_sets, num_descriptors);
 
 		if (!pool)
 		{

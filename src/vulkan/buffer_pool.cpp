@@ -6,7 +6,7 @@ using namespace std;
 
 namespace Vulkan
 {
-	void BufferPool::init(Device* device_, VkDeviceSize block_size_,
+	void BufferPool::Init(Device* device_, VkDeviceSize block_size_,
 		VkDeviceSize alignment_, VkBufferUsageFlags usage_,
 		bool need_device_local_)
 	{
@@ -17,7 +17,7 @@ namespace Vulkan
 		need_device_local = need_device_local_;
 	}
 
-	void BufferPool::set_spill_region_size(VkDeviceSize spill_size_)
+	void BufferPool::SetSpillRegionSize(VkDeviceSize spill_size_)
 	{
 		spill_size = spill_size_;
 	}
@@ -26,13 +26,14 @@ namespace Vulkan
 	{
 	}
 
-	void BufferPool::reset()
+	void BufferPool::Reset()
 	{
 		blocks.clear();
 	}
 
-	BufferBlock BufferPool::allocate_block(VkDeviceSize size)
+	BufferBlock BufferPool::AllocateBlock(VkDeviceSize size)
 	{
+		// If needs device_local, domain device, if staging buffer, domain host, if index, vertex or uniform LinkedDeviceHost.
 		BufferDomain ideal_domain = need_device_local ? BufferDomain::Device : ((usage & VK_BUFFER_USAGE_TRANSFER_SRC_BIT) != 0) ? BufferDomain::Host : BufferDomain::LinkedDeviceHost;
 
 		VkBufferUsageFlags extra_usage = ideal_domain == BufferDomain::Device ? VK_BUFFER_USAGE_TRANSFER_DST_BIT : 0;
@@ -45,8 +46,7 @@ namespace Vulkan
 		info.usage = usage | extra_usage;
 
 		block.gpu = device->CreateBuffer(info, nullptr);
-		device->SetName(*block.gpu, "chain-allocated-block-gpu");
-		block.gpu->set_internal_sync_object();
+		block.gpu->SetInternalSyncObject();
 
 		if (device->AllocationHasMemoryPropertyFlags(block.gpu->GetAllocation(), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
 		{
@@ -67,8 +67,7 @@ namespace Vulkan
 
 			VK_ASSERT(block.cpu->GetAllocation().persistantly_mapped);
 
-			block.cpu->set_internal_sync_object();
-			device->SetName(*block.cpu, "chain-allocated-block-cpu");
+			block.cpu->SetInternalSyncObject();
 			block.mapped = static_cast<uint8_t*>(device->MapHostBuffer(*block.cpu, MEMORY_ACCESS_WRITE_BIT));
 		}
 
@@ -79,11 +78,11 @@ namespace Vulkan
 		return block;
 	}
 
-	BufferBlock BufferPool::request_block(VkDeviceSize minimum_size)
+	BufferBlock BufferPool::RequestBlock(VkDeviceSize minimum_size)
 	{
 		if ((minimum_size > block_size) || blocks.empty())
 		{ // If the request is too large or the pool empty, allocate a new block.
-			return allocate_block(max(block_size, minimum_size));
+			return AllocateBlock(max(block_size, minimum_size));
 		}
 		else
 		{ // Else get the last block in the pool
@@ -96,7 +95,7 @@ namespace Vulkan
 		}
 	}
 
-	void BufferPool::recycle_block(BufferBlock&& block)
+	void BufferPool::RecycleBlock(BufferBlock&& block)
 	{
 		VK_ASSERT(block.size == block_size);
 		blocks.push_back(move(block));
