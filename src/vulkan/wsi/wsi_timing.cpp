@@ -16,6 +16,7 @@ namespace Vulkan
 {
 	void WSITiming::Init(WSIPlatform* platform_, Device* device_, VkSwapchainKHR swapchain_, const WSITimingOptions& options_)
 	{
+		// Just set and initialize
 		platform = platform_;
 		device = device_->GetDevice();
 		table = &device_->GetDeviceTable();

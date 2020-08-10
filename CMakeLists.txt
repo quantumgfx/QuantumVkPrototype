@@ -158,16 +158,11 @@ target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
 target_link_libraries(QuantumVk PUBLIC fossilize)
 
 # Src Directories
-set(QM_BASE_DIR src/base)
 set(QM_UTILS_DIR src/utils)
 set(QM_VK_DIR src/vulkan)
 set(QM_THREADING_DIR src/threading)
 
 target_sources(QuantumVk PRIVATE 
-	${QM_BASE_DIR}/base.cpp
-	${QM_BASE_DIR}/base.hpp
-	${QM_BASE_DIR}/global.cpp
-	${QM_BASE_DIR}/global.hpp
 	
 	${QM_UTILS_DIR}/aligned_alloc.cpp
 	${QM_UTILS_DIR}/aligned_alloc.hpp
@@ -197,6 +192,7 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/graphics/descriptor_set.hpp ${QM_VK_DIR}/graphics/descriptor_set.cpp
 	${QM_VK_DIR}/graphics/render_pass.hpp ${QM_VK_DIR}/graphics/render_pass.cpp
 	${QM_VK_DIR}/graphics/shader.hpp ${QM_VK_DIR}/graphics/shader.cpp
+	${QM_VK_DIR}/graphics/spirv_compiler.hpp ${QM_VK_DIR}/graphics/spirv_compiler.cpp
 	
 	${QM_VK_DIR}/images/format.hpp
 	${QM_VK_DIR}/images/image.hpp ${QM_VK_DIR}/images/image.cpp

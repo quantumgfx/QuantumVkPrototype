@@ -1,5 +1,4 @@
 #include "context.hpp"
-#include "base/global.hpp"
 #include "utils/logging.hpp"
 #include <vector>
 #include <mutex>
@@ -8,11 +7,11 @@
 
 #include <vulkan/vulkan.h>
 
-#ifdef QM_PLATFORM_WINDOWS
+#ifndef _WIN32
+	#include <dlfcn.h>
+#elif defined(_WIN32)
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
-#else
-	#error "Unsupported platform"
 #endif
 
 namespace Vulkan 
@@ -27,24 +26,51 @@ namespace Vulkan
 		if (loader_init_once && !addr)
 			return true;
 
-
-#ifdef QM_PLATFORM_WINDOWS
-		static HMODULE module;
-		if (!module)
-		{
-			module = LoadLibraryA("vulkan-1.dll");
-			if (!module)
-				return false;
-		}
-
-		// Ugly pointer warning workaround.
-		auto ptr = GetProcAddress(module, "vkGetInstanceProcAddr");
-		static_assert(sizeof(ptr) == sizeof(addr), "Mismatch pointer type.");
-		memcpy(&addr, &ptr, sizeof(ptr));
-
 		if (!addr)
-			return false;
+		{
+#ifndef _WIN32
+			static void* module;
+			if (!module)
+			{
+				//TODO better way for user to specify this
+				//const char* vulkan_path = getenv("GRANITE_VULKAN_LIBRARY");
+				//if (vulkan_path)
+					//module = dlopen(vulkan_path, RTLD_LOCAL | RTLD_LAZY);
+#ifdef __APPLE__
+				if (!module)
+					module = dlopen("libvulkan.1.dylib", RTLD_LOCAL | RTLD_LAZY);
+#else
+				if (!module)
+					module = dlopen("libvulkan.so.1", RTLD_LOCAL | RTLD_LAZY);
+				if (!module)
+					module = dlopen("libvulkan.so", RTLD_LOCAL | RTLD_LAZY);
 #endif
+				if (!module)
+					return false;
+			}
+
+			addr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(module, "vkGetInstanceProcAddr"));
+			if (!addr)
+				return false;
+#else
+			static HMODULE module;
+			if (!module)
+			{
+				module = LoadLibraryA("vulkan-1.dll");
+				if (!module)
+					return false;
+			}
+
+			// Ugly pointer warning workaround.
+			auto ptr = GetProcAddress(module, "vkGetInstanceProcAddr");
+			static_assert(sizeof(ptr) == sizeof(addr), "Mismatch pointer type.");
+			memcpy(&addr, &ptr, sizeof(ptr));
+
+			if (!addr)
+				return false;
+#endif
+
+		}
 		volkInitializeCustom(addr);
 
 		loader_init_once = true;
@@ -162,6 +188,11 @@ namespace Vulkan
 	void Context::SetNotificationCallback(std::function<void(const char*)> func)
 	{
 		message_callback = move(func);
+	}
+
+	void Context::SetChooseGPUFunc(std::function<VkPhysicalDevice(std::vector<VkPhysicalDevice>&)> func)
+	{
+		choose_gpu_func = move(func);
 	}
 
 
@@ -374,9 +405,6 @@ namespace Vulkan
 		if (!ext->supports_debug_utils && has_extension(VK_EXT_DEBUG_REPORT_EXTENSION_NAME))
 			instance_exts.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
 
-		if (Base::global.force_no_validation)
-			force_no_validation = true;
-
 		if (!force_no_validation && has_layer("VK_LAYER_KHRONOS_validation"))
 		{
 			instance_layers.push_back("VK_LAYER_KHRONOS_validation");
@@ -468,7 +496,8 @@ namespace Vulkan
 					VK_VERSION_PATCH(props.driverVersion));
 			}
 
-			gpu = Base::global.choose_gpu_func(gpus);
+			if (choose_gpu_func)
+				gpu = choose_gpu_func(gpus);
 
 			if (gpu == VK_NULL_HANDLE)
 				gpu = gpus.front();
@@ -887,15 +916,8 @@ namespace Vulkan
 				ppNext = &ext->ubo_std430_features.pNext;
 			}
 
-#ifdef VULKAN_DEBUG
-			bool use_timeline_semaphore = force_no_validation;
-			if (Base::global.force_timeline_semaphore)
-			{
-					use_timeline_semaphore = true;
-			}
-#else
 			constexpr bool use_timeline_semaphore = true;
-#endif
+
 			if (use_timeline_semaphore && has_extension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME))
 			{
 				enabled_extensions.push_back(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);

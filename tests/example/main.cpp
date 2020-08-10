@@ -9,9 +9,16 @@ int main()
 	else
 		std::cout << "Initing Vulkan loader usuccessful\n";
 
-	{
-		Vulkan::ContextHandle context = Vulkan::Context::Create();
+	Vulkan::Context* context = new Vulkan::Context();
 
-		context->InitInstanceAndDevice(nullptr, 0, nullptr, 0);
-	}
+	context->InitInstanceAndDevice(nullptr, 0, nullptr, 0);
+
+
+	Vulkan::Device* device = new Vulkan::Device();
+
+	device->SetContext(context, nullptr, 0, nullptr, 0);
+
+
+	delete device;
+	delete context;
 }

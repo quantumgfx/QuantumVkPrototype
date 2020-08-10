@@ -72,8 +72,8 @@ namespace Vulkan
 		virtual void EventSwapchainCreated(Device* device, unsigned width, unsigned height, float aspect_ratio, size_t num_swapchain_images, VkFormat format, VkSurfaceTransformFlagBitsKHR pre_rotate);
 		virtual void EventSwapchainDestroyed();
 		virtual void EventFrameTick(double frame, double elapsed);
-		virtual void EventSwapchainTndex(Device* device, unsigned index);
-		virtual void EventDisplayTimingStutter(uint32_t current_serial, uint32_t observed_serial, unsigned dropped_frames);
+		virtual void EventSwapchainIndex(Device* device, unsigned index);
+		virtual void EventDisplayTimingStutter(uint32_t current_serial, uint32_t observed_serial, uint32_t dropped_frames);
 
 		virtual float GetEstimatedFramePresentationDuration();
 
@@ -96,28 +96,48 @@ namespace Vulkan
 		UnlockedNoTearing // Force MAILBOX
 	};
 
+	// The WSI (window system integration) object has it's own Context and Device.
+	// It is responsible for creating the surface, swapchain and managing the presentation loop.
 	class WSI
 	{
 	public:
-		WSI();
-		void SetPlatform(WSIPlatform* platform);
-		void SetPresentMode(PresentMode mode);
-		void SetBackbufferSrgb(bool enable);
-		void SetSupportPrerotate(bool enable);
-		VkSurfaceTransformFlagBitsKHR GetCurrentPrerotate() const;
 
+		// Various settings
+
+		// Sets the present mode
+		void SetPresentMode(PresentMode mode);
+		// Sets the preferred format
+		void SetBackbufferSrgb(bool enable);
+		// Indicates whether transforms should be supported
+		void SetSupportPrerotate(bool enable);
+		// Overrides the preferred number of swapchain images
+		void PreferredNumSwapchainImages(uint32_t desired_swapchain_images);
+		// Indicates that the application preferres exclusive full screen images
+		void PreferExclusiveFullScreen(bool prefer);
+
+		// Getters
+
+		// Returns the current present mode
 		PresentMode GetPresentMode() const
 		{
 			return present_mode;
 		}
-
+		// Returns whether srbg formats are preferred
 		bool GetBackbufferSrgb() const
 		{
 			return srgb_backbuffer_enable;
 		}
 
-		bool Init(unsigned num_thread_indices);
-		bool InitExternalContext(ContextHandle context);
+		// Returns the current transform
+		VkSurfaceTransformFlagBitsKHR GetCurrentPrerotate() const;
+
+		WSI();
+		// Sets the current platform
+		void SetPlatform(WSIPlatform* platform);
+		// Inits the WSI for a certain number of threads, passing cache data directly to Device::SetContext
+		bool Init(unsigned num_thread_indices, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size);
+		// Inits the WSI using an external context, passing cache data directly to Device::SetContext
+		bool InitExternalContext(std::unique_ptr<Context> context, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size);
 		bool InitExternalSwapchain(std::vector<Vulkan::ImageHandle> external_images);
 		void DeinitExternal();
 
@@ -166,11 +186,12 @@ namespace Vulkan
 		void UpdateFramebuffer(unsigned width, unsigned height);
 
 		std::unique_ptr<Context> context;
+		std::unique_ptr<Device> device;
+
 		VkSurfaceKHR surface = VK_NULL_HANDLE;
 		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 		std::vector<VkImage> swapchain_images;
 		std::vector<Semaphore> release_semaphores;
-		std::unique_ptr<Device> device;
 		const VolkDeviceTable* table = nullptr;
 
 		unsigned swapchain_width = 0;
@@ -186,7 +207,7 @@ namespace Vulkan
 			NoSurface,
 			Error
 		};
-		SwapchainError Init_Swapchain(unsigned width, unsigned height);
+		SwapchainError InitSwapchain(unsigned width, unsigned height);
 		bool BlockingInitSwapchain(unsigned width, unsigned height);
 
 		uint32_t swapchain_index = 0;
@@ -216,5 +237,9 @@ namespace Vulkan
 
 		void TearDownSwapchain();
 		void DrainSwapchain();
+
+		uint32_t desired_swapchain_images = 3;
+
+		bool prefer_exclusive_full_screen = false;
 	};
 }

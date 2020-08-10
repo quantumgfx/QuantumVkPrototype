@@ -524,7 +524,7 @@ namespace Vulkan
 		return heap_data;
 	}
 
-	void Device::SetContext(const ContextHandle& context_, uint8_t* initial_cache_data, size_t initiale_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size)
+	void Device::SetContext(Context* context_, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size)
 	{
 		context = context_;
 		table = &context_->GetDeviceTable();
@@ -574,7 +574,7 @@ namespace Vulkan
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			false);
 
-		InitPipelineCache(initial_cache_data, initiale_cache_size);
+		InitPipelineCache(initial_cache_data, initial_cache_size);
 		
 		InitFossilizePipeline(fossilize_pipeline_data, fossilize_pipeline_size);
 	}

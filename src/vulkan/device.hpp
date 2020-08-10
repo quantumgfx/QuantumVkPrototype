@@ -195,6 +195,8 @@ namespace Vulkan
 		std::vector<ImageHandle> keep_alive_images;
 	};
 
+	class Device;
+
 	class Device : public Fossilize::StateCreatorInterface
 	{
 	public:
@@ -245,7 +247,7 @@ namespace Vulkan
 
 		// Only called by main thread, during setup phase.
 		// Sets context and initializes device
-		void SetContext(const ContextHandle& context, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size);
+		void SetContext(Context* context, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size);
 
 		void InitSwapchain(const std::vector<VkImage>& swapchain_images, unsigned width, unsigned height, VkFormat format);
 		void InitExternalSwapchain(const std::vector<ImageHandle>& swapchain_images);
@@ -423,8 +425,9 @@ namespace Vulkan
 		bool SwapchainTouched() const;
 
 	private:
+
 		//Hold on to a reference to context
-		ContextHandle context;
+		Context* context;
 
 		VkInstance instance = VK_NULL_HANDLE;
 		VkPhysicalDevice gpu = VK_NULL_HANDLE;

@@ -86,15 +86,13 @@ namespace Vulkan
 		void operator()(Context* context);
 	};
 
-	using ContextHandle = Util::IntrusivePtr<Context>;
-
 	// The context is responsible for:
 	// - Creating VkInstance
 	// - Creating VkDevice
 	// - Setting up VkQueues for graphics, compute and transfer.
 	// - Setting up validation layers.
 	// - Creating debug callbacks.
-	class Context : public Util::IntrusivePtrEnabled<Context, std::default_delete<Context>, HandleCounter>
+	class Context
 	{
 	public:
 
@@ -117,111 +115,58 @@ namespace Vulkan
 		Context(const Context&) = delete;
 		void operator=(const Context&) = delete;
 
+		Context();
 		~Context();
 
-		VkInstance GetInstance() const
-		{
-			return instance;
-		}
+		// Returns the context's VkInstance.
+		VkInstance GetInstance() const { return instance; }
+		// Returns the context's VkPhysicalDevice.
+		VkPhysicalDevice GetGPU() const { return gpu; }
+		// Returns the context's VkDevice.
+		VkDevice GetDevice() const { return device; }
+		// Returns the volk table used to load vkFunctions.
+		VolkDeviceTable& GetDeviceTable() { return *device_table; }
+		// Returns the volk table used to load vkFunctions.
+		const VolkDeviceTable& GetDeviceTable() const { return *device_table; }
 
-		VkPhysicalDevice GetGPU() const
-		{
-			return gpu;
-		}
+		// Returns the general properties of the GPU.
+		const VkPhysicalDeviceProperties& GetGPUProps() const { return gpu_props; }
+		// Returns the gpu's memory properties.
+		const VkPhysicalDeviceMemoryProperties& GetMemProps() const { return mem_props; }
 
-		VkDevice GetDevice() const
-		{
-			return device;
-		}
+		VkQueue GetGraphicsQueue() const { return graphics_queue; }
+		VkQueue GetComputeQueue() const { return compute_queue; }
+		VkQueue GetTransferQueue() const { return transfer_queue; }
 
-		VkQueue GetGraphicsQueue() const
-		{
-			return graphics_queue;
-		}
+		uint32_t GetGraphicsQueueFamily() const { return graphics_queue_family; }
+		uint32_t GetComputeQueueFamily() const { return compute_queue_family; }
+		uint32_t GetTransferQueueFamily() const { return transfer_queue_family; }
 
-		VkQueue GetComputeQueue() const
-		{
-			return compute_queue;
-		}
+		uint32_t GetTimestampValidBits() const { return timestamp_valid_bits; }
 
-		VkQueue GetTransferQueue() const
-		{
-			return transfer_queue;
-		}
+		void ReleaseInstance() { owned_instance = false; }
+		void ReleaseDevice() { owned_device = false; }
 
-		const VkPhysicalDeviceProperties& GetGPUProps() const
-		{
-			return gpu_props;
-		}
-
-		const VkPhysicalDeviceMemoryProperties& GetMemProps() const
-		{
-			return mem_props;
-		}
-
-		uint32_t GetGraphicsQueueFamily() const
-		{
-			return graphics_queue_family;
-		}
-
-		uint32_t GetComputeQueueFamily() const
-		{
-			return compute_queue_family;
-		}
-
-		uint32_t GetTransferQueueFamily() const
-		{
-			return transfer_queue_family;
-		}
-
-		uint32_t GetTimestampValidBits() const
-		{
-			return timestamp_valid_bits;
-		}
-
-		void ReleaseInstance()
-		{
-			owned_instance = false;
-		}
-
-		void ReleaseDevice()
-		{
-			owned_device = false;
-		}
-
-		const DeviceFeatures& GetEnabledDeviceFeatures() const
-		{
-			return *ext;
-		}
+		const DeviceFeatures& GetEnabledDeviceFeatures() const { return *ext; }
 
 		static const VkApplicationInfo& GetApplicationInfo(bool supports_vulkan_11_instance, bool supports_vulkan_12_instance);
 
 		void NotifyValidationError(const char* msg);
+
+		// Options
+
+		void SetNumThreadIndices(unsigned indices) { num_thread_indices = indices; }
 		void SetNotificationCallback(std::function<void(const char*)> func);
+		void SetChooseGPUFunc(std::function<VkPhysicalDevice(std::vector<VkPhysicalDevice>&)> func);
 
-		void SetNumThreadIndices(unsigned indices)
-		{
-			num_thread_indices = indices;
-		}
+		// ---------
+		// Option Getters
 
-		unsigned GetNumThreadIndices() const
-		{
-			return num_thread_indices;
-		}
+		unsigned GetNumThreadIndices() const { return num_thread_indices; }
 
-		const VolkDeviceTable& GetDeviceTable() const
-		{
-			return *device_table;
-		}
-
-		static ContextHandle Create()
-		{
-			return ContextHandle(new Context());
-		}
+		// --------------
 
 	private:
-
-		Context();
 
 		VkDevice device = VK_NULL_HANDLE;
 		VkInstance instance = VK_NULL_HANDLE;
@@ -257,10 +202,12 @@ namespace Vulkan
 		VkDebugUtilsMessengerEXT debug_messenger = VK_NULL_HANDLE;
 #endif
 		std::function<void(const char*)> message_callback;
+		std::function<VkPhysicalDevice(std::vector<VkPhysicalDevice>&)> choose_gpu_func;
+
+		bool force_no_validation = false;
 
 		void Destroy();
 		void CheckDescriptorIndexFeatures();
-		bool force_no_validation = false;
 
 	};
 }

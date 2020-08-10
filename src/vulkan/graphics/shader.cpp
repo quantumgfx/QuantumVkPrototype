@@ -1,5 +1,5 @@
 #include "shader.hpp"
-#include "device.hpp"
+#include "vulkan/device.hpp"
 #include "spirv_cross.hpp"
 
 using namespace std;
