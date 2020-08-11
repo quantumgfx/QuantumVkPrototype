@@ -47,7 +47,7 @@ namespace Vulkan
 		uint32_t output_mask = 0;
 		uint32_t push_constant_size = 0;
 		uint32_t spec_constant_mask = 0;
-		uint32_t bindless_set_mask = 0;
+		//uint32_t bindless_set_mask = 0;
 		DescriptorSetLayout sets[VULKAN_NUM_DESCRIPTOR_SETS];
 	};
 
@@ -143,8 +143,9 @@ namespace Vulkan
 		uint32_t GetCombindedSpecConstantMask() const { return combined_spec_constant_mask; }
 		const VkPushConstantRange& GetPushConstantRange() const { return push_constant_range; }
 
+
 		uint32_t GetDescriptorSetMask() const { return descriptor_set_mask; }
-		uint32_t GetBindlessDescriptorSetMask() const { return bindless_descriptor_set_mask; }
+		//uint32_t GetBindlessDescriptorSetMask() const { return bindless_descriptor_set_mask; }
 		const DescriptorSetLayout& GetSetLayout(uint32_t set) const { return sets[set]; }
 		DescriptorSetAllocator* GetSetAllocator(uint32_t set) const { return set_allocators[set]; }
 		VkDescriptorUpdateTemplateKHR GetSetUpdateTemplate(uint32_t set) const { return update_templates[set]; }
@@ -168,7 +169,7 @@ namespace Vulkan
 		VkPushConstantRange push_constant_range = {};
 
 		uint32_t descriptor_set_mask = 0;
-		uint32_t bindless_descriptor_set_mask = 0;
+		//uint32_t bindless_descriptor_set_mask = 0;
 
 		DescriptorSetLayout sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
 		DescriptorSetAllocator* set_allocators[VULKAN_NUM_DESCRIPTOR_SETS] = {};

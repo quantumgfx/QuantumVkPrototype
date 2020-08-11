@@ -156,6 +156,7 @@ target_sources(QuantumVk PRIVATE
 	${QM_UTILS_DIR}/intrusive.hpp
 	${QM_UTILS_DIR}/intrusive_list.hpp
 	${QM_UTILS_DIR}/intrusive_hash_map.hpp
+	${QM_UTILS_DIR}/intrusive_object_pool.hpp
 	${QM_UTILS_DIR}/logging.hpp
 	${QM_UTILS_DIR}/object_pool.hpp
 	${QM_UTILS_DIR}/read_write_lock.hpp
@@ -184,6 +185,7 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/memory/buffer.hpp ${QM_VK_DIR}/memory/buffer.cpp
 	${QM_VK_DIR}/memory/buffer_pool.hpp ${QM_VK_DIR}/memory/buffer_pool.cpp
 	${QM_VK_DIR}/memory/memory_allocator.hpp ${QM_VK_DIR}/memory/memory_allocator.cpp
+	${QM_VK_DIR}/memory/vma_build.cpp
 	
 	${QM_VK_DIR}/misc/cookie.hpp ${QM_VK_DIR}/misc/cookie.cpp
 	${QM_VK_DIR}/misc/limits.hpp
@@ -204,7 +206,7 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/command_buffer.hpp ${QM_VK_DIR}/command_buffer.cpp
 	${QM_VK_DIR}/command_pool.hpp ${QM_VK_DIR}/command_pool.cpp
 	${QM_VK_DIR}/device.hpp ${QM_VK_DIR}/device.cpp
-	${QM_VK_DIR}/device_shaders.cpp
+	${QM_VK_DIR}/device_shaders.cpp ${QM_VK_DIR}/device_submission.cpp
 	${QM_VK_DIR}/vulkan_common.hpp
 	${QM_VK_DIR}/vulkan_headers.hpp
 	

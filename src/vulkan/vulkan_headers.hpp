@@ -1,7 +1,6 @@
 #pragma once
 
 // NOTE: The Vulkan symbols are function pointers and are provided by the "volk" project.
-
 #include <volk/volk.h>
 #include <cstdlib>
 #include <stdexcept>

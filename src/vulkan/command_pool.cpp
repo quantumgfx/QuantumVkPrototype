@@ -132,3 +132,4 @@ namespace Vulkan
 		index = 0;
 		secondary_index = 0;
 	}
+}

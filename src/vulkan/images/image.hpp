@@ -291,10 +291,10 @@ namespace Vulkan
 	//Memory type of image
 	enum class ImageDomain
 	{
-		Physical,
-		Transient,
-		LinearHostCached,
-		LinearHost
+		Physical, // Device local
+		Transient, // Not backed by real memory, used for transient attachments
+		LinearHostCached, // Visible on host as linear stream of pixels (preferes to be cached)
+		LinearHost // Visible on host as linear stream of pixels (preferes to be coherent)
 	};
 
 	//Specifies image view creation

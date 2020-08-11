@@ -44,9 +44,4 @@ namespace Util
 	//Ref counted heap data. As long as the handle is retained, memory will remain valid (useful for passing memory allocated with new out of a function)
 	using RetainedHeapData = IntrusivePtr<HeapData>;
 
-	RetainedHeapData CreateRetainedHeapData(void* inital_data, size_t initial_size)
-	{
-		return RetainedHeapData(new HeapData(inital_data, initial_size));
-	}
-
 }

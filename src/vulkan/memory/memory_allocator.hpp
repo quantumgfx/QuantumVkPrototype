@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "vulkan/vulkan_headers.hpp"
-
 #include <VulkanMemoryAllocator/vk_mem_alloc.h>
 
 #ifdef QM_VULKAN_MT

@@ -1310,16 +1310,17 @@ namespace Vulkan
 			current_layout = &program->GetLayout();
 			current_pipeline_layout = current_layout->GetVkLayout();
 		}
-		else if (program->GetPipelineLayout()->get_hash() != current_layout->get_hash())
+		else if (program->GetLayout().GetHash() != current_layout->GetHash())
 		{
 			//New layout to switch to
-			auto& new_layout = program->GetPipelineLayout()->GetResourceLayout();
+			auto& new_layout = program->GetLayout();
 			//Old layout to switch from
-			auto& old_layout = current_layout->GetResourceLayout();
+			auto& old_layout = current_layout;
 
 			// If the push constant layout changes, all descriptor sets
 			// are invalidated.
-			if (new_layout.push_constant_layout_hash != old_layout.push_constant_layout_hash)
+			if (new_layout.GetPushConstantRange().size != old_layout->GetPushConstantRange().size || 
+				new_layout.GetPushConstantRange().stageFlags != old_layout->GetPushConstantRange().stageFlags)
 			{
 				dirty_sets = ~0u;
 				set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
@@ -1327,11 +1328,10 @@ namespace Vulkan
 			else
 			{
 				// Find the first set whose descriptor set layout differs.
-				auto* new_pipe_layout = program->GetPipelineLayout();
 				for (unsigned set = 0; set < VULKAN_NUM_DESCRIPTOR_SETS; set++)
 				{
 					//If the sets differ
-					if (new_pipe_layout->GetAllocator(set) != current_layout->GetAllocator(set))
+					if (new_layout.GetSetAllocator(set) != current_layout->GetSetAllocator(set))
 					{
 						//Indicate that set must be changed
 						dirty_sets |= ~((1u << set) - 1);
@@ -1339,8 +1339,8 @@ namespace Vulkan
 					}
 				}
 			}
-			current_layout = program->GetPipelineLayout();
-			current_pipeline_layout = current_layout->GetLayout();
+			current_layout = &program->GetLayout();
+			current_pipeline_layout = current_layout->GetVkLayout();
 		}
 	}
 
@@ -1797,16 +1797,16 @@ namespace Vulkan
 
 	void CommandBuffer::RebindDescriptorSet(uint32_t set)
 	{
-		auto& layout = current_layout->GetResourceLayout();
-		//Bind any bindless descriptors
-		if (layout.bindless_descriptor_set_mask & (1u << set))
-		{
-			VK_ASSERT(bindless_sets[set]);
-			table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &bindless_sets[set], 0, nullptr);
-			return;
-		}
+		//auto& layout = current_layout->GetResourceLayout();
+		////Bind any bindless descriptors
+		//if (layout.bindless_descriptor_set_mask & (1u << set))
+		//{
+		//	VK_ASSERT(bindless_sets[set]);
+		//	table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &bindless_sets[set], 0, nullptr);
+		//	return;
+		//}
 
-		auto& set_layout = layout.sets[set];
+		auto& set_layout = current_layout->GetSetLayout(set);
 		uint32_t num_dynamic_offsets = 0;
 		uint32_t dynamic_offsets[VULKAN_NUM_BINDINGS];
 
@@ -1825,16 +1825,15 @@ namespace Vulkan
 
 	void CommandBuffer::FlushDescriptorSet(uint32_t set)
 	{
-		auto& layout = current_layout->GetResourceLayout();
-		if (layout.bindless_descriptor_set_mask & (1u << set))
+		/*if (layout.bindless_descriptor_set_mask & (1u << set))
 		{
 			VK_ASSERT(bindless_sets[set]);
 			table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
 				current_pipeline_layout, set, 1, &bindless_sets[set], 0, nullptr);
 			return;
-		}
+		}*/
 
-		auto& set_layout = layout.sets[set];
+		auto& set_layout = current_layout->GetSetLayout(set);
 		uint32_t num_dynamic_offsets = 0;
 		uint32_t dynamic_offsets[VULKAN_NUM_BINDINGS];
 		Util::Hasher h;
@@ -1937,19 +1936,19 @@ namespace Vulkan
 			});
 
 		Util::Hash hash = h.get();
-		auto allocated = current_layout->GetAllocator(set)->Find(thread_index, hash);
+		auto allocated = current_layout->GetSetAllocator(set)->Find(thread_index, hash);
 
 		// The descriptor set was not successfully cached, rebuild.
 		if (!allocated.second)
 		{
-			auto update_template = current_layout->GetUpdateTemplate(set);
+			auto update_template = current_layout->GetSetUpdateTemplate(set);
 
 			if (update_template != VK_NULL_HANDLE)
 			{
 				table.vkUpdateDescriptorSetWithTemplateKHR(device->GetDevice(), allocated.first, update_template, bindings.bindings[set]);
 			}
 			else
-				UpdateDescriptorSetLegacy(*device, allocated.first, layout.sets[set], bindings.bindings[set]);
+				UpdateDescriptorSetLegacy(*device, allocated.first, current_layout->GetSetLayout(set), bindings.bindings[set]);
 		}
 
 		table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &allocated.first, num_dynamic_offsets, dynamic_offsets);
@@ -1958,9 +1957,8 @@ namespace Vulkan
 
 	void CommandBuffer::FlushDescriptorSets()
 	{
-		auto& layout = current_layout->GetResourceLayout();
 
-		uint32_t set_update = layout.descriptor_set_mask & dirty_sets;
+		uint32_t set_update = current_layout->GetDescriptorSetMask() & dirty_sets;
 		Util::for_each_bit(set_update, [&](uint32_t set) { FlushDescriptorSet(set); });
 		dirty_sets &= ~set_update;
 
@@ -1968,7 +1966,7 @@ namespace Vulkan
 		dirty_sets_dynamic &= ~set_update;
 
 		// If we only rebound UBOs, we might get away with just rebinding descriptor sets, no hashing and lookup required.
-		uint32_t dynamic_set_update = layout.descriptor_set_mask & dirty_sets_dynamic;
+		uint32_t dynamic_set_update = current_layout->GetDescriptorSetMask() & dirty_sets_dynamic;
 		Util::for_each_bit(dynamic_set_update, [&](uint32_t set) { RebindDescriptorSet(set); });
 		dirty_sets_dynamic &= ~dynamic_set_update;
 	}

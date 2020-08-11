@@ -71,7 +71,7 @@ namespace Vulkan
 		VulkanObjectPool<SemaphoreHolder> semaphores;
 		VulkanObjectPool<EventHolder> events;
 		VulkanObjectPool<CommandBuffer> command_buffers;
-		VulkanObjectPool<BindlessDescriptorPool> bindless_descriptor_pool;
+		//VulkanObjectPool<BindlessDescriptorPool> bindless_descriptor_pool;
 		VulkanObjectPool<Shader> shaders;
 		VulkanObjectPool<Program> programs;
 	};
@@ -185,6 +185,7 @@ namespace Vulkan
 		std::vector<std::pair<VkImage, DeviceAllocation>> destroyed_images;
 		std::vector<std::pair<VkBuffer, DeviceAllocation>> destroyed_buffers;
 		std::vector<VkDescriptorPool> destroyed_descriptor_pools;
+		std::vector<DescriptorSetAllocator*> destroyed_set_allocators;
 
 		std::vector<VkPipelineLayout> destroyed_layouts;
 		std::vector<VkPipeline> destroyed_pipelines;
@@ -316,8 +317,9 @@ namespace Vulkan
 		// Creates a compute program consting of the shaders specified in shaders
 		ProgramHandle CreateComputeProgram(const ComputeProgramShaders& shaders);
 
-		// Map and unmap buffer objects.
+		// Map and unmap buffer objects, access indicates whether the memory will be written to, read from, or both.
 		void* MapHostBuffer(const Buffer& buffer, MemoryAccessFlags access);
+		// Access indicates whether the memory was written to, read from, or both scince maphostbuffer().
 		void UnmapHostBuffer(const Buffer& buffer, MemoryAccessFlags access);
 
 		// Map Linear Host image
@@ -349,8 +351,6 @@ namespace Vulkan
 		BufferViewHandle CreateBufferView(const BufferViewCreateInfo& view_info);
 		// Create sampler
 		SamplerHandle CreateSampler(const SamplerCreateInfo& info);
-
-		BindlessDescriptorPoolHandle CreateBindlessDescriptorPool(BindlessResourceType type, unsigned num_sets, unsigned num_descriptors);
 
 		// Detects whether a given format supports the format fetures
 		bool ImageFormatIsSupported(VkFormat format, VkFormatFeatureFlags required, VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL) const;
@@ -456,7 +456,9 @@ namespace Vulkan
 
 		const Framebuffer& RequestFramebuffer(const RenderPassInfo& info);
 		const RenderPass& RequestRenderPass(const RenderPassInfo& info, bool compatible);
-		DescriptorSetAllocator* RequestDescriptorSetAllocator(const DescriptorSetLayout& layout);
+
+		DescriptorSetAllocator* CreateSetAllocator(const DescriptorSetLayout& layout);
+		void FreeSetAllocator(DescriptorSetAllocator* allocator);
 
 		VkPhysicalDeviceMemoryProperties mem_props;
 		VkPhysicalDeviceProperties gpu_props;
@@ -465,7 +467,6 @@ namespace Vulkan
 		//Creates every type of stock sampler (by creating 1 sampler for each enum type)
 		void InitStockSamplers();
 		void InitTimelineSemaphores();
-		void InitBindless();
 		void DeinitTimelineSemaphores();
 
 		// Make sure this is deleted last.
@@ -514,19 +515,15 @@ namespace Vulkan
 
 		SamplerHandle samplers[static_cast<unsigned>(StockSampler::Count)];
 
-		VulkanCache<RenderPass> render_passes;
+		VulkanIntrusiveObjectPool<DescriptorSetAllocator> descriptor_set_allocators;
 
-		DescriptorSetAllocator* bindless_sampled_image_allocator_fp = nullptr;
-		DescriptorSetAllocator* bindless_sampled_image_allocator_integer = nullptr;
+		VulkanCache<RenderPass> render_passes;
 
 		FramebufferAllocator framebuffer_allocator;
 		TransientAttachmentAllocator transient_allocator;
 
-		VulkanCache<DescriptorSetAllocator> descriptor_set_allocators;
-
 		VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
 
-		SamplerHandle CreateSampler(const SamplerCreateInfo& info, StockSampler sampler);
 		bool InitPipelineCache(const uint8_t* initial_cache_data, size_t initial_cache_size);
 
 		CommandPool& GetCommandPool(CommandBuffer::Type type, unsigned thread);
@@ -562,6 +559,7 @@ namespace Vulkan
 		void ResetFence(VkFence fence, bool observed_wait);
 		void KeepHandleAlive(ImageHandle handle);
 		void DestroyDescriptorPool(VkDescriptorPool desc_pool);
+		void DestroyDescriptorSetAllocator(DescriptorSetAllocator* allocator);
 
 		void DestroyBufferNolock(VkBuffer buffer, const DeviceAllocation& allocation);
 		void DestroyImageNolock(VkImage image, const DeviceAllocation& allocation);
@@ -577,9 +575,10 @@ namespace Vulkan
 		void DestroyEventNolock(VkEvent event);
 		void DestroyDescriptorPoolNolock(VkDescriptorPool desc_pool);
 		void ResetFenceNolock(VkFence fence, bool observed_wait);
+		void DestroyDescriptorSetAllocatorNolock(DescriptorSetAllocator* allocator);
 
 		void FlushFrameNolock();
-		CommandBufferHandle RequestCommandBufferNolock(unsigned thread_index, CommandBuffer::Type type, bool profiled);
+		CommandBufferHandle RequestCommandBufferNolock(unsigned thread_index, CommandBuffer::Type type);
 		//Ends command buffer. If there is a fence or semaphore to signal, this submits to queue immediately, otherwise deffer submission.
 		void SubmitNolock(CommandBufferHandle cmd, Fence* fence, unsigned semaphore_count, Semaphore* semaphore);
 		void SubmitEmptyNolock(CommandBuffer::Type type, Fence* fence, unsigned semaphore_count, Semaphore* semaphore);

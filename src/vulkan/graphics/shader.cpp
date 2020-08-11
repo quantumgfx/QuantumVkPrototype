@@ -23,6 +23,9 @@ namespace Vulkan
 		if(vklayout != VK_NULL_HANDLE)
 			device->DestroyLayout(vklayout);
 
+		for (auto& allocator : set_allocators)
+			device->DestroyDescriptorSetAllocator(allocator);
+
 		// This isn't used in command buffers, so it can be deleted immediately
 		auto& table = device->GetDeviceTable();
 		for (auto& update : update_templates)
@@ -110,7 +113,7 @@ namespace Vulkan
 
 			spec_constant_mask[i] = shader_layout.spec_constant_mask;
 			combined_spec_constant_mask |= shader_layout.spec_constant_mask;
-			bindless_descriptor_set_mask |= shader_layout.bindless_set_mask;
+			//bindless_descriptor_set_mask |= shader_layout.bindless_set_mask;
 		}
 
 		for (unsigned set = 0; set < VULKAN_NUM_DESCRIPTOR_SETS; set++)
@@ -122,18 +125,18 @@ namespace Vulkan
 				for (unsigned binding = 0; binding < VULKAN_NUM_BINDINGS; binding++)
 				{
 					auto& array_size = sets[set].array_size[binding];
-					if (array_size == DescriptorSetLayout::UNSIZED_ARRAY)
-					{
-						for (unsigned i = 1; i < VULKAN_NUM_BINDINGS; i++)
-						{
-							if (sets[set].binding_stages[i] != 0)
-								QM_LOG_ERROR("Using bindless for set = %u, but binding = %u has a descriptor attached to it.\n", set, i);
-						}
+					//if (array_size == DescriptorSetLayout::UNSIZED_ARRAY)
+					//{
+					//	for (unsigned i = 1; i < VULKAN_NUM_BINDINGS; i++)
+					//	{
+					//		if (sets[set].binding_stages[i] != 0)
+					//			QM_LOG_ERROR("Using bindless for set = %u, but binding = %u has a descriptor attached to it.\n", set, i);
+					//	}
 
-						// Allows us to have one unified descriptor set layout for bindless.
-						sets[set].binding_stages[binding] = VK_SHADER_STAGE_ALL;
-					}
-					else if (array_size == 0)
+					//	// Allows us to have one unified descriptor set layout for bindless.
+					//	sets[set].binding_stages[binding] = VK_SHADER_STAGE_ALL;
+					//}
+					if (array_size == 0)
 					{
 						array_size = 1;
 					}
@@ -143,8 +146,7 @@ namespace Vulkan
 						{
 							if (sets[set].binding_stages[binding + i] != 0)
 							{
-								QM_LOG_ERROR("Detected binding aliasing for (%u, %u). Binding array with %u elements starting at (%u, %u) overlaps.\n",
-									set, binding + i, array_size, set, binding);
+								QM_LOG_ERROR("Detected binding aliasing for (%u, %u). Binding array with %u elements starting at (%u, %u) overlaps.\n", set, binding + i, array_size, set, binding);
 							}
 						}
 					}
@@ -156,7 +158,7 @@ namespace Vulkan
 		unsigned num_sets = 0;
 		for (unsigned i = 0; i < VULKAN_NUM_DESCRIPTOR_SETS; i++)
 		{
-			set_allocators[i] = device->RequestDescriptorSetAllocator(sets[i]);
+			set_allocators[i] = device->CreateSetAllocator(sets[i]);
 			layouts[i] = set_allocators[i]->GetLayout();
 			if (descriptor_set_mask & (1u << i))
 				num_sets = i + 1;
@@ -210,8 +212,8 @@ namespace Vulkan
 		{
 			if ((descriptor_set_mask & (1u << desc_set)) == 0)
 				continue;
-			if ((bindless_descriptor_set_mask & (1u << desc_set)) == 0)
-				continue;
+			/*if ((bindless_descriptor_set_mask & (1u << desc_set)) == 0)
+				continue;*/
 
 			VkDescriptorUpdateTemplateEntryKHR update_entries[VULKAN_NUM_BINDINGS];
 			uint32_t update_count = 0;
@@ -403,23 +405,24 @@ namespace Vulkan
 				QM_LOG_ERROR("Array dimension must be a literal.\n");
 			else
 			{
-				if (type.array.front() == 0)
-				{
-					// Runtime array.
-					if (!device->GetDeviceFeatures().supports_descriptor_indexing)
-						QM_LOG_ERROR("Sufficient features for descriptor indexing is not supported on this device.\n");
+				//if (type.array.front() == 0)
+				//{
+				//	// Runtime array.
+				//	if (!device->GetDeviceFeatures().supports_descriptor_indexing)
+				//		QM_LOG_ERROR("Sufficient features for descriptor indexing is not supported on this device.\n");
 
-					if (binding != 0)
-						QM_LOG_ERROR("Bindless textures can only be used with binding = 0 in a set.\n");
+				//	if (binding != 0)
+				//		QM_LOG_ERROR("Bindless textures can only be used with binding = 0 in a set.\n");
 
-					if (type.basetype != SPIRType::Image || type.image.dim == spv::DimBuffer)
-						QM_LOG_ERROR("Can only use bindless for sampled images.\n");
-					else
-						layout.bindless_set_mask |= 1u << set;
+				//	if (type.basetype != SPIRType::Image || type.image.dim == spv::DimBuffer)
+				//		QM_LOG_ERROR("Can only use bindless for sampled images.\n");
+				//	else
+				//		layout.bindless_set_mask |= 1u << set;
 
-					size = DescriptorSetLayout::UNSIZED_ARRAY;
-				}
-				else if (size && size != type.array.front())
+				//	size = DescriptorSetLayout::UNSIZED_ARRAY;
+				//}
+				//else 
+				if (size && size != type.array.front())
 					QM_LOG_ERROR("Array dimension for (%u, %u) is inconsistent.\n", set, binding);
 				else if (type.array.front() + binding > VULKAN_NUM_BINDINGS)
 					QM_LOG_ERROR("Binding array will go out of bounds.\n");

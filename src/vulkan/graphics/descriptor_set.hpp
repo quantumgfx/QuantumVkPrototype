@@ -3,6 +3,7 @@
 #include "utils/hash.hpp"
 #include "utils/object_pool.hpp"
 #include "utils/intrusive.hpp"
+#include "utils/intrusive_object_pool.hpp"
 #include "utils/temporary_hashmap.hpp"
 
 #include "vulkan/images/sampler.hpp"
@@ -28,8 +29,6 @@ namespace Vulkan
 		uint32_t binding_stages[VULKAN_NUM_BINDINGS] = {};
 		//Size of array at each binding
 		uint32_t array_size[VULKAN_NUM_BINDINGS] = {};
-
-		enum { UNSIZED_ARRAY = 0xffffffff};
 
 		//Location of all sampled images
 		uint32_t sampled_image_mask = 0;
@@ -81,53 +80,13 @@ namespace Vulkan
 	static const unsigned VULKAN_DESCRIPTOR_RING_SIZE = 8;
 
 	class DescriptorSetAllocator;
-	class BindlessDescriptorPool;
 	class ImageView;
 
-	struct BindlessDescriptorPoolDeleter
-	{
-		void operator()(BindlessDescriptorPool* pool);
-	};
-
-	class BindlessDescriptorPool : public Util::IntrusivePtrEnabled<BindlessDescriptorPool, BindlessDescriptorPoolDeleter, HandleCounter>, public InternalSyncEnabled
-	{
-	public:
-		friend struct BindlessDescriptorPoolDeleter;
-
-		explicit BindlessDescriptorPool(Device* device, DescriptorSetAllocator* allocator, VkDescriptorPool pool);
-		~BindlessDescriptorPool();
-
-		void operator=(const BindlessDescriptorPool&) = delete;
-		BindlessDescriptorPool(const BindlessDescriptorPool&) = delete;
-
-		bool AllocateDescriptors(unsigned count);
-		VkDescriptorSet GetDescriptorSet() const;
-
-		void SetTexture(unsigned binding, const ImageView& view);
-		void SetTextureUnorm(unsigned binding, const ImageView& view);
-		void SetTextureSrgb(unsigned binding, const ImageView& view);
-
-	private:
-		Device* device;
-		DescriptorSetAllocator* allocator;
-		VkDescriptorPool desc_pool;
-		VkDescriptorSet desc_set = VK_NULL_HANDLE;
-
-		void SetTexture(unsigned binding, VkImageView view, VkImageLayout layout);
-	};
-	using BindlessDescriptorPoolHandle = Util::IntrusivePtr<BindlessDescriptorPool>;
-
-	enum class BindlessResourceType
-	{
-		ImageFP,
-		ImageInt
-	};
-
-	class DescriptorSetAllocator : public HashedObject<DescriptorSetAllocator>
+	class DescriptorSetAllocator : public Util::IntrusiveObjectPoolEnabled
 	{
 	public:
 
-		DescriptorSetAllocator(Util::Hash hash, Device* device, const DescriptorSetLayout& layout);
+		DescriptorSetAllocator(Device* device, const DescriptorSetLayout& layout);
 		~DescriptorSetAllocator();
 
 		void operator=(const DescriptorSetAllocator&) = delete;
@@ -143,13 +102,6 @@ namespace Vulkan
 
 		void Clear();
 
-		bool IsBindless() const
-		{
-			return bindless;
-		}
-
-		VkDescriptorPool AllocateBindlessPool(unsigned num_sets, unsigned num_descriptors);
-		VkDescriptorSet AllocateBindlessSet(VkDescriptorPool pool, unsigned num_descriptors);
 
 	private:
 
@@ -175,6 +127,5 @@ namespace Vulkan
 		};
 		std::vector<std::unique_ptr<PerThread>> per_thread;
 		std::vector<VkDescriptorPoolSize> pool_size;
-		bool bindless = false;
 	};
 }
