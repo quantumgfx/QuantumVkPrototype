@@ -8,7 +8,7 @@ using namespace Util;
 
 namespace Vulkan
 {
-	DescriptorSetAllocator::DescriptorSetAllocator(Hash hash, Device* device_, const DescriptorSetLayout& layout, const uint32_t* stages_for_binds)
+	DescriptorSetAllocator::DescriptorSetAllocator(Hash hash, Device* device_, const DescriptorSetLayout& layout)
 		: IntrusiveHashMapEnabled<DescriptorSetAllocator>(hash)
 		, device(device_)
 		, table(device_->GetDeviceTable())
@@ -49,7 +49,7 @@ namespace Vulkan
 
 		for (unsigned i = 0; i < VULKAN_NUM_BINDINGS; i++)
 		{
-			auto stages = stages_for_binds[i];
+			auto stages = layout.binding_stages[i];
 			if (stages == 0)
 				continue;
 
@@ -152,8 +152,6 @@ namespace Vulkan
 #endif
 		if (table.vkCreateDescriptorSetLayout(device->GetDevice(), &info, nullptr, &set_layout) != VK_SUCCESS)
 			QM_LOG_ERROR("Failed to create descriptor set layout.");
-
-		device->register_descriptor_set_layout(set_layout, get_hash(), info);
 	}
 
 	VkDescriptorSet DescriptorSetAllocator::AllocateBindlessSet(VkDescriptorPool pool, unsigned num_descriptors)
@@ -302,6 +300,7 @@ namespace Vulkan
 		Clear();
 	}
 
+	
 	BindlessDescriptorPool::BindlessDescriptorPool(Device* device_, DescriptorSetAllocator* allocator_, VkDescriptorPool pool)
 		: device(device_), allocator(allocator_), desc_pool(pool)
 	{

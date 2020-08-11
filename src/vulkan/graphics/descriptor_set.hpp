@@ -22,6 +22,15 @@ namespace Vulkan
 	//Descriptor set layout
 	struct DescriptorSetLayout
 	{
+		//Stages the decriptor set is used in
+		uint32_t stages;
+		//Stages each binding is used in
+		uint32_t binding_stages[VULKAN_NUM_BINDINGS] = {};
+		//Size of array at each binding
+		uint32_t array_size[VULKAN_NUM_BINDINGS] = {};
+
+		enum { UNSIZED_ARRAY = 0xffffffff};
+
 		//Location of all sampled images
 		uint32_t sampled_image_mask = 0;
 		//Location of all storage images
@@ -38,14 +47,12 @@ namespace Vulkan
 		uint32_t sampler_mask = 0;
 		//Location of non combined images
 		uint32_t separate_image_mask = 0;
+		//Which images are floating point and which are integer formats
 		uint32_t fp_mask = 0;
 		//Location of immutable samplers
 		uint32_t immutable_sampler_mask = 0;
 		//Type of each immutable sampler
 		uint64_t immutable_samplers = 0;
-		//Size of array at each binding
-		uint8_t array_size[VULKAN_NUM_BINDINGS] = {};
-		enum { UNSIZED_ARRAY = 0xff };
 	};
 
 	// Avoid -Wclass-memaccess warnings since we hash DescriptorSetLayout.
@@ -119,7 +126,8 @@ namespace Vulkan
 	class DescriptorSetAllocator : public HashedObject<DescriptorSetAllocator>
 	{
 	public:
-		DescriptorSetAllocator(Util::Hash hash, Device* device, const DescriptorSetLayout& layout, const uint32_t* stages_for_bindings);
+
+		DescriptorSetAllocator(Util::Hash hash, Device* device, const DescriptorSetLayout& layout);
 		~DescriptorSetAllocator();
 
 		void operator=(const DescriptorSetAllocator&) = delete;

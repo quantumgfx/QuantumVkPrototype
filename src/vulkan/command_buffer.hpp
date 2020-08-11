@@ -170,7 +170,7 @@ namespace Vulkan
 
 	struct DeferredPipelineCompile
 	{
-		Program* program;
+		ProgramHandle program;
 		const RenderPass* compatible_render_pass;
 		PipelineState static_state;
 		PotentialState potential_static_state;
@@ -381,13 +381,7 @@ namespace Vulkan
 		Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(unsigned thread_index, unsigned subpass);
 		static Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(Device& device, const RenderPassInfo& rp, unsigned thread_index, unsigned subpass);
 
-		void SetProgram(Program* program);
-
-#ifdef QM_VULKAN_FILESYSTEM
-		// Convenience functions for one-off shader binds.
-		void set_program(const std::string& vertex, const std::string& fragment, const std::vector<std::pair<std::string, int>>& defines = {});
-		void set_program(const std::string& compute, const std::vector<std::pair<std::string, int>>& defines = {});
-#endif
+		void SetProgram(ProgramHandle program);
 		//-------------------Setting Uniforms----------------------------
 
 		void SetBufferView(unsigned set, unsigned binding, const BufferView& view);
@@ -693,8 +687,8 @@ namespace Vulkan
 		void End();
 
 		void ExtractPipelineState(DeferredPipelineCompile& compile) const;
-		static VkPipeline BuildGraphicsPipeline(Device* device, const DeferredPipelineCompile& compile);
-		static VkPipeline BuildComputePipeline(Device* device, const DeferredPipelineCompile& compile);
+		static VkPipeline BuildGraphicsPipeline(Device* device, DeferredPipelineCompile& compile);
+		static VkPipeline BuildComputePipeline(Device* device, DeferredPipelineCompile& compile);
 
 		bool FlushPipelineStateWithoutBlocking();
 

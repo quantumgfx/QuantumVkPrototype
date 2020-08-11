@@ -8,19 +8,157 @@ using namespace Util;
 
 namespace Vulkan
 {
-	PipelineLayout::PipelineLayout(Hash hash, Device* device_, const CombinedResourceLayout& layout_)
-		: IntrusiveHashMapEnabled<PipelineLayout>(hash)
-		, device(device_)
-		, layout(layout_)
+	///////////////////////////////
+	//Pipeline Layout//////////////
+	///////////////////////////////
+
+	PipelineLayout::PipelineLayout(Device* device)
+		: device(device)
 	{
+	}
+
+	PipelineLayout::~PipelineLayout()
+	{
+
+		if(vklayout != VK_NULL_HANDLE)
+			device->DestroyLayout(vklayout);
+
+		// This isn't used in command buffers, so it can be deleted immediately
+		auto& table = device->GetDeviceTable();
+		for (auto& update : update_templates)
+			if (update != VK_NULL_HANDLE)
+				table.vkDestroyDescriptorUpdateTemplateKHR(device->GetDevice(), update, nullptr);
+	}
+
+	void PipelineLayout::CreateLayout(Program& program)
+	{
+		if (program.HasShader(ShaderStage::Vertex))
+			attribute_mask = program.GetShader(ShaderStage::Vertex)->GetLayout().input_mask;
+		if (program.HasShader(ShaderStage::Fragment))
+			render_target_mask = program.GetShader(ShaderStage::Fragment)->GetLayout().output_mask;
+
+		descriptor_set_mask = 0;
+
+		for (unsigned i = 0; i < static_cast<unsigned>(ShaderStage::Count); i++)
+		{
+			ShaderStage shader_type = static_cast<ShaderStage>(i);
+			if (!program.HasShader(shader_type))
+				continue;
+
+			auto shader = program.GetShader(static_cast<ShaderStage>(i));
+
+			uint32_t stage_mask = 1u << i;
+
+			auto& shader_layout = shader->GetLayout();
+			for (unsigned set = 0; set < VULKAN_NUM_DESCRIPTOR_SETS; set++)
+			{
+				sets[set].sampled_image_mask |= shader_layout.sets[set].sampled_image_mask;
+				sets[set].storage_image_mask |= shader_layout.sets[set].storage_image_mask;
+				sets[set].uniform_buffer_mask |= shader_layout.sets[set].uniform_buffer_mask;
+				sets[set].storage_buffer_mask |= shader_layout.sets[set].storage_buffer_mask;
+				sets[set].sampled_buffer_mask |= shader_layout.sets[set].sampled_buffer_mask;
+				sets[set].input_attachment_mask |= shader_layout.sets[set].input_attachment_mask;
+				sets[set].sampler_mask |= shader_layout.sets[set].sampler_mask;
+				sets[set].separate_image_mask |= shader_layout.sets[set].separate_image_mask;
+				sets[set].fp_mask |= shader_layout.sets[set].fp_mask;
+
+				Util::for_each_bit(shader_layout.sets[set].immutable_sampler_mask, [&](uint32_t binding) {
+					StockSampler sampler = GetImmutableSampler(shader_layout.sets[set], binding);
+
+					// Do we already have an immutable sampler? Make sure it matches the layout.
+					if (HasImmutableSampler(sets[set], binding))
+					{
+						if (sampler != GetImmutableSampler(sets[set], binding))
+							QM_LOG_ERROR("Immutable sampler mismatch detected!\n");
+					}
+
+					SetImmutableSampler(sets[set], binding, sampler);
+					});
+
+				uint32_t active_binds =
+					shader_layout.sets[set].sampled_image_mask |
+					shader_layout.sets[set].storage_image_mask |
+					shader_layout.sets[set].uniform_buffer_mask |
+					shader_layout.sets[set].storage_buffer_mask |
+					shader_layout.sets[set].sampled_buffer_mask |
+					shader_layout.sets[set].input_attachment_mask |
+					shader_layout.sets[set].sampler_mask |
+					shader_layout.sets[set].separate_image_mask;
+
+				if (active_binds)
+					sets[set].stages |= stage_mask;
+
+				Util::for_each_bit(active_binds, [&](uint32_t bit) {
+					sets[set].binding_stages[bit] |= stage_mask;
+
+					auto& combined_size = sets[set].array_size[bit];
+					auto& shader_size = shader_layout.sets[set].array_size[bit];
+					if (combined_size && combined_size != shader_size)
+						QM_LOG_ERROR("Mismatch between array sizes in different shaders.\n");
+					else
+						combined_size = shader_size;
+					});
+			}
+
+			// Merge push constant ranges into one range.
+			// Do not try to split into multiple ranges as it just complicates things for no obvious gain.
+			if (shader_layout.push_constant_size != 0)
+			{
+				push_constant_range.stageFlags |= 1u << i;
+				push_constant_range.size = std::max(push_constant_range.size, shader_layout.push_constant_size);
+			}
+
+			spec_constant_mask[i] = shader_layout.spec_constant_mask;
+			combined_spec_constant_mask |= shader_layout.spec_constant_mask;
+			bindless_descriptor_set_mask |= shader_layout.bindless_set_mask;
+		}
+
+		for (unsigned set = 0; set < VULKAN_NUM_DESCRIPTOR_SETS; set++)
+		{
+			if (sets[set].stages != 0)
+			{
+				descriptor_set_mask |= 1u << set;
+
+				for (unsigned binding = 0; binding < VULKAN_NUM_BINDINGS; binding++)
+				{
+					auto& array_size = sets[set].array_size[binding];
+					if (array_size == DescriptorSetLayout::UNSIZED_ARRAY)
+					{
+						for (unsigned i = 1; i < VULKAN_NUM_BINDINGS; i++)
+						{
+							if (sets[set].binding_stages[i] != 0)
+								QM_LOG_ERROR("Using bindless for set = %u, but binding = %u has a descriptor attached to it.\n", set, i);
+						}
+
+						// Allows us to have one unified descriptor set layout for bindless.
+						sets[set].binding_stages[binding] = VK_SHADER_STAGE_ALL;
+					}
+					else if (array_size == 0)
+					{
+						array_size = 1;
+					}
+					else
+					{
+						for (unsigned i = 1; i < array_size; i++)
+						{
+							if (sets[set].binding_stages[binding + i] != 0)
+							{
+								QM_LOG_ERROR("Detected binding aliasing for (%u, %u). Binding array with %u elements starting at (%u, %u) overlaps.\n",
+									set, binding + i, array_size, set, binding);
+							}
+						}
+					}
+				}
+			}
+		}
 
 		VkDescriptorSetLayout layouts[VULKAN_NUM_DESCRIPTOR_SETS] = {};
 		unsigned num_sets = 0;
 		for (unsigned i = 0; i < VULKAN_NUM_DESCRIPTOR_SETS; i++)
 		{
-			set_allocators[i] = device->RequestDescriptorSetAllocator(layout.sets[i], layout.stages_for_bindings[i]);
+			set_allocators[i] = device->RequestDescriptorSetAllocator(sets[i]);
 			layouts[i] = set_allocators[i]->GetLayout();
-			if (layout.descriptor_set_mask & (1u << i))
+			if (descriptor_set_mask & (1u << i))
 				num_sets = i + 1;
 		}
 
@@ -37,23 +175,32 @@ namespace Vulkan
 			info.pSetLayouts = layouts;
 		}
 
-		if (layout.push_constant_range.stageFlags != 0)
+		if (push_constant_range.stageFlags != 0)
 		{
 			info.pushConstantRangeCount = 1;
-			info.pPushConstantRanges = &layout.push_constant_range;
+			info.pPushConstantRanges = &push_constant_range;
 		}
 
 #ifdef VULKAN_DEBUG
 		QM_LOG_INFO("Creating pipeline layout.\n");
 #endif
 		auto& table = device->GetDeviceTable();
-		if (table.vkCreatePipelineLayout(device->GetDevice(), &info, nullptr, &pipe_layout) != VK_SUCCESS)
+		if (table.vkCreatePipelineLayout(device->GetDevice(), &info, nullptr, &vklayout) != VK_SUCCESS)
 			QM_LOG_ERROR("Failed to create pipeline layout.\n");
-
-		device->register_pipeline_layout(pipe_layout, get_hash(), info);
 
 		if (device->GetDeviceFeatures().supports_update_template)
 			CreateUpdateTemplates();
+
+		// Compute pipeline layout hash
+		Util::Hasher h;
+		h.data(reinterpret_cast<const uint32_t*>(sets), sizeof(sets));
+		h.u32(push_constant_range.stageFlags);
+		h.u32(push_constant_range.size);
+		h.data(spec_constant_mask, sizeof(spec_constant_mask));
+		h.u32(attribute_mask);
+		h.u32(render_target_mask);
+
+		hash = h.get();
 	}
 
 	void PipelineLayout::CreateUpdateTemplates()
@@ -61,15 +208,15 @@ namespace Vulkan
 		auto& table = device->GetDeviceTable();
 		for (unsigned desc_set = 0; desc_set < VULKAN_NUM_DESCRIPTOR_SETS; desc_set++)
 		{
-			if ((layout.descriptor_set_mask & (1u << desc_set)) == 0)
+			if ((descriptor_set_mask & (1u << desc_set)) == 0)
 				continue;
-			if ((layout.bindless_descriptor_set_mask & (1u << desc_set)) == 0)
+			if ((bindless_descriptor_set_mask & (1u << desc_set)) == 0)
 				continue;
 
 			VkDescriptorUpdateTemplateEntryKHR update_entries[VULKAN_NUM_BINDINGS];
 			uint32_t update_count = 0;
 
-			auto& set_layout = layout.sets[desc_set];
+			auto& set_layout = sets[desc_set];
 
 			for_each_bit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
 				unsigned array_size = set_layout.array_size[binding];
@@ -180,33 +327,25 @@ namespace Vulkan
 				});
 
 			VkDescriptorUpdateTemplateCreateInfoKHR info = { VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO_KHR };
-			info.pipelineLayout = pipe_layout;
+			info.pipelineLayout = vklayout;
 			info.descriptorSetLayout = set_allocators[desc_set]->GetLayout();
 			info.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET_KHR;
 			info.set = desc_set;
 			info.descriptorUpdateEntryCount = update_count;
 			info.pDescriptorUpdateEntries = update_entries;
-			info.pipelineBindPoint = (layout.stages_for_sets[desc_set] & VK_SHADER_STAGE_COMPUTE_BIT) ?
+			info.pipelineBindPoint = (set_layout.stages & VK_SHADER_STAGE_COMPUTE_BIT) ?
 				VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
 
-			if (table.vkCreateDescriptorUpdateTemplateKHR(device->GetDevice(), &info, nullptr,
-				&update_template[desc_set]) != VK_SUCCESS)
+			if (table.vkCreateDescriptorUpdateTemplateKHR(device->GetDevice(), &info, nullptr, &update_templates[desc_set]) != VK_SUCCESS)
 			{
 				QM_LOG_ERROR("Failed to create descriptor update template.\n");
 			}
 		}
 	}
 
-	PipelineLayout::~PipelineLayout()
-	{
-		auto& table = device->GetDeviceTable();
-		if (pipe_layout != VK_NULL_HANDLE)
-			table.vkDestroyPipelineLayout(device->GetDevice(), pipe_layout, nullptr);
-
-		for (auto& update : update_template)
-			if (update != VK_NULL_HANDLE)
-				table.vkDestroyDescriptorUpdateTemplateKHR(device->GetDevice(), update, nullptr);
-	}
+	////////////////////////////////
+	//Shader////////////////////////
+	////////////////////////////////
 
 	const char* Shader::StageToName(ShaderStage stage)
 	{
@@ -296,22 +435,26 @@ namespace Vulkan
 		}
 	}
 
-	Shader::Shader(Hash hash, Device* device_, const uint32_t* data, size_t size)
-		: IntrusiveHashMapEnabled<Shader>(hash)
-		, device(device_)
+	Shader::Shader(Device* device_, const uint32_t* data, size_t size)
+		: device(device_)
 	{
+		// Compute shader hash
+		Util::Hasher hasher;
+		hasher.data(data, size);
+		hash = hasher.get();
+		// -------------------
+
+
 		VkShaderModuleCreateInfo info = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
 		info.codeSize = size;
 		info.pCode = data;
 
 #ifdef VULKAN_DEBUG
-		QM_LOG_ERROR("Creating shader module.\n");
+		QM_LOG_INFO("Creating shader module.\n");
 #endif
 		auto& table = device->GetDeviceTable();
 		if (table.vkCreateShaderModule(device->GetDevice(), &info, nullptr, &module) != VK_SUCCESS)
 			QM_LOG_ERROR("Failed to create shader module.\n");
-
-		device->register_shader_module(module, get_hash(), info);
 
 		Compiler compiler(data, size / sizeof(uint32_t));
 
@@ -443,8 +586,7 @@ namespace Vulkan
 			// Just assume we're accessing everything. At least on older validation layers,
 			// it did not do a static analysis to determine similar information, so we got a lot
 			// of false positives.
-			layout.push_constant_size =
-				compiler.get_declared_struct_size(compiler.get_type(resources.push_constant_buffers.front().base_type_id));
+			layout.push_constant_size = compiler.get_declared_struct_size(compiler.get_type(resources.push_constant_buffers.front().base_type_id));
 		}
 
 		auto spec_constants = compiler.get_specialization_constants();
@@ -462,29 +604,55 @@ namespace Vulkan
 
 	Shader::~Shader()
 	{
-		auto& table = device->GetDeviceTable();
-		if (module)
-			table.vkDestroyShaderModule(device->GetDevice(), module, nullptr);
+		if (internal_sync)
+			device->DestroyShaderNolock(module);
+		else
+			device->DestroyShader(module);
 	}
 
-	void Program::SetShader(ShaderStage stage, Shader* handle)
+	void ShaderDeleter::operator()(Shader* shader)
 	{
-		shaders[Util::ecast(stage)] = handle;
+		shader->device->handle_pool.shaders.free(shader);
 	}
 
-	Program::Program(Device* device_, Shader* vertex, Shader* fragment)
-		: device(device_)
+	////////////////////////
+	//Program///////////////
+	////////////////////////
+
+	Program::Program(Device* device_, const GraphicsProgramShaders& graphics_shaders)
+		: device(device_), pipeline_layout(device_)
 	{
-		SetShader(ShaderStage::Vertex, vertex);
-		SetShader(ShaderStage::Fragment, fragment);
-		device->BakeProgram(*this);
+		VK_ASSERT(graphics_shaders.vertex);
+		// Compute program hash
+		Util::Hasher hasher;
+		hasher.u64(graphics_shaders.vertex->GetHash());
+		if (graphics_shaders.tess_control)
+			hasher.u64(graphics_shaders.tess_control->GetHash());
+		if (graphics_shaders.tess_eval)
+			hasher.u64(graphics_shaders.tess_eval->GetHash());
+		if (graphics_shaders.geometry)
+			hasher.u64(graphics_shaders.geometry->GetHash());
+		if (graphics_shaders.fragment)
+			hasher.u64(graphics_shaders.fragment->GetHash());
+		hash = hasher.get();
+		// --------------------
+
+		shaders = graphics_shaders;
+		pipeline_layout.CreateLayout(*this);
 	}
 
-	Program::Program(Device* device_, Shader* compute_shader)
-		: device(device_)
+	Program::Program(Device* device_, const ComputeProgramShaders& compute_shaders)
+		: device(device_), pipeline_layout(device_)
 	{
-		SetShader(ShaderStage::Compute, compute_shader);
-		device->BakeProgram(*this);
+		VK_ASSERT(compute_shaders.compute);
+		// Compute program hash
+		Util::Hasher hasher;
+		hasher.u64(compute_shaders.compute->GetHash());
+		hash = hasher.get();
+		// --------------------
+
+		shaders = compute_shaders;
+		pipeline_layout.CreateLayout(*this);
 	}
 
 	VkPipeline Program::GetPipeline(Hash hash) const
@@ -501,11 +669,13 @@ namespace Vulkan
 	Program::~Program()
 	{
 		for (auto& pipe : pipelines)
-		{
-			if (internal_sync)
-				device->DestroyPipelineNolock(pipe.get());
-			else
-				device->DestroyPipeline(pipe.get());
-		}
+			device->DestroyPipeline(pipe.get());
 	}
+
+	void ProgramDeleter::operator()(Program* program)
+	{
+		program->device->handle_pool.programs.free(program);
+	}
+
+	
 }

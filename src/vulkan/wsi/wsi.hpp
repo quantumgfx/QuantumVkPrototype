@@ -135,9 +135,9 @@ namespace Vulkan
 		// Sets the current platform
 		void SetPlatform(WSIPlatform* platform);
 		// Inits the WSI for a certain number of threads, passing cache data directly to Device::SetContext
-		bool Init(unsigned num_thread_indices, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size);
+		bool Init(unsigned num_thread_indices, uint8_t* initial_cache_data, size_t initial_cache_size);
 		// Inits the WSI using an external context, passing cache data directly to Device::SetContext
-		bool InitExternalContext(std::unique_ptr<Context> context, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size);
+		bool InitExternalContext(std::unique_ptr<Context> context, uint8_t* initial_cache_data, size_t initial_cache_size);
 		bool InitExternalSwapchain(std::vector<Vulkan::ImageHandle> external_images);
 		void DeinitExternal();
 

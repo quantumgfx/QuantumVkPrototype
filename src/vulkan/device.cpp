@@ -190,239 +190,6 @@ namespace Vulkan
 		managers.memory.UnmapMemory(buffer.GetAllocation(), access);
 	}
 
-	Shader* Device::RequestShader(const uint32_t* data, size_t size)
-	{
-		//Generates a hash of the data
-		Util::Hasher hasher;
-		hasher.data(data, size);
-		//If hash already exists just return that shader
-		auto hash = hasher.get();
-		auto* ret = shaders.find(hash);
-		//Else construct a new shader before returning it
-		if (!ret)
-			ret = shaders.emplace_yield(hash, hash, this, data, size);
-		return ret;
-	}
-
-	Shader* Device::RequestShaderByHash(Hash hash)
-	{
-		return shaders.find(hash);
-	}
-
-	Program* Device::RequestProgram(Vulkan::Shader* compute_shader)
-	{
-		if (!compute_shader)
-			return nullptr;
-
-		Util::Hasher hasher;
-		//Get program hash
-		hasher.u64(compute_shader->get_hash());
-
-		auto hash = hasher.get();
-		//Check if program already exists
-		auto* ret = programs.find(hash);
-		if (!ret) //If not construct a new program
-			ret = programs.emplace_yield(hash, this, compute_shader);
-		return ret;
-	}
-
-	Program* Device::RequestProgram(const uint32_t* compute_data, size_t compute_size)
-	{
-		if (!compute_size)
-			return nullptr;
-
-		auto* compute_shader = RequestShader(compute_data, compute_size);
-		return RequestProgram(compute_shader);
-	}
-
-	Program* Device::RequestProgram(Shader* vertex, Shader* fragment)
-	{
-		if (!vertex || !fragment)
-			return nullptr;
-
-		Util::Hasher hasher;
-		hasher.u64(vertex->get_hash());
-		hasher.u64(fragment->get_hash());
-
-		auto hash = hasher.get();
-		auto* ret = programs.find(hash);
-
-		if (!ret)
-			ret = programs.emplace_yield(hash, this, vertex, fragment);
-		return ret;
-	}
-
-	Program* Device::RequestProgram(const uint32_t* vertex_data, size_t vertex_size, const uint32_t* fragment_data, size_t fragment_size)
-	{
-		if (!vertex_size || !fragment_size)
-			return nullptr;
-
-		auto* vertex = RequestShader(vertex_data, vertex_size);
-		auto* fragment = RequestShader(fragment_data, fragment_size);
-		return RequestProgram(vertex, fragment);
-	}
-
-	PipelineLayout* Device::RequestPipelineLayout(const CombinedResourceLayout& layout)
-	{
-		Hasher h;
-		h.data(reinterpret_cast<const uint32_t*>(layout.sets), sizeof(layout.sets));
-		h.data(&layout.stages_for_bindings[0][0], sizeof(layout.stages_for_bindings));
-		h.u32(layout.push_constant_range.stageFlags);
-		h.u32(layout.push_constant_range.size);
-		h.data(layout.spec_constant_mask, sizeof(layout.spec_constant_mask));
-		h.u32(layout.attribute_mask);
-		h.u32(layout.render_target_mask);
-
-		auto hash = h.get();
-		// 
-		auto* ret = pipeline_layouts.find(hash);
-		if (!ret)
-			ret = pipeline_layouts.emplace_yield(hash, hash, this, layout);
-		return ret;
-	}
-
-	DescriptorSetAllocator* Device::RequestDescriptorSetAllocator(const DescriptorSetLayout& layout, const uint32_t* stages_for_bindings)
-	{
-		Hasher h;
-		h.data(reinterpret_cast<const uint32_t*>(&layout), sizeof(layout));
-		h.data(stages_for_bindings, sizeof(uint32_t) * VULKAN_NUM_BINDINGS);
-		auto hash = h.get();
-
-		auto* ret = descriptor_set_allocators.find(hash);
-		if (!ret)
-			ret = descriptor_set_allocators.emplace_yield(hash, hash, this, layout, stages_for_bindings);
-		return ret;
-	}
-
-	void Device::BakeProgram(Program& program)
-	{
-		CombinedResourceLayout layout;
-		if (program.GetShader(ShaderStage::Vertex))
-			layout.attribute_mask = program.GetShader(ShaderStage::Vertex)->GetLayout().input_mask;
-		if (program.GetShader(ShaderStage::Fragment))
-			layout.render_target_mask = program.GetShader(ShaderStage::Fragment)->GetLayout().output_mask;
-
-		layout.descriptor_set_mask = 0;
-
-		for (unsigned i = 0; i < static_cast<unsigned>(ShaderStage::Count); i++)
-		{
-			auto* shader = program.GetShader(static_cast<ShaderStage>(i));
-			if (!shader)
-				continue;
-
-			uint32_t stage_mask = 1u << i;
-
-			auto& shader_layout = shader->GetLayout();
-			for (unsigned set = 0; set < VULKAN_NUM_DESCRIPTOR_SETS; set++)
-			{
-				layout.sets[set].sampled_image_mask |= shader_layout.sets[set].sampled_image_mask;
-				layout.sets[set].storage_image_mask |= shader_layout.sets[set].storage_image_mask;
-				layout.sets[set].uniform_buffer_mask |= shader_layout.sets[set].uniform_buffer_mask;
-				layout.sets[set].storage_buffer_mask |= shader_layout.sets[set].storage_buffer_mask;
-				layout.sets[set].sampled_buffer_mask |= shader_layout.sets[set].sampled_buffer_mask;
-				layout.sets[set].input_attachment_mask |= shader_layout.sets[set].input_attachment_mask;
-				layout.sets[set].sampler_mask |= shader_layout.sets[set].sampler_mask;
-				layout.sets[set].separate_image_mask |= shader_layout.sets[set].separate_image_mask;
-				layout.sets[set].fp_mask |= shader_layout.sets[set].fp_mask;
-
-				for_each_bit(shader_layout.sets[set].immutable_sampler_mask, [&](uint32_t binding) {
-					StockSampler sampler = GetImmutableSampler(shader_layout.sets[set], binding);
-
-					// Do we already have an immutable sampler? Make sure it matches the layout.
-					if (HasImmutableSampler(layout.sets[set], binding))
-					{
-						if (sampler != GetImmutableSampler(layout.sets[set], binding))
-							QM_LOG_ERROR("Immutable sampler mismatch detected!\n");
-					}
-
-					SetImmutableSampler(layout.sets[set], binding, sampler);
-					});
-
-				uint32_t active_binds =
-					shader_layout.sets[set].sampled_image_mask |
-					shader_layout.sets[set].storage_image_mask |
-					shader_layout.sets[set].uniform_buffer_mask |
-					shader_layout.sets[set].storage_buffer_mask |
-					shader_layout.sets[set].sampled_buffer_mask |
-					shader_layout.sets[set].input_attachment_mask |
-					shader_layout.sets[set].sampler_mask |
-					shader_layout.sets[set].separate_image_mask;
-
-				if (active_binds)
-					layout.stages_for_sets[set] |= stage_mask;
-
-				for_each_bit(active_binds, [&](uint32_t bit) {
-					layout.stages_for_bindings[set][bit] |= stage_mask;
-
-					auto& combined_size = layout.sets[set].array_size[bit];
-					auto& shader_size = shader_layout.sets[set].array_size[bit];
-					if (combined_size && combined_size != shader_size)
-						QM_LOG_ERROR("Mismatch between array sizes in different shaders.\n");
-					else
-						combined_size = shader_size;
-					});
-			}
-
-			// Merge push constant ranges into one range.
-			// Do not try to split into multiple ranges as it just complicates things for no obvious gain.
-			if (shader_layout.push_constant_size != 0)
-			{
-				layout.push_constant_range.stageFlags |= 1u << i;
-				layout.push_constant_range.size =
-					std::max(layout.push_constant_range.size, shader_layout.push_constant_size);
-			}
-
-			layout.spec_constant_mask[i] = shader_layout.spec_constant_mask;
-			layout.combined_spec_constant_mask |= shader_layout.spec_constant_mask;
-			layout.bindless_descriptor_set_mask |= shader_layout.bindless_set_mask;
-		}
-
-		for (unsigned set = 0; set < VULKAN_NUM_DESCRIPTOR_SETS; set++)
-		{
-			if (layout.stages_for_sets[set] != 0)
-			{
-				layout.descriptor_set_mask |= 1u << set;
-
-				for (unsigned binding = 0; binding < VULKAN_NUM_BINDINGS; binding++)
-				{
-					auto& array_size = layout.sets[set].array_size[binding];
-					if (array_size == DescriptorSetLayout::UNSIZED_ARRAY)
-					{
-						for (unsigned i = 1; i < VULKAN_NUM_BINDINGS; i++)
-						{
-							if (layout.stages_for_bindings[set][i] != 0)
-								QM_LOG_ERROR("Using bindless for set = %u, but binding = %u has a descriptor attached to it.\n", set, i);
-						}
-
-						// Allows us to have one unified descriptor set layout for bindless.
-						layout.stages_for_bindings[set][binding] = VK_SHADER_STAGE_ALL;
-					}
-					else if (array_size == 0)
-					{
-						array_size = 1;
-					}
-					else
-					{
-						for (unsigned i = 1; i < array_size; i++)
-						{
-							if (layout.stages_for_bindings[set][binding + i] != 0)
-							{
-								QM_LOG_ERROR("Detected binding aliasing for (%u, %u). Binding array with %u elements starting at (%u, %u) overlaps.\n",
-									set, binding + i, array_size, set, binding);
-							}
-						}
-					}
-				}
-			}
-		}
-
-		Hasher h;
-		h.u32(layout.push_constant_range.stageFlags);
-		h.u32(layout.push_constant_range.size);
-		layout.push_constant_layout_hash = h.get();
-		program.SetPipelineLayout(RequestPipelineLayout(layout));
-	}
-
 	void Device::InitWorkarounds()
 	{
 		workarounds = {};
@@ -524,7 +291,7 @@ namespace Vulkan
 		return heap_data;
 	}
 
-	void Device::SetContext(Context* context_, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size)
+	void Device::SetContext(Context* context_, uint8_t* initial_cache_data, size_t initial_cache_size)
 	{
 		context = context_;
 		table = &context_->GetDeviceTable();
@@ -575,8 +342,6 @@ namespace Vulkan
 			false);
 
 		InitPipelineCache(initial_cache_data, initial_cache_size);
-		
-		InitFossilizePipeline(fossilize_pipeline_data, fossilize_pipeline_size);
 	}
 
 	void Device::InitBindless()
@@ -591,10 +356,11 @@ namespace Vulkan
 			layout.array_size[i] = 1;
 
 		layout.separate_image_mask = 1;
-		uint32_t stages_for_sets[VULKAN_NUM_BINDINGS] = { VK_SHADER_STAGE_ALL };
-		bindless_sampled_image_allocator_integer = RequestDescriptorSetAllocator(layout, stages_for_sets);
+
+		layout.binding_stages[0] = VK_SHADER_STAGE_ALL;
+		bindless_sampled_image_allocator_integer = RequestDescriptorSetAllocator(layout);
 		layout.fp_mask = 1;
-		bindless_sampled_image_allocator_fp = RequestDescriptorSetAllocator(layout, stages_for_sets);
+		bindless_sampled_image_allocator_fp = RequestDescriptorSetAllocator(layout);
 	}
 
 	void Device::InitTimelineSemaphores()
@@ -1880,6 +1646,12 @@ namespace Vulkan
 		DestroyPipelineNolock(pipeline);
 	}
 
+	void Device::DestroyLayout(VkPipelineLayout layout)
+	{
+		LOCK();
+		DestroyLayoutNolock(layout);
+	}
+
 	void Device::ResetFence(VkFence fence, bool observed_wait)
 	{
 		LOCK();
@@ -1940,6 +1712,12 @@ namespace Vulkan
 		DestroySamplerNolock(sampler);
 	}
 
+	void Device::DestroyShader(VkShaderModule shader)
+	{
+		LOCK();
+		DestroyShaderNolock(shader);
+	}
+
 	void Device::DestroyImageView(VkImageView view)
 	{
 		LOCK();
@@ -1950,6 +1728,12 @@ namespace Vulkan
 	{
 		VK_ASSERT(!exists(Frame().destroyed_pipelines, pipeline));
 		Frame().destroyed_pipelines.push_back(pipeline);
+	}
+
+	void Device::DestroyLayoutNolock(VkPipelineLayout layout)
+	{
+		VK_ASSERT(!exists(Frame().destroyed_layouts, layout));
+		Frame().destroyed_layouts.push_back(layout);
 	}
 
 	void Device::DestroyImageViewNolock(VkImageView view)
@@ -2015,6 +1799,12 @@ namespace Vulkan
 	{
 		VK_ASSERT(!exists(Frame().destroyed_samplers, sampler));
 		Frame().destroyed_samplers.push_back(sampler);
+	}
+
+	void Device::DestroyShaderNolock(VkShaderModule shader)
+	{
+		VK_ASSERT(!exists(Frame().destroyed_shaders, shader));
+		Frame().destroyed_shaders.push_back(shader);
 	}
 
 	void Device::DestroyFramebufferNolock(VkFramebuffer framebuffer)
@@ -2089,8 +1879,12 @@ namespace Vulkan
 			table.vkDestroyFramebuffer(vkdevice, framebuffer, nullptr);
 		for (auto& sampler : destroyed_samplers)
 			table.vkDestroySampler(vkdevice, sampler, nullptr);
+		for (auto& shader : destroyed_shaders)
+			table.vkDestroyShaderModule(vkdevice, shader, nullptr);
 		for (auto& pipeline : destroyed_pipelines)
 			table.vkDestroyPipeline(vkdevice, pipeline, nullptr);
+		for (auto& layout : destroyed_layouts)
+			table.vkDestroyPipelineLayout(vkdevice, layout, nullptr);
 		for (auto& view : destroyed_image_views)
 			table.vkDestroyImageView(vkdevice, view, nullptr);
 		for (auto& view : destroyed_buffer_views)
@@ -2130,12 +1924,14 @@ namespace Vulkan
 		destroyed_framebuffers.clear();
 		destroyed_samplers.clear();
 		destroyed_pipelines.clear();
+		destroyed_shaders.clear();
 		destroyed_image_views.clear();
 		destroyed_buffer_views.clear();
 		destroyed_images.clear();
 		destroyed_buffers.clear();
 		destroyed_semaphores.clear();
 		destroyed_descriptor_pools.clear();
+		destroyed_layouts.clear();
 		recycled_semaphores.clear();
 		recycled_events.clear();
 
@@ -3414,6 +3210,18 @@ namespace Vulkan
 		if (!ret)
 			ret = render_passes.emplace_yield(hash, hash, this, info);
 		return *ret;
+	}
+
+	DescriptorSetAllocator* Device::RequestDescriptorSetAllocator(const DescriptorSetLayout& layout)
+	{
+		Hasher h;
+		h.data(reinterpret_cast<const uint32_t*>(&layout), sizeof(layout));
+		auto hash = h.get();
+
+		auto* ret = descriptor_set_allocators.find(hash);
+		if (!ret)
+			ret = descriptor_set_allocators.emplace_yield(hash, hash, this, layout);
+		return ret;
 	}
 
 	const Framebuffer& Device::RequestFramebuffer(const RenderPassInfo& info)

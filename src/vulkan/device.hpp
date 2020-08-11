@@ -37,8 +37,6 @@
 #include <condition_variable>
 #endif
 
-#include "fossilize.hpp"
-
 #include "threading/thread_group.hpp"
 
 #include "misc/quirks.hpp"
@@ -74,6 +72,8 @@ namespace Vulkan
 		VulkanObjectPool<EventHolder> events;
 		VulkanObjectPool<CommandBuffer> command_buffers;
 		VulkanObjectPool<BindlessDescriptorPool> bindless_descriptor_pool;
+		VulkanObjectPool<Shader> shaders;
+		VulkanObjectPool<Program> programs;
 	};
 
 	struct FossilizeReplayer
@@ -180,24 +180,29 @@ namespace Vulkan
 
 		std::vector<VkFramebuffer> destroyed_framebuffers;
 		std::vector<VkSampler> destroyed_samplers;
-		std::vector<VkPipeline> destroyed_pipelines;
 		std::vector<VkImageView> destroyed_image_views;
 		std::vector<VkBufferView> destroyed_buffer_views;
 		std::vector<std::pair<VkImage, DeviceAllocation>> destroyed_images;
 		std::vector<std::pair<VkBuffer, DeviceAllocation>> destroyed_buffers;
 		std::vector<VkDescriptorPool> destroyed_descriptor_pools;
+
+		std::vector<VkPipelineLayout> destroyed_layouts;
+		std::vector<VkPipeline> destroyed_pipelines;
+		std::vector<VkShaderModule> destroyed_shaders;
+
+		std::vector<ImageHandle> keep_alive_images;
+
 		Util::SmallVector<CommandBufferHandle> graphics_submissions;
 		Util::SmallVector<CommandBufferHandle> compute_submissions;
 		Util::SmallVector<CommandBufferHandle> transfer_submissions;
 		std::vector<VkSemaphore> recycled_semaphores;
 		std::vector<VkEvent> recycled_events;
 		std::vector<VkSemaphore> destroyed_semaphores;
-		std::vector<ImageHandle> keep_alive_images;
 	};
 
 	class Device;
 
-	class Device : public Fossilize::StateCreatorInterface
+	class Device
 	{
 	public:
 		// Device-based objects which need to poke at internal data structures when their lifetimes end.
@@ -225,16 +230,18 @@ namespace Vulkan
 		friend struct CommandBufferDeleter;
 		friend class BindlessDescriptorPool;
 		friend struct BindlessDescriptorPoolDeleter;
+		friend class Shader;
+		friend struct ShaderDeleter;
 		friend class Program;
+		friend struct ProgramDeleter;
+		friend class PipelineLayout;
 		friend class WSI;
 		friend class Cookie;
 		friend class Framebuffer;
-		friend class PipelineLayout;
 		friend class FramebufferAllocator;
 		friend class RenderPass;
 		friend class Texture;
 		friend class DescriptorSetAllocator;
-		friend class Shader;
 		friend class ImageResourceHolder;
 		friend struct PerFrame;
 
@@ -247,7 +254,7 @@ namespace Vulkan
 
 		// Only called by main thread, during setup phase.
 		// Sets context and initializes device
-		void SetContext(Context* context, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size);
+		void SetContext(Context* context, uint8_t* initial_cache_data, size_t initial_cache_size);
 
 		void InitSwapchain(const std::vector<VkImage>& swapchain_images, unsigned width, unsigned height, VkFormat format);
 		void InitExternalSwapchain(const std::vector<ImageHandle>& swapchain_images);
@@ -269,8 +276,6 @@ namespace Vulkan
 
 		// Retrieves the pipeline cache data. This should be stored in a file (before device is destroyed) by the client and loaded up in SetContext.
 		Util::RetainedHeapData GetPipelineCacheData(size_t override_max_size = 0);
-		// Retrieves fossilize pipeline data.
-		Util::RetainedHeapData GetFossilizePipelineData();
 
 		// Frame-pushing interface.
 
@@ -304,18 +309,12 @@ namespace Vulkan
 
 		// "Requests" essentially hash the object, check if it exists in the cache and if not creates a new object
 
-		// Creates a shader with code and size. If shader has already been created this just returns that
-		Shader* RequestShader(const uint32_t* code, size_t size);
-		// Requests an already created shader using its hash
-		Shader* RequestShaderByHash(Util::Hash hash);
-		// Creates a program with a vertex sahder and fragment shader. Also hashing
-		Program* RequestProgram(const uint32_t* vertex_data, size_t vertex_size, const uint32_t* fragment_data, size_t fragment_size);
-		// Creates a program with a compute shader. Also hashing.
-		Program* RequestProgram(const uint32_t* compute_data, size_t compute_size);
-		// Creates a program from a vertex and fragment shader
-		Program* RequestProgram(Shader* vertex, Shader* fragment);
-		// Creates a progam from a compute shader
-		Program* RequestProgram(Shader* compute);
+		// Creates a new shader using spirv code. Code is stored in 4 byte words. Size variable is the size of the code in bytes
+		ShaderHandle CreateShader(const uint32_t* code, size_t size);
+		// Creates a graphics program consting of the shaders specified in shaders
+		ProgramHandle CreateGraphicsProgram(const GraphicsProgramShaders& shaders);
+		// Creates a compute program consting of the shaders specified in shaders
+		ProgramHandle CreateComputeProgram(const ComputeProgramShaders& shaders);
 
 		// Map and unmap buffer objects.
 		void* MapHostBuffer(const Buffer& buffer, MemoryAccessFlags access);
@@ -446,7 +445,6 @@ namespace Vulkan
 	#endif
 
 		uint64_t AllocateCookie();
-		void BakeProgram(Program& program);
 
 		void RequestVertexBlock(BufferBlock& block, VkDeviceSize size);
 		void RequestIndexBlock(BufferBlock& block, VkDeviceSize size);
@@ -456,10 +454,9 @@ namespace Vulkan
 		void SetAcquireSemaphore(unsigned index, Semaphore acquire);
 		Semaphore ConsumeReleaseSemaphore();
 
-		PipelineLayout* RequestPipelineLayout(const CombinedResourceLayout& layout);
-		DescriptorSetAllocator* RequestDescriptorSetAllocator(const DescriptorSetLayout& layout, const uint32_t* stages_for_sets);
 		const Framebuffer& RequestFramebuffer(const RenderPassInfo& info);
 		const RenderPass& RequestRenderPass(const RenderPassInfo& info, bool compatible);
+		DescriptorSetAllocator* RequestDescriptorSetAllocator(const DescriptorSetLayout& layout);
 
 		VkPhysicalDeviceMemoryProperties mem_props;
 		VkPhysicalDeviceProperties gpu_props;
@@ -517,22 +514,20 @@ namespace Vulkan
 
 		SamplerHandle samplers[static_cast<unsigned>(StockSampler::Count)];
 
-		VulkanCache<PipelineLayout> pipeline_layouts;
-		VulkanCache<DescriptorSetAllocator> descriptor_set_allocators;
 		VulkanCache<RenderPass> render_passes;
-		VulkanCache<Shader> shaders;
-		VulkanCache<Program> programs;
 
 		DescriptorSetAllocator* bindless_sampled_image_allocator_fp = nullptr;
 		DescriptorSetAllocator* bindless_sampled_image_allocator_integer = nullptr;
 
 		FramebufferAllocator framebuffer_allocator;
 		TransientAttachmentAllocator transient_allocator;
+
+		VulkanCache<DescriptorSetAllocator> descriptor_set_allocators;
+
 		VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
 
 		SamplerHandle CreateSampler(const SamplerCreateInfo& info, StockSampler sampler);
 		bool InitPipelineCache(const uint8_t* initial_cache_data, size_t initial_cache_size);
-		bool InitFossilizePipeline(const uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size);
 
 		CommandPool& GetCommandPool(CommandBuffer::Type type, unsigned thread);
 		QueueData& GetQueueData(CommandBuffer::Type type);
@@ -557,7 +552,9 @@ namespace Vulkan
 		void DestroyImageView(VkImageView view);
 		void DestroyBufferView(VkBufferView view);
 		void DestroyPipeline(VkPipeline pipeline);
+		void DestroyLayout(VkPipelineLayout layout);
 		void DestroySampler(VkSampler sampler);
+		void DestroyShader(VkShaderModule shader);
 		void DestroyFramebuffer(VkFramebuffer framebuffer);
 		void DestroySemaphore(VkSemaphore semaphore);
 		void RecycleSemaphore(VkSemaphore semaphore);
@@ -571,7 +568,9 @@ namespace Vulkan
 		void DestroyImageViewNolock(VkImageView view);
 		void DestroyBufferViewNolock(VkBufferView view);
 		void DestroyPipelineNolock(VkPipeline pipeline);
+		void DestroyLayoutNolock(VkPipelineLayout layout);
 		void DestroySamplerNolock(VkSampler sampler);
+		void DestroyShaderNolock(VkShaderModule shader);
 		void DestroyFramebufferNolock(VkFramebuffer framebuffer);
 		void DestroySemaphoreNolock(VkSemaphore semaphore);
 		void RecycleSemaphoreNolock(VkSemaphore semaphore);
@@ -604,44 +603,6 @@ namespace Vulkan
 		ShaderManager shader_manager;
 		TextureManager texture_manager;
 	#endif
-
-		Fossilize::StateRecorder state_recorder;
-		//Create sampler with hash
-		bool enqueue_create_sampler(Fossilize::Hash hash, const VkSamplerCreateInfo* create_info, VkSampler* sampler) override;
-		//Emmits dummy index
-		bool enqueue_create_descriptor_set_layout(Fossilize::Hash hash, const VkDescriptorSetLayoutCreateInfo* create_info, VkDescriptorSetLayout* layout) override;
-		//Emmits dummy index
-		bool enqueue_create_pipeline_layout(Fossilize::Hash hash, const VkPipelineLayoutCreateInfo* create_info, VkPipelineLayout* layout) override;
-		//Create shader module with hash
-		bool enqueue_create_shader_module(Fossilize::Hash hash, const VkShaderModuleCreateInfo* create_info, VkShaderModule* module) override;
-		//Create render_pass with hash
-		bool enqueue_create_render_pass(Fossilize::Hash hash, const VkRenderPassCreateInfo* create_info, VkRenderPass* render_pass) override;
-		//Same as enqueue_create_graphics_pipeline but with compute pipelines
-		bool enqueue_create_compute_pipeline(Fossilize::Hash hash, const VkComputePipelineCreateInfo* create_info, VkPipeline* pipeline) override;
-		//If multithreading is enabled this queues fossilize_create_graphics_pipeline on another thread
-		bool enqueue_create_graphics_pipeline(Fossilize::Hash hash, const VkGraphicsPipelineCreateInfo* create_info, VkPipeline* pipeline) override;
-		void notify_replayed_resources_for_type() override;
-		//Create graphics pipeline using fossilize cache
-		VkPipeline fossilize_create_graphics_pipeline(Fossilize::Hash hash, VkGraphicsPipelineCreateInfo& info);
-		//Create compute pipeline using fossilize cache
-		VkPipeline fossilize_create_compute_pipeline(Fossilize::Hash hash, VkComputePipelineCreateInfo& info);
-
-		//Resgiesters a graphics pipeline to fossilize to be cached
-		void register_graphics_pipeline(Fossilize::Hash hash, const VkGraphicsPipelineCreateInfo& info);
-		//Resgiesters a comput pipeline to fossilize to be cached
-		void register_compute_pipeline(Fossilize::Hash hash, const VkComputePipelineCreateInfo& info);
-		//Resgiesters a render pass to fossilize to be cached
-		void register_render_pass(VkRenderPass render_pass, Fossilize::Hash hash, const VkRenderPassCreateInfo& info);
-		//Resgiesters a descriptor set layout to fossilize to be cached
-		void register_descriptor_set_layout(VkDescriptorSetLayout layout, Fossilize::Hash hash, const VkDescriptorSetLayoutCreateInfo& info);
-		//Resgiesters a pipelinelayout to fossilize to be cached
-		void register_pipeline_layout(VkPipelineLayout layout, Fossilize::Hash hash, const VkPipelineLayoutCreateInfo& info);
-		//Resgiesters a shader module to fossilize to be cached
-		void register_shader_module(VkShaderModule module, Fossilize::Hash hash, const VkShaderModuleCreateInfo& info);
-		//Resgiesters a sampler to fossilize to be cached
-		void register_sampler(VkSampler sampler, Fossilize::Hash hash, const VkSamplerCreateInfo& info);
-
-		FossilizeReplayer replayer_state;
 
 		ImplementationWorkarounds workarounds;
 		void InitWorkarounds();

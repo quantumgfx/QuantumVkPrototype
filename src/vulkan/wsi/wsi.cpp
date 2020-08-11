@@ -67,13 +67,13 @@ namespace Vulkan
 		}
 	}
 
-	bool WSI::InitExternalContext(std::unique_ptr<Context> fresh_context, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size)
+	bool WSI::InitExternalContext(std::unique_ptr<Context> fresh_context, uint8_t* initial_cache_data, size_t initial_cache_size)
 	{
 		context = std::move(fresh_context);
 
 		// Need to have a dummy swapchain in place before we issue create device events.
 		device.reset(new Device());
-		device->SetContext(context.get(), initial_cache_data, initial_cache_size, fossilize_pipeline_data, fossilize_pipeline_size);
+		device->SetContext(context.get(), initial_cache_data, initial_cache_size);
 		device->InitExternalSwapchain({ ImageHandle(nullptr) });
 		platform->EventDeviceCreated(device.get());
 		table = &context->GetDeviceTable();
@@ -110,7 +110,7 @@ namespace Vulkan
 		platform = platform_;
 	}
 
-	bool WSI::Init(unsigned num_thread_indices, uint8_t* initial_cache_data, size_t initial_cache_size, uint8_t* fossilize_pipeline_data, size_t fossilize_pipeline_size)
+	bool WSI::Init(unsigned num_thread_indices, uint8_t* initial_cache_data, size_t initial_cache_size)
 	{
 		auto instance_ext = platform->GetInstanceExtensions();
 		auto device_ext = platform->GetDeviceExtensions();
@@ -121,7 +121,7 @@ namespace Vulkan
 			return false;
 
 		device.reset(new Device());
-		device->SetContext(context.get(), initial_cache_data, initial_cache_size, fossilize_pipeline_data, fossilize_pipeline_size);
+		device->SetContext(context.get(), initial_cache_data, initial_cache_size);
 		table = &context->GetDeviceTable();
 
 		platform->EventDeviceCreated(device.get());

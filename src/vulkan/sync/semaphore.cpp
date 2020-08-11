@@ -1,5 +1,5 @@
 #include "semaphore.hpp"
-#include "device.hpp"
+#include "vulkan/device.hpp"
 
 namespace Vulkan
 {

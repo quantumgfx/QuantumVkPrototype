@@ -21,7 +21,7 @@ namespace Util
 		template <typename T>
 		inline void data(const T* data_, size_t size)
 		{
-			size /= sizeof(*data_);
+			size /= sizeof(T);
 			for (size_t i = 0; i < size; i++)
 				h = (h * 0x100000001b3ull) ^ data_[i];
 		}

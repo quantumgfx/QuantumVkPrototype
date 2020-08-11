@@ -84,13 +84,13 @@ override_option(SPIRV_CROSS_STATIC ON)
 override_option(SPIRV_CROSS_CLI OFF)
 
 override_option(SPIRV_CROSS_ENABLE_TESTS OFF)
-override_option(SPIRV_CROSS_ENABLE_GLSL ON)
-override_option(SPIRV_CROSS_ENABLE_HLSL ON)
-override_option(SPIRV_CROSS_ENABLE_MSL ON)
-override_option(SPIRV_CROSS_ENABLE_CPP ON)
-override_option(SPIRV_CROSS_ENABLE_REFLECT ON)
+override_option(SPIRV_CROSS_ENABLE_GLSL OFF)
+override_option(SPIRV_CROSS_ENABLE_HLSL OFF)
+override_option(SPIRV_CROSS_ENABLE_MSL OFF)
+override_option(SPIRV_CROSS_ENABLE_CPP OFF)
+override_option(SPIRV_CROSS_ENABLE_REFLECT OFF)
 override_option(SPIRV_CROSS_ENABLE_C_API OFF)
-override_option(SPIRV_CROSS_ENABLE_UTIL ON)
+override_option(SPIRV_CROSS_ENABLE_UTIL OFF)
 
 override_option(SPIRV_CROSS_SANITIZE_ADDRESS OFF)
 override_option(SPIRV_CROSS_SANITIZE_MEMORY OFF)
@@ -124,30 +124,13 @@ set_sln_folder(spirv-cross-reflect SPIRV-Cross)
 set_sln_folder(spirv-cross-util SPIRV-Cross)
 # -------------------------------
 
-# ---------Fossilize-------------
-override_option(FOSSILIZE_MSVC_ANALYZE OFF)
-override_option(FOSSILIZE_ENABLE_EXCEPTIONS OFF)
-override_option(FOSSILIZE_SANITIZE_ADDRESS OFF)
-override_option(FOSSILIZE_SANITIZE_THREADS OFF)
-override_option(FOSSILIZE_VULKAN_LAYER OFF)
-override_option(FOSSILIZE_RAPIDJSON_INCLUDE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/extern/rapidjson/include")
-override_option(FOSSILIZE_VULKAN_INCLUDE_PATH "${VULKAN_SDK_DIR}/Include/vulkan")
-override_option(FOSSILIZE_CLI OFF)
-override_option(FOSSILIZE_TESTS OFF)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/extern/fossilize EXCLUDE_FROM_ALL)
-set_sln_folder(fossilize Dependencies)
-set_sln_folder(miniz Dependencies)
-# -------------------------------
-
-set(QM_VK_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
 # QuantumVk Library
 add_library(QuantumVk STATIC)
 set_static_lib_output_dir(QuantumVk ${CMAKE_CURRENT_SOURCE_DIR}/bin/QuantumVk)
 # Include Directories
 target_include_directories(QuantumVk PUBLIC "${VULKAN_SDK_DIR}/Include")
-target_include_directories(QuantumVk PUBLIC ${QM_VK_INCLUDE_DIR})
 target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/extern)
 
 # target_compile_options(QuantumVk PRIVATE ${QM_CXX_FLAGS})
@@ -155,7 +138,6 @@ target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/extern)
 # libraries that QuantumVk links to
 target_link_libraries(QuantumVk PUBLIC volk)
 target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
-target_link_libraries(QuantumVk PUBLIC fossilize)
 
 # Src Directories
 set(QM_UTILS_DIR src/utils)
@@ -173,6 +155,7 @@ target_sources(QuantumVk PRIVATE
 	${QM_UTILS_DIR}/hashmap.hpp
 	${QM_UTILS_DIR}/intrusive.hpp
 	${QM_UTILS_DIR}/intrusive_list.hpp
+	${QM_UTILS_DIR}/intrusive_hash_map.hpp
 	${QM_UTILS_DIR}/logging.hpp
 	${QM_UTILS_DIR}/object_pool.hpp
 	${QM_UTILS_DIR}/read_write_lock.hpp
@@ -192,7 +175,6 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/graphics/descriptor_set.hpp ${QM_VK_DIR}/graphics/descriptor_set.cpp
 	${QM_VK_DIR}/graphics/render_pass.hpp ${QM_VK_DIR}/graphics/render_pass.cpp
 	${QM_VK_DIR}/graphics/shader.hpp ${QM_VK_DIR}/graphics/shader.cpp
-	${QM_VK_DIR}/graphics/spirv_compiler.hpp ${QM_VK_DIR}/graphics/spirv_compiler.cpp
 	
 	${QM_VK_DIR}/images/format.hpp
 	${QM_VK_DIR}/images/image.hpp ${QM_VK_DIR}/images/image.cpp
@@ -222,7 +204,7 @@ target_sources(QuantumVk PRIVATE
 	${QM_VK_DIR}/command_buffer.hpp ${QM_VK_DIR}/command_buffer.cpp
 	${QM_VK_DIR}/command_pool.hpp ${QM_VK_DIR}/command_pool.cpp
 	${QM_VK_DIR}/device.hpp ${QM_VK_DIR}/device.cpp
-	${QM_VK_DIR}/device_fossilize.cpp
+	${QM_VK_DIR}/device_shaders.cpp
 	${QM_VK_DIR}/vulkan_common.hpp
 	${QM_VK_DIR}/vulkan_headers.hpp
 	

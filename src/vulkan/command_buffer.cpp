@@ -475,7 +475,7 @@ namespace Vulkan
 		current_pipeline = VK_NULL_HANDLE;
 		current_pipeline_layout = VK_NULL_HANDLE;
 		current_layout = nullptr;
-		pipeline_state.program = nullptr;
+		pipeline_state.program.Reset();
 		memset(bindings.cookies, 0, sizeof(bindings.cookies));
 		memset(bindings.secondary_cookies, 0, sizeof(bindings.secondary_cookies));
 		memset(&index_state, 0, sizeof(index_state));
@@ -652,11 +652,11 @@ namespace Vulkan
 		BeginCompute();
 	}
 
-	VkPipeline CommandBuffer::BuildComputePipeline(Device* device, const DeferredPipelineCompile& compile)
+	VkPipeline CommandBuffer::BuildComputePipeline(Device* device, DeferredPipelineCompile& compile)
 	{
 		auto& shader = *compile.program->GetShader(ShaderStage::Compute);
 		VkComputePipelineCreateInfo info = { VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
-		info.layout = compile.program->GetPipelineLayout()->GetLayout();
+		info.layout = compile.program->GetLayout().GetVkLayout();
 		info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 		info.stage.module = shader.GetModule();
 		info.stage.pName = "main";
@@ -670,7 +670,7 @@ namespace Vulkan
 
 		VkSpecializationInfo spec_info = {};
 		VkSpecializationMapEntry spec_entries[VULKAN_NUM_SPEC_CONSTANTS];
-		auto mask = compile.program->GetPipelineLayout()->GetResourceLayout().combined_spec_constant_mask & compile.potential_static_state.spec_constant_mask;
+		auto mask = compile.program->GetLayout().GetCombindedSpecConstantMask() & compile.potential_static_state.spec_constant_mask;
 
 		uint32_t spec_constants[VULKAN_NUM_SPEC_CONSTANTS];
 
@@ -751,8 +751,6 @@ namespace Vulkan
 
 		VkPipeline compute_pipeline;
 
-		device->register_compute_pipeline(compile.hash, info);
-
 #ifdef VULKAN_DEBUG
 		QM_LOG_INFO("Creating compute pipeline.\n");
 #endif
@@ -785,7 +783,7 @@ namespace Vulkan
 		}
 	}
 
-	VkPipeline CommandBuffer::BuildGraphicsPipeline(Device* device, const DeferredPipelineCompile& compile)
+	VkPipeline CommandBuffer::BuildGraphicsPipeline(Device* device, DeferredPipelineCompile& compile)
 	{
 		// Viewport state
 		VkPipelineViewportStateCreateInfo vp = { VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
@@ -819,7 +817,7 @@ namespace Vulkan
 			auto& att = blend_attachments[i];
 			att = {};
 
-			if (compile.compatible_render_pass->GetColorAttachment(compile.subpass_index, i).attachment != VK_ATTACHMENT_UNUSED && (compile.program->GetPipelineLayout()->GetResourceLayout().render_target_mask & (1u << i)))
+			if (compile.compatible_render_pass->GetColorAttachment(compile.subpass_index, i).attachment != VK_ATTACHMENT_UNUSED && (compile.program->GetLayout().GetRenderTargetMask() & (1u << i)))
 			{
 				att.colorWriteMask = (compile.static_state.state.write_mask >> (4 * i)) & 0xf;
 				att.blendEnable = compile.static_state.state.blend_enable;
@@ -861,7 +859,7 @@ namespace Vulkan
 		VkPipelineVertexInputStateCreateInfo vi = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
 		VkVertexInputAttributeDescription vi_attribs[VULKAN_NUM_VERTEX_ATTRIBS];
 		vi.pVertexAttributeDescriptions = vi_attribs;
-		uint32_t attr_mask = compile.program->GetPipelineLayout()->GetResourceLayout().attribute_mask;
+		uint32_t attr_mask = compile.program->GetLayout().GetAttribMask();
 		uint32_t binding_mask = 0;
 		Util::for_each_bit(attr_mask, [&](uint32_t bit) {
 			auto& attr = vi_attribs[vi.vertexAttributeDescriptionCount++];
@@ -934,37 +932,37 @@ namespace Vulkan
 		for (unsigned i = 0; i < static_cast<unsigned>(ShaderStage::Count); i++)
 		{
 			auto stage = static_cast<ShaderStage>(i);
-			if (compile.program->GetShader(stage))
+			if (!compile.program->GetShader(stage))
+				continue;
+
+			auto& s = stages[num_stages++];
+			s = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+			s.module = compile.program->GetShader(stage)->GetModule();
+			s.pName = "main";
+			s.stage = static_cast<VkShaderStageFlagBits>(1u << i);
+
+			auto mask = compile.program->GetLayout().GetSpecConstantMask(stage) & compile.potential_static_state.spec_constant_mask;
+
+			if (mask)
 			{
-				auto& s = stages[num_stages++];
-				s = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-				s.module = compile.program->GetShader(stage)->GetModule();
-				s.pName = "main";
-				s.stage = static_cast<VkShaderStageFlagBits>(1u << i);
+				s.pSpecializationInfo = &spec_info[i];
+				spec_info[i].pData = spec_constants[i];
+				spec_info[i].pMapEntries = spec_entries[i];
 
-				auto mask = compile.program->GetPipelineLayout()->GetResourceLayout().spec_constant_mask[i] & compile.potential_static_state.spec_constant_mask;
-
-				if (mask)
-				{
-					s.pSpecializationInfo = &spec_info[i];
-					spec_info[i].pData = spec_constants[i];
-					spec_info[i].pMapEntries = spec_entries[i];
-
-					Util::for_each_bit(mask, [&](uint32_t bit) {
-						auto& entry = spec_entries[i][spec_info[i].mapEntryCount];
-						entry.offset = sizeof(uint32_t) * spec_info[i].mapEntryCount;
-						entry.size = sizeof(uint32_t);
-						entry.constantID = bit;
-						spec_constants[i][spec_info[i].mapEntryCount] = compile.potential_static_state.spec_constants[bit];
-						spec_info[i].mapEntryCount++;
-						});
-					spec_info[i].dataSize = spec_info[i].mapEntryCount * sizeof(uint32_t);
-				}
+				Util::for_each_bit(mask, [&](uint32_t bit) {
+					auto& entry = spec_entries[i][spec_info[i].mapEntryCount];
+					entry.offset = sizeof(uint32_t) * spec_info[i].mapEntryCount;
+					entry.size = sizeof(uint32_t);
+					entry.constantID = bit;
+					spec_constants[i][spec_info[i].mapEntryCount] = compile.potential_static_state.spec_constants[bit];
+					spec_info[i].mapEntryCount++;
+					});
+				spec_info[i].dataSize = spec_info[i].mapEntryCount * sizeof(uint32_t);
 			}
 		}
 
 		VkGraphicsPipelineCreateInfo pipe = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-		pipe.layout = compile.program->GetPipelineLayout()->GetLayout();
+		pipe.layout = compile.program->GetLayout().GetVkLayout();
 		pipe.renderPass = compile.compatible_render_pass->GetRenderPass();
 		pipe.subpass = compile.subpass_index;
 
@@ -980,8 +978,6 @@ namespace Vulkan
 		pipe.stageCount = num_stages;
 
 		VkPipeline pipeline;
-
-		device->register_graphics_pipeline(compile.hash, pipe);
 
 #ifdef VULKAN_DEBUG
 		QM_LOG_INFO("Creating graphics pipeline.\n");
@@ -1021,11 +1017,10 @@ namespace Vulkan
 	void CommandBuffer::UpdateHashComputePipeline(DeferredPipelineCompile& compile)
 	{
 		Util::Hasher h;
-		h.u64(compile.program->get_hash());
+		h.u64(compile.program->GetHash());
 
 		// Spec constants.
-		auto& layout = compile.program->GetPipelineLayout()->GetResourceLayout();
-		uint32_t combined_spec_constant = layout.combined_spec_constant_mask;
+		uint32_t combined_spec_constant = compile.program->GetLayout().GetCombindedSpecConstantMask();
 		combined_spec_constant &= compile.potential_static_state.spec_constant_mask;
 		h.u32(combined_spec_constant);
 		Util::for_each_bit(combined_spec_constant, [&](uint32_t bit) {
@@ -1049,8 +1044,7 @@ namespace Vulkan
 	{
 		Util::Hasher h;
 		active_vbos = 0;
-		auto& layout = compile.program->GetPipelineLayout()->GetResourceLayout();
-		Util::for_each_bit(layout.attribute_mask, [&](uint32_t bit) {
+		Util::for_each_bit(compile.program->GetLayout().GetAttribMask(), [&](uint32_t bit) {
 			h.u32(bit);
 			active_vbos |= 1u << compile.attribs[bit].binding;
 			h.u32(compile.attribs[bit].binding);
@@ -1065,7 +1059,7 @@ namespace Vulkan
 
 		h.u64(compile.compatible_render_pass->get_hash());
 		h.u32(compile.subpass_index);
-		h.u64(compile.program->get_hash());
+		h.u64(compile.program->GetHash());
 		h.data(compile.static_state.words, sizeof(compile.static_state.words));
 
 		if (compile.static_state.state.blend_enable)
@@ -1083,7 +1077,7 @@ namespace Vulkan
 		}
 
 		// Spec constants.
-		uint32_t combined_spec_constant = layout.combined_spec_constant_mask;
+		uint32_t combined_spec_constant = compile.program->GetLayout().GetCombindedSpecConstantMask();
 		combined_spec_constant &= compile.potential_static_state.spec_constant_mask;
 		h.u32(combined_spec_constant);
 		Util::for_each_bit(combined_spec_constant, [&](uint32_t bit) {
@@ -1119,7 +1113,7 @@ namespace Vulkan
 
 		if (get_and_clear(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT))
 		{
-			auto& range = current_layout->GetResourceLayout().push_constant_range;
+			auto& range = current_layout->GetPushConstantRange();
 			if (range.stageFlags != 0)
 			{
 				VK_ASSERT(range.offset == 0);
@@ -1162,7 +1156,7 @@ namespace Vulkan
 
 		if (get_and_clear(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT))
 		{
-			auto& range = current_layout->GetResourceLayout().push_constant_range;
+			auto& range = current_layout->GetPushConstantRange();
 			if (range.stageFlags != 0)
 			{
 				VK_ASSERT(range.offset == 0);
@@ -1287,7 +1281,7 @@ namespace Vulkan
 		set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
 	}
 
-	void CommandBuffer::SetProgram(Program* program)
+	void CommandBuffer::SetProgram(ProgramHandle program)
 	{
 		//If this is already set as the program, ignore this call
 		if (pipeline_state.program == program)
@@ -1313,8 +1307,8 @@ namespace Vulkan
 			//As well as the push constants
 			set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
 			//Set the layout
-			current_layout = program->GetPipelineLayout();
-			current_pipeline_layout = current_layout->GetLayout();
+			current_layout = &program->GetLayout();
+			current_pipeline_layout = current_layout->GetVkLayout();
 		}
 		else if (program->GetPipelineLayout()->get_hash() != current_layout->get_hash())
 		{

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vulkan_headers.hpp"
-#include "vulkan_common.hpp"
+#include "vulkan/vulkan_headers.hpp"
+#include "vulkan/vulkan_common.hpp"
 #include "vulkan/misc/cookie.hpp"
 #include "utils/object_pool.hpp"
 

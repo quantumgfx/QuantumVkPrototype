@@ -1,5 +1,5 @@
 #include "pipeline_event.hpp"
-#include "device.hpp"
+#include "vulkan/device.hpp"
 
 namespace Vulkan
 {

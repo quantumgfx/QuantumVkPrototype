@@ -96,8 +96,6 @@ namespace Vulkan
 #endif
 		if (table.vkCreateRenderPass(device->GetDevice(), &info, nullptr, &render_pass) != VK_SUCCESS)
 			QM_LOG_ERROR("Failed to create render pass.");
-
-		device->register_render_pass(render_pass, get_hash(), create_info);
 	}
 
 	RenderPass::RenderPass(Hash hash, Device* device_, const RenderPassInfo& info)
@@ -794,8 +792,6 @@ namespace Vulkan
 		auto& table = device->GetDeviceTable();
 		if (table.vkCreateRenderPass(device->GetDevice(), &rp_info, nullptr, &render_pass) != VK_SUCCESS)
 			QM_LOG_ERROR("Failed to create render pass.");
-
-		device->register_render_pass(render_pass, get_hash(), rp_info);
 	}
 
 	void RenderPass::FixupWsiBarrier(VkRenderPassCreateInfo& create_info, VkAttachmentDescription* attachments)

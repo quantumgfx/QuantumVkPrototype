@@ -3,12 +3,15 @@
 #include "utils/hash.hpp"
 #include "utils/intrusive.hpp"
 #include "utils/enum_cast.hpp"
+#include "utils/object_pool.hpp"
 
 #include "descriptor_set.hpp"
 
 #include "vulkan/misc/cookie.hpp"
 #include "vulkan/misc/limits.hpp"
 #include "vulkan/vulkan_headers.hpp"
+
+#include <variant>
 
 namespace spirv_cross
 {
@@ -31,6 +34,12 @@ namespace Vulkan
 		Count
 	};
 
+	enum class ProgramType
+	{
+		Graphics = 0,
+		Compute
+	};
+
 	// Specifies the layout of resources in a shader
 	struct ResourceLayout
 	{
@@ -40,21 +49,6 @@ namespace Vulkan
 		uint32_t spec_constant_mask = 0;
 		uint32_t bindless_set_mask = 0;
 		DescriptorSetLayout sets[VULKAN_NUM_DESCRIPTOR_SETS];
-	};
-
-	struct CombinedResourceLayout
-	{
-		uint32_t attribute_mask = 0;
-		uint32_t render_target_mask = 0;
-		DescriptorSetLayout sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
-		uint32_t stages_for_bindings[VULKAN_NUM_DESCRIPTOR_SETS][VULKAN_NUM_BINDINGS] = {};
-		uint32_t stages_for_sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
-		VkPushConstantRange push_constant_range = {};
-		uint32_t descriptor_set_mask = 0;
-		uint32_t bindless_descriptor_set_mask = 0;
-		uint32_t spec_constant_mask[Util::ecast(ShaderStage::Count)] = {};
-		uint32_t combined_spec_constant_mask = 0;
-		Util::Hash push_constant_layout_hash = 0;
 	};
 
 	struct ResourceBinding
@@ -79,46 +73,19 @@ namespace Vulkan
 		uint8_t push_constant_data[VULKAN_PUSH_CONSTANT_SIZE];
 	};
 
-	class PipelineLayout : public HashedObject<PipelineLayout>
+	class Shader;
+
+	struct ShaderDeleter
 	{
-	public:
-		PipelineLayout(Util::Hash hash, Device* device, const CombinedResourceLayout& layout);
-		~PipelineLayout();
-
-		const CombinedResourceLayout& GetResourceLayout() const
-		{
-			return layout;
-		}
-
-		VkPipelineLayout GetLayout() const
-		{
-			return pipe_layout;
-		}
-
-		DescriptorSetAllocator* GetAllocator(unsigned set) const
-		{
-			return set_allocators[set];
-		}
-
-		VkDescriptorUpdateTemplateKHR GetUpdateTemplate(unsigned set) const
-		{
-			return update_template[set];
-		}
-
-	private:
-		Device* device;
-		VkPipelineLayout pipe_layout = VK_NULL_HANDLE;
-		CombinedResourceLayout layout;
-		DescriptorSetAllocator* set_allocators[VULKAN_NUM_DESCRIPTOR_SETS] = {};
-		VkDescriptorUpdateTemplateKHR update_template[VULKAN_NUM_DESCRIPTOR_SETS] = {};
-		void CreateUpdateTemplates();
+		void operator()(Shader* shader);
 	};
 
 	// Essentially just a vkShaderModule
-	class Shader : public HashedObject<Shader>
+	class Shader : public Util::IntrusivePtrEnabled<Shader, ShaderDeleter, HandleCounter>, public InternalSyncEnabled
 	{
 	public:
-		Shader(Util::Hash hash, Device* device, const uint32_t* data, size_t size);
+
+		friend struct ShaderDeleter;
 		~Shader();
 
 		const ResourceLayout& GetLayout() const
@@ -131,9 +98,21 @@ namespace Vulkan
 			return module;
 		}
 
+		Util::Hash GetHash() const
+		{
+			return hash;
+		}
+
 		static const char* StageToName(ShaderStage stage);
 
 	private:
+
+		friend class Util::ObjectPool<Shader>;
+
+		Shader(Device* device, const uint32_t* data, size_t size);
+
+		Util::Hash hash;
+
 		Device* device;
 		VkShaderModule module;
 		ResourceLayout layout;
@@ -141,39 +120,157 @@ namespace Vulkan
 		void UpdateArrayInfo(const spirv_cross::SPIRType& type, unsigned set, unsigned binding);
 	};
 
-	// Represents multiple shaders bound together into a sequence. Contains pipeline layout, shaders and pipeline cache (all the possible different combinations of state info).
-	// The actual pipelines are created in the command buffers
-	class Program : public HashedObject<Program>, public InternalSyncEnabled
+	using ShaderHandle = Util::IntrusivePtr<Shader>;
+
+	// Forward declaration
+	class Program;
+
+	// Contains imformation about the resources used by a program.
+	class PipelineLayout
+	{
+
+	public:
+
+		PipelineLayout(Device* device);
+		~PipelineLayout();
+
+		Util::Hash GetHash() const { VK_ASSERT(hash); return hash; }
+
+		VkPipelineLayout GetVkLayout() const { return vklayout; }
+		uint32_t GetAttribMask() const { return attribute_mask; }
+		uint32_t GetRenderTargetMask() const { return render_target_mask; }
+		uint32_t GetSpecConstantMask(ShaderStage stage) const { return spec_constant_mask[static_cast<uint32_t>(stage)]; }
+		uint32_t GetCombindedSpecConstantMask() const { return combined_spec_constant_mask; }
+		const VkPushConstantRange& GetPushConstantRange() const { return push_constant_range; }
+
+		uint32_t GetDescriptorSetMask() const { return descriptor_set_mask; }
+		uint32_t GetBindlessDescriptorSetMask() const { return bindless_descriptor_set_mask; }
+		const DescriptorSetLayout& GetSetLayout(uint32_t set) const { return sets[set]; }
+		DescriptorSetAllocator* GetSetAllocator(uint32_t set) const { return set_allocators[set]; }
+		VkDescriptorUpdateTemplateKHR GetSetUpdateTemplate(uint32_t set) const { return update_templates[set]; }
+
+		void CreateLayout(Program& program);
+
+	private:
+
+		void CreateUpdateTemplates();
+
+		Util::Hash hash;
+
+		Device* device;
+
+		VkPipelineLayout vklayout = VK_NULL_HANDLE;
+		uint32_t attribute_mask = 0;
+		uint32_t render_target_mask = 0;
+		uint32_t spec_constant_mask[Util::ecast(ShaderStage::Count)] = {};
+		uint32_t combined_spec_constant_mask = 0;
+
+		VkPushConstantRange push_constant_range = {};
+
+		uint32_t descriptor_set_mask = 0;
+		uint32_t bindless_descriptor_set_mask = 0;
+
+		DescriptorSetLayout sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
+		DescriptorSetAllocator* set_allocators[VULKAN_NUM_DESCRIPTOR_SETS] = {};
+		VkDescriptorUpdateTemplateKHR update_templates[VULKAN_NUM_DESCRIPTOR_SETS] = {};
+
+	};
+
+	// Functor to delete Program
+	struct ProgramDeleter
+	{
+		void operator()(Program* program);
+	};
+
+	// Modules to create graphics program
+	struct GraphicsProgramShaders
+	{
+		ShaderHandle vertex;
+		ShaderHandle tess_control;
+		ShaderHandle tess_eval;
+		ShaderHandle geometry;
+		ShaderHandle fragment;
+	};
+
+	// Modules to crate compute program
+	struct ComputeProgramShaders
+	{
+		ShaderHandle compute;
+	};
+
+	// Represents multiple shaders bound together into a sequence. Contains pipeline layout, shaders, descriptor_info, and pipeline_cache (all the possible different combinations of state info).
+	// The actual pipelines are created in the command buffers. 
+	class Program : public Util::IntrusivePtrEnabled<Program, ProgramDeleter, HandleCounter>
 	{
 	public:
-		Program(Device* device, Shader* vertex, Shader* fragment);
-		Program(Device* device, Shader* compute);
+
+		friend struct ProgramDeleter;
+
 		~Program();
 
-		inline const Shader* GetShader(ShaderStage stage) const
+		bool HasShader(ShaderStage stage) const
 		{
-			return shaders[Util::ecast(stage)];
+			if (shaders.index() == 0)
+				if (stage == ShaderStage::Vertex || stage == ShaderStage::Fragment || stage == ShaderStage::TessControl || stage == ShaderStage::TessEvaluation || stage == ShaderStage::Geometry)
+					return true;
+			if (shaders.index() == 1)
+				if (stage == ShaderStage::Compute)
+					return true;
+			return false;
 		}
 
-		void SetPipelineLayout(PipelineLayout* new_layout)
+		ShaderHandle GetShader(ShaderStage stage) const
 		{
-			layout = new_layout;
+			switch (stage)
+			{
+			case Vulkan::ShaderStage::Vertex:         VK_ASSERT(shaders.index() == 0); return std::get<0>(shaders).vertex;
+			case Vulkan::ShaderStage::TessControl:    VK_ASSERT(shaders.index() == 0); return std::get<0>(shaders).tess_control;
+			case Vulkan::ShaderStage::TessEvaluation: VK_ASSERT(shaders.index() == 0); return std::get<0>(shaders).tess_eval;
+			case Vulkan::ShaderStage::Geometry:       VK_ASSERT(shaders.index() == 0); return std::get<0>(shaders).geometry;
+			case Vulkan::ShaderStage::Fragment:       VK_ASSERT(shaders.index() == 0); return std::get<0>(shaders).fragment;
+			case Vulkan::ShaderStage::Compute:        VK_ASSERT(shaders.index() == 1); return std::get<1>(shaders).compute;
+			default: return ShaderHandle{ nullptr };
+			}
 		}
 
-		PipelineLayout* GetPipelineLayout() const
+		ProgramType GetProgramType()
 		{
-			return layout;
+			return shaders.index() == 0 ? ProgramType::Graphics : ProgramType::Compute;
+		}
+
+		Util::Hash GetHash() const
+		{
+			return hash;
+		}
+
+		PipelineLayout& GetLayout()
+		{
+			return pipeline_layout;
 		}
 
 		VkPipeline GetPipeline(Util::Hash hash) const;
 		VkPipeline AddPipeline(Util::Hash hash, VkPipeline pipeline);
 
 	private:
-		void SetShader(ShaderStage stage, Shader* handle);
+
+		friend class Util::ObjectPool<Program>;
+
+		// Create graphics program
+		Program(Device* device, const GraphicsProgramShaders& graphics_shaders);
+		// Compute pipeline
+		Program(Device* device, const ComputeProgramShaders& compute_shaders);
+
+	private:
+
+		Util::Hash hash;
 		Device* device;
-		Shader* shaders[Util::ecast(ShaderStage::Count)] = {};
-		PipelineLayout* layout = nullptr;
+
+		std::variant<GraphicsProgramShaders, ComputeProgramShaders> shaders;
+
 		VulkanCache<Util::IntrusivePODWrapper<VkPipeline>> pipelines;
+
+		PipelineLayout pipeline_layout;
 	};
 
+	using ProgramHandle = Util::IntrusivePtr<Program>;
 }
