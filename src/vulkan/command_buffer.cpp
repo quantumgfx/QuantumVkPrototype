@@ -51,7 +51,7 @@ namespace Vulkan
 
 	void CommandBuffer::CopyBuffer(const Buffer& dst, const Buffer& src)
 	{
-		VK_ASSERT(dst.get_create_info().size == src.get_create_info().size);
+		VK_ASSERT(dst.GetCreateInfo().size == src.GetCreateInfo().size);
 		CopyBuffer(dst, 0, src, 0, dst.GetAllocation().size);
 	}
 
@@ -1591,7 +1591,7 @@ namespace Vulkan
 
 	void CommandBuffer::SetUnormTexture(unsigned set, unsigned binding, const ImageView& view)
 	{
-		VK_ASSERT(view.get_image().get_create_info().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
+		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
 		auto unorm_view = view.GetUnormView();
 		VK_ASSERT(unorm_view != VK_NULL_HANDLE);
 		SetTexture(set, binding, unorm_view, unorm_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie() | COOKIE_BIT_UNORM);
@@ -1599,7 +1599,7 @@ namespace Vulkan
 
 	void CommandBuffer::SetSrgbTexture(unsigned set, unsigned binding, const ImageView& view)
 	{
-		VK_ASSERT(view.get_image().get_create_info().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
+		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
 		auto srgb_view = view.GetSRGBView();
 		VK_ASSERT(srgb_view != VK_NULL_HANDLE);
 		SetTexture(set, binding, srgb_view, srgb_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie() | COOKIE_BIT_SRGB);
@@ -1615,7 +1615,7 @@ namespace Vulkan
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
-		VK_ASSERT(view.get_image().get_create_info().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
+		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
 		const auto& sampler = device->GetStockSampler(stock);
 		SetTexture(set, binding, view, sampler);
 	}

@@ -262,7 +262,7 @@ namespace Vulkan
 #if defined(VULKAN_DEBUG) && defined(SUBMIT_DEBUG)
 			if (ext->timeline_semaphore_features.timelineSemaphore)
 			{
-				LOGI("Signal compute: (%p) %u\n",
+				QM_LOG_INFO("Signal compute: (%p) %u\n",
 					reinterpret_cast<void*>(timeline_semaphore),
 					unsigned(data.current_timeline));
 			}
@@ -272,9 +272,9 @@ namespace Vulkan
 		case CommandBuffer::Type::AsyncTransfer:
 			Frame().timeline_fence_transfer = data.current_timeline;
 #if defined(VULKAN_DEBUG) && defined(SUBMIT_DEBUG)
-			if (ext.timeline_semaphore_features.timelineSemaphore)
+			if (ext->timeline_semaphore_features.timelineSemaphore)
 			{
-				LOGI("Signal transfer: (%p) %u\n",
+				QM_LOG_INFO("Signal transfer: (%p) %u\n",
 					reinterpret_cast<void*>(timeline_semaphore),
 					unsigned(data.current_timeline));
 			}
@@ -368,7 +368,7 @@ namespace Vulkan
 			queue_lock_callback();
 #if defined(VULKAN_DEBUG) && defined(SUBMIT_DEBUG)
 		if (cleared_fence)
-			LOGI("Signalling Fence: %llx\n", reinterpret_cast<unsigned long long>(cleared_fence));
+			QM_LOG_INFO("Signalling Fence: %llx\n", reinterpret_cast<unsigned long long>(cleared_fence));
 #endif
 
 		VkResult result = table->vkQueueSubmit(queue, 1, &submit, cleared_fence);
@@ -402,9 +402,9 @@ namespace Vulkan
 		QM_LOG_INFO("Empty submission to %s queue:\n", queue_name);
 		for (uint32_t i = 0; i < submit.waitSemaphoreCount; i++)
 		{
-			QM_LOG_INFO("  Waiting for semaphore: %llx in stages %s\n",
-				reinterpret_cast<unsigned long long>(submit.pWaitSemaphores[i]),
-				stage_flags_to_string(submit.pWaitDstStageMask[i]).c_str());
+			//QM_LOG_INFO("  Waiting for semaphore: %llx in stages %s\n",
+				//reinterpret_cast<unsigned long long>(submit.pWaitSemaphores[i]),
+				//stage_flags_to_string(submit.pWaitDstStageMask[i]).c_str());
 		}
 
 		for (uint32_t i = 0; i < submit.signalSemaphoreCount; i++)
@@ -806,9 +806,9 @@ namespace Vulkan
 			QM_LOG_INFO("Submission to %s queue:\n", queue_name);
 			for (uint32_t i = 0; i < submit.waitSemaphoreCount; i++)
 			{
-				QM_LOG_INFO("  Waiting for semaphore: %llx in stages %s\n",
-					reinterpret_cast<unsigned long long>(submit.pWaitSemaphores[i]),
-					stage_flags_to_string(submit.pWaitDstStageMask[i]).c_str());
+				//QM_LOG_INFO("  Waiting for semaphore: %llx in stages %s\n",
+					//reinterpret_cast<unsigned long long>(submit.pWaitSemaphores[i]),
+					//StageFlagsToString(submit.pWaitDstStageMask[i]).c_str());
 			}
 
 			for (uint32_t i = 0; i < submit.commandBufferCount; i++)

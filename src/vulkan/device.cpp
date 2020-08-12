@@ -536,10 +536,6 @@ namespace Vulkan
 		return Fence(handle_pool.fences.allocate(this, fence));
 	}
 
-	
-
-	
-
 	void Device::FlushFrame(CommandBuffer::Type type)
 	{
 		if (type == CommandBuffer::Type::AsyncTransfer)
@@ -591,6 +587,7 @@ namespace Vulkan
 		DRAIN_FRAME_LOCK();
 		EndFrameNolock();
 	}
+
 	void Device::EndFrameNolock()
 	{
 		// Kept handles alive until end-of-frame, free now if appropriate.
@@ -1005,13 +1002,13 @@ namespace Vulkan
 
 	void Device::DestroyImageNolock(VkImage image, const DeviceAllocation& allocation)
 	{
-		VK_ASSERT(!exists(Frame().destroyed_images, std::make_pair(image, allocation)));
+		//VK_ASSERT(!exists(Frame().destroyed_images, std::make_pair(image, allocation)));
 		Frame().destroyed_images.push_back(std::make_pair(image, allocation));
 	}
 
 	void Device::DestroyBufferNolock(VkBuffer buffer, const DeviceAllocation& allocation)
 	{
-		VK_ASSERT(!exists(Frame().destroyed_buffers, std::make_pair(buffer, allocation)));
+		//VK_ASSERT(!exists(Frame().destroyed_buffers, std::make_pair(buffer, allocation)));
 		Frame().destroyed_buffers.push_back(std::make_pair(buffer, allocation));
 	}
 
@@ -1050,15 +1047,15 @@ namespace Vulkan
 			const uint64_t values[3] = { timeline_fence_graphics, timeline_fence_compute, timeline_fence_transfer };
 
 #if defined(VULKAN_DEBUG) && defined(SUBMIT_DEBUG)
-			if (device.get_device_features().timeline_semaphore_features.timelineSemaphore)
+			if (device.GetDeviceFeatures().timeline_semaphore_features.timelineSemaphore)
 			{
-				LOGI("Waiting for graphics (%p) %u\n",
+				QM_LOG_INFO("Waiting for graphics (%p) %u\n",
 					reinterpret_cast<void*>(graphics_timeline_semaphore),
 					unsigned(timeline_fence_graphics));
-				LOGI("Waiting for compute (%p) %u\n",
+				QM_LOG_INFO("Waiting for compute (%p) %u\n",
 					reinterpret_cast<void*>(compute_timeline_semaphore),
 					unsigned(timeline_fence_compute));
-				LOGI("Waiting for transfer (%p) %u\n",
+				QM_LOG_INFO("Waiting for transfer (%p) %u\n",
 					reinterpret_cast<void*>(transfer_timeline_semaphore),
 					unsigned(timeline_fence_transfer));
 			}
@@ -1075,7 +1072,7 @@ namespace Vulkan
 		{
 #if defined(VULKAN_DEBUG) && defined(SUBMIT_DEBUG)
 			for (auto& fence : wait_fences)
-				LOGI("Waiting for Fence: %llx\n", reinterpret_cast<unsigned long long>(fence));
+				QM_LOG_INFO("Waiting for Fence: %llx\n", reinterpret_cast<unsigned long long>(fence));
 #endif
 			table.vkWaitForFences(vkdevice, wait_fences.size(), wait_fences.data(), VK_TRUE, UINT64_MAX);
 			wait_fences.clear();
@@ -1086,7 +1083,7 @@ namespace Vulkan
 		{
 #if defined(VULKAN_DEBUG) && defined(SUBMIT_DEBUG)
 			for (auto& fence : recycle_fences)
-				LOGI("Recycling Fence: %llx\n", reinterpret_cast<unsigned long long>(fence));
+				QM_LOG_INFO("Recycling Fence: %llx\n", reinterpret_cast<unsigned long long>(fence));
 #endif
 			table.vkResetFences(vkdevice, recycle_fences.size(), recycle_fences.data());
 			for (auto& fence : recycle_fences)
@@ -1266,6 +1263,7 @@ namespace Vulkan
 			});
 
 		VK_ASSERT(!per_frame.empty());
+
 		frame_context_index++;
 		if (frame_context_index >= per_frame.size())
 			frame_context_index = 0;

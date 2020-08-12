@@ -55,7 +55,7 @@ namespace Vulkan
 	void CommandPool::SignalSubmitted(VkCommandBuffer cmd)
 	{
 #ifdef VULKAN_DEBUG
-		VK_ASSERT(in_flight.find(cmd) != end(in_flight));
+		VK_ASSERT(in_flight.find(cmd) != std::end(in_flight));
 		in_flight.erase(cmd);
 #else
 		(void)cmd;
@@ -113,7 +113,7 @@ namespace Vulkan
 
 			table->vkAllocateCommandBuffers(device->GetDevice(), &info, &cmd);
 #ifdef VULKAN_DEBUG
-			VK_ASSERT(in_flight.find(cmd) == end(in_flight));
+			VK_ASSERT(in_flight.find(cmd) == std::end(in_flight));
 			in_flight.insert(cmd);
 #endif
 			buffers.push_back(cmd);

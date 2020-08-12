@@ -15,18 +15,6 @@ elseif (MSVC)
     set(QM_CXX_FLAGS /D_CRT_SECURE_NO_WARNINGS /wd4267 /wd4244 /wd4309 /wd4005 /MP /DNOMINMAX)
 endif()
 
-macro(set_static_lib_output_dir target dir)
-	if(TARGET ${target})
-		set_target_properties(${target} PROPERTIES CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${dir})
-	endif()
-endmacro()
-
-macro(set_executable_output_dir target dir)
-	if(TARGET ${target})
-		set_target_properties(${target} PROPERTIES CMAKE_RUNTIME_OUTPUT_DIRECTORY ${dir})
-	endif()
-endmacro()
-
 macro(set_sln_folder target folder)
 	if(TARGET ${target})
 		set_target_properties(${target} PROPERTIES FOLDER ${folder})
@@ -57,18 +45,21 @@ set(DEFAULT_VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
 
 # Options
 option(QM_VULKAN_MT "Make QuantumVk thread-safe." ON)
-set(VULKAN_SDK_DIR ${DEFAULT_VULKAN_SDK_DIR} CACHE PATH "Directory of vulkan SDK")
+# set(VULKAN_SDK_DIR ${DEFAULT_VULKAN_SDK_DIR} CACHE PATH "Directory of Vulkan SDK")
+set(VULKAN_SDK_DIR C:/VulkanSDK/1.2.148.1)
 # ------------------------------
 
 # -----------Volk---------------
 add_library(volk STATIC extern/volk/volk.c extern/volk/volk.h)
-set_static_lib_output_dir(volk ${CMAKE_CURRENT_SOURCE_DIR}/bin/volk)
 if (NOT WIN32)
     target_link_libraries(volk PRIVATE dl)
 endif()
 
 target_include_directories(volk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/extern/volk)
 target_include_directories(volk PUBLIC "${VULKAN_SDK_DIR}/Include")
+
+message("Vulkan Include directory: ${VULKAN_SDK_DIR}/Include")
+
 set_sln_folder(volk Dependencies)
 
 if (WIN32)
@@ -126,7 +117,6 @@ set_sln_folder(spirv-cross-util SPIRV-Cross)
 
 # QuantumVk Library
 add_library(QuantumVk STATIC)
-set_static_lib_output_dir(QuantumVk ${CMAKE_CURRENT_SOURCE_DIR}/bin/QuantumVk)
 # Include Directories
 target_include_directories(QuantumVk PUBLIC "${VULKAN_SDK_DIR}/Include")
 target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -229,7 +219,6 @@ target_compile_options(QuantumVk PRIVATE ${QM_CXX_FLAGS})
 # --------------------------------
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/tests/example)
-set_executable_output_dir(Example ${CMAKE_CURRENT_SOURCE_DIR}/bin/Example)
 
 if(MSVC)
 	set(VS_STARTUP_PROJECT Example)

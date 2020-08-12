@@ -22,6 +22,8 @@ namespace Vulkan
 
 	bool Context::InitLoader(PFN_vkGetInstanceProcAddr addr)
 	{
+		QM_LOG_INFO("Loading Vulkan Dynamic Library.\n");
+
 		std::lock_guard holder(loader_init_lock);
 		if (loader_init_once && !addr)
 			return true;
@@ -422,8 +424,10 @@ namespace Vulkan
 		info.enabledLayerCount = static_cast<uint32_t>(instance_layers.size());
 		info.ppEnabledLayerNames = instance_layers.empty() ? nullptr : instance_layers.data();
 
+		QM_LOG_INFO("-------------------Vulkan Instance Extensions------------------------\n");
 		for (auto* ext_name : instance_exts)
 			QM_LOG_INFO("Enabling instance extension: %s.\n", ext_name);
+		QM_LOG_INFO("---------------------------------------------------------------------\n");
 
 		if (instance == VK_NULL_HANDLE)
 			if (vkCreateInstance(&info, nullptr, &instance) != VK_SUCCESS)
@@ -481,6 +485,7 @@ namespace Vulkan
 			if (vkEnumeratePhysicalDevices(instance, &gpu_count, gpus.data()) != VK_SUCCESS)
 				return false;
 
+			QM_LOG_INFO("Searching for GPUS:\n");
 			for (auto& g : gpus)
 			{
 				VkPhysicalDeviceProperties props;
@@ -1084,8 +1089,10 @@ namespace Vulkan
 		device_info.enabledLayerCount = static_cast<uint32_t>(enabled_layers.size());
 		device_info.ppEnabledLayerNames = enabled_layers.empty() ? nullptr : enabled_layers.data();
 
+		QM_LOG_INFO("--------------------Vulkan Device Extensions------------------------\n");
 		for (auto* enabled_extension : enabled_extensions)
 			QM_LOG_INFO("Enabling device extension: %s.\n", enabled_extension);
+		QM_LOG_INFO("--------------------------------------------------------------------\n");
 
 		if (vkCreateDevice(gpu, &device_info, nullptr, &device) != VK_SUCCESS)
 			return false;

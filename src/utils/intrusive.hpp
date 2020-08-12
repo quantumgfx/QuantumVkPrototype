@@ -177,7 +177,7 @@ namespace Util
 			// Static up-cast here to avoid potential issues with multiple intrusive inheritance.
 			// Also makes sure that the pointer type actually inherits from this type.
 			if (data)
-				static_cast<ReferenceBase*>(data)->AddRef();
+				static_cast<ReferenceBase*>(data)->ReleaseReference();
 			data = nullptr;
 		}
 

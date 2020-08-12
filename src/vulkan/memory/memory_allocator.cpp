@@ -42,9 +42,9 @@ namespace Vulkan
 		create_info.pRecordSettings = nullptr;
 		create_info.pVulkanFunctions = &vulkan_function_ptrs;
 		if (device->GetDeviceFeatures().supports_vulkan_11_device || device->GetDeviceFeatures().supports_vulkan_12_device)
-			create_info.vulkanApiVersion = VK_VERSION_1_1;
+			create_info.vulkanApiVersion = VK_MAKE_VERSION(1, 1, 0);
 		else
-			create_info.vulkanApiVersion = VK_VERSION_1_0;
+			create_info.vulkanApiVersion = VK_MAKE_VERSION(1, 0, 0);
 		create_info.instance = device->GetInstance();
 		create_info.physicalDevice = device->GetPhysicalDevice();
 		create_info.device = device->GetDevice();

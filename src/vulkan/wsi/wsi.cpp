@@ -265,7 +265,11 @@ namespace Vulkan
 		}
 
 		if (has_acquired_swapchain_index)
+		{
+			// Poll input because this is supossed to be called every frame
+			platform->PollInput();
 			return true;
+		}
 
 		external_release.Reset();
 
@@ -516,6 +520,20 @@ namespace Vulkan
 		context.reset();
 
 		using_display_timing = false;
+	}
+
+	static inline const char* PresentModeToString(VkPresentModeKHR mode)
+	{
+		switch (mode)
+		{
+		case VK_PRESENT_MODE_IMMEDIATE_KHR:                 return "Immediate";
+		case VK_PRESENT_MODE_MAILBOX_KHR:                   return "Mailbox";
+		case VK_PRESENT_MODE_FIFO_KHR:                      return "Fifo";
+		case VK_PRESENT_MODE_FIFO_RELAXED_KHR:              return "Fifo Relaxed";
+		case VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR:     return "Shared demand refresh";
+		case VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR: return "Shared continuous refresh";
+		default:                                            return "Unknown";
+		}
 	}
 
 	bool WSI::BlockingInitSwapchain(unsigned width, unsigned height)
@@ -772,7 +790,7 @@ namespace Vulkan
 
 		uint32_t num_present_modes;
 
-		vector<VkPresentModeKHR> present_modes;
+		std::vector<VkPresentModeKHR> present_modes;
 
 #ifdef _WIN32
 		if (use_surface_info && device->GetDeviceFeatures().supports_full_screen_exclusive)
@@ -823,6 +841,7 @@ namespace Vulkan
 			}
 		}
 
+		QM_LOG_INFO("Swapchain Present Mode: %s\n", PresentModeToString(swapchain_present_mode));
 		QM_LOG_INFO("Targeting %u swapchain images.\n", desired_swapchain_images);
 
 		if (desired_swapchain_images < surface_properties.minImageCount)

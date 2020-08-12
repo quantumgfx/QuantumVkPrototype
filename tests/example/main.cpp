@@ -4,6 +4,7 @@
 #include <thread>
 
 #include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 
 struct GLFWPlatform : public Vulkan::WSIPlatform
 {
@@ -55,7 +56,6 @@ struct GLFWPlatform : public Vulkan::WSIPlatform
 
 	virtual bool Alive(Vulkan::WSI& wsi)
 	{
-		glfwPollEvents();
 		return !glfwWindowShouldClose(window);
 	}
 
@@ -74,46 +74,54 @@ int main()
 {
 	glfwInit();
 
+	if (!Vulkan::Context::InitLoader(nullptr))
+		QM_LOG_ERROR("Failed to load vulkan dynamic library");
+
 	{
 		GLFWPlatform platform;
 
+		Vulkan::WSI wsi;
+		wsi.SetPlatform(&platform);
+		wsi.SetBackbufferSrgb(true);
+		wsi.Init(1, nullptr, 0);
 
-		while (!glfwWindowShouldClose(platform.window)) 
+		Vulkan::Device& device = wsi.GetDevice();
+
+		Util::Timer timer;
+		timer.start();
+
+		uint64_t loops = 0;
+		while (platform.Alive(wsi)) 
 		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(16));
-			platform.PollInput();
+			//std::this_thread::sleep_for(std::chrono::milliseconds(16));
+			wsi.BeginFrame();
+			{
+				auto cmd = device.RequestCommandBuffer();
+
+				// Just render a clear color to screen.
+				// There is a lot of stuff going on in these few calls which will need its own sample to explore w.r.t. synchronization.
+				// For now, you'll just get a blue-ish color on screen.
+				Vulkan::RenderPassInfo rp = device.GetSwapchainRenderPass(Vulkan::SwapchainRenderPass::ColorOnly);
+				rp.clear_color[0].float32[0] = 0.1f;
+				rp.clear_color[0].float32[1] = 0.2f;
+				rp.clear_color[0].float32[2] = 0.3f;
+				cmd->BeginRenderPass(rp);
+				cmd->EndRenderPass();
+				device.Submit(cmd);
+			}
+
+			wsi.EndFrame();
+
+			loops++;
 		}
+
+		float time_milli = timer.end()/(float)loops * 1000;
+
+		QM_LOG_INFO("Average Frame time (ms): %f\n", time_milli);
 	}
 	
 
 
 	glfwTerminate();
-
-
-
-	/*if (Vulkan::Context::InitLoader(nullptr))
-		std::cout << "Initing Vulkan loader successful\n";
-	else
-		std::cout << "Initing Vulkan loader usuccessful\n";
-
-	Vulkan::Context* context = new Vulkan::Context();
-	context->InitInstanceAndDevice(nullptr, 0, nullptr, 0);
-	Vulkan::Device* device = new Vulkan::Device();
-	device->SetContext(context, nullptr, 0);
-
-	{
-
-		Vulkan::ShaderHandle vert_shader = device->CreateShader(nullptr, 0);
-		Vulkan::ShaderHandle frag_shader = device->CreateShader(nullptr, 0);
-
-		Vulkan::GraphicsProgramShaders program_shaders;
-		program_shaders.vertex = vert_shader;
-		program_shaders.fragment = frag_shader;
-
-		Vulkan::ProgramHandle program = device->CreateGraphicsProgram(program_shaders);
-
-	}
-
-	delete device;
-	delete context;*/
+	
 }
