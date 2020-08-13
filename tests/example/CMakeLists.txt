@@ -43,7 +43,6 @@ target_sources(GLFW PUBLIC
 			
 target_compile_definitions(GLFW PUBLIC _GLFW_X1)
 endif()
-		
 
 add_executable(Example "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
 target_link_libraries(Example PRIVATE QuantumVk)

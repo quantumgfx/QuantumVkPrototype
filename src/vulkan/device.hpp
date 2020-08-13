@@ -76,15 +76,6 @@ namespace Vulkan
 		VulkanObjectPool<Program> programs;
 	};
 
-	struct FossilizeReplayer
-	{
-		std::unordered_map<VkShaderModule, Shader*> shader_map;
-		std::unordered_map<VkRenderPass, RenderPass*> render_pass_map;
-#ifdef QM_VULKAN_MT
-		Quantum::TaskGroup pipeline_group;
-#endif
-	};
-
 	// Pending buffers which need to be copied from CPU to GPU before submitting graphics or compute work.
 	struct DmaQueues
 	{
@@ -597,11 +588,6 @@ namespace Vulkan
 		void EndFrameNolock();
 
 		Fence RequestLegacyFence();
-
-	#ifdef QM_VULKAN_FILESYSTEM
-		ShaderManager shader_manager;
-		TextureManager texture_manager;
-	#endif
 
 		ImplementationWorkarounds workarounds;
 		void InitWorkarounds();

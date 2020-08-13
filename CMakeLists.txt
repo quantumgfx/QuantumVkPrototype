@@ -21,9 +21,10 @@ macro(set_sln_folder target folder)
 	endif()
 endmacro()
 
-macro(override_option setting value)
-	set(${setting} ${value} CACHE INTERNAL "" FORCE)
-endmacro()
+#macro(override_option setting value)
+#	set(${setting} ${value} CACHE INTERNAL "" FORCE)
+#endmacro()
+
 
 # global project stuff
 # put cmake build stuff in there own groups
@@ -41,12 +42,11 @@ endif()
 
 # Get Default vulkan sdk directory
 set(DEFAULT_VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
-# set(QM_VULKAN_FOSSILIZE ON)
 
 # Options
 option(QM_VULKAN_MT "Make QuantumVk thread-safe." ON)
-# set(VULKAN_SDK_DIR ${DEFAULT_VULKAN_SDK_DIR} CACHE PATH "Directory of Vulkan SDK")
-set(VULKAN_SDK_DIR C:/VulkanSDK/1.2.148.1)
+
+set(VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
 # ------------------------------
 
 # -----------Volk---------------
@@ -67,52 +67,38 @@ if (WIN32)
 endif()
 # -------------------------------
 
-# --------SPIRV-Cross------------
-# override spirv settings
-override_option(SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS OFF)
-override_option(SPIRV_CROSS_SHARED OFF)
-override_option(SPIRV_CROSS_STATIC ON)
-override_option(SPIRV_CROSS_CLI OFF)
+add_subdirectory(extern EXCLUDE_FROM_ALL)
+# -------------------------------
 
-override_option(SPIRV_CROSS_ENABLE_TESTS OFF)
-override_option(SPIRV_CROSS_ENABLE_GLSL OFF)
-override_option(SPIRV_CROSS_ENABLE_HLSL OFF)
-override_option(SPIRV_CROSS_ENABLE_MSL OFF)
-override_option(SPIRV_CROSS_ENABLE_CPP OFF)
-override_option(SPIRV_CROSS_ENABLE_REFLECT OFF)
-override_option(SPIRV_CROSS_ENABLE_C_API OFF)
-override_option(SPIRV_CROSS_ENABLE_UTIL OFF)
+# -----------shaderc-------------
+#override_option(SHADERC_ENABLE_SPVC OFF)
+##override_option(SHADERC_ENABLE_WGSL_OUTPUT OFF)
+#override_option(SHADERC_SKIP_INSTALL ON)
+#override_option(SHADERC_SKIP_TESTS ON)
+#override_option(SHADERC_SPVC_ENABLE_DIRECT_LOGGING OFF)
+#override_option(SHADERC_SPVC_DISABLE_CONTEXT_LOGGING OFF)
+#override_option(SHADERC_ENABLE_WERROR_COMPILE OFF)
+#override_option(SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS OFF)
+#override_option(SHADERC_ENABLE_SHARED_CRT OFF)
 
-override_option(SPIRV_CROSS_SANITIZE_ADDRESS OFF)
-override_option(SPIRV_CROSS_SANITIZE_MEMORY OFF)
-override_option(SPIRV_CROSS_SANITIZE_THREADS OFF)
-override_option(SPIRV_CROSS_SANITIZE_UNDEFINED OFF)
+#override_option(DISABLE_EXCEPTIONS OFF)
+#override_option(DISABLE_RTTI OFF)
+#override_option(ENABLE_CODE_COVERAGE OFF)
 
-override_option(SPIRV_CROSS_NAMESPACE_OVERRIDE "")
-override_option(SPIRV_CROSS_FORCE_STL_TYPES OFF)
+#override_option(SHADERC_EFFCEE_DIR "Unnessasary")
+#override_option(SHADERC_RE2_DIR "Unnessasary")
+#override_option(SHADERC_SPIRV_CROSS_DIR "Unnessasary")
+#override_option(SHADERC_TINT_DIR "Unnessasary")
+#override_option(SHADERC_GOOGLE_TEST_DIR "Unnessasary")
 
-override_option(SPIRV_CROSS_SKIP_INSTALL ON)
+#override_option(ASCIIDOCTOR_EXE "Unnessasary")
 
-override_option(SPIRV_CROSS_WERROR OFF)
-override_option(SPIRV_CROSS_MISC_WARNINGS OFF)
-override_option(SPIRV_CROSS_FORCE_PIC OFF)
+#add_subdirectory(extern/shaderc EXCLUDE_FROM_ALL)
 
-# Sets to not found. These are only used if testing is enabled, which it isn't.
-override_option(spirv-cross-glslang "NOTFOUND")
-override_option(spirv-cross-spirv-as "NOTFOUND")
-override_option(spirv-cross-spirv-val "NOTFOUND")
-override_option(spirv-cross-spirv-opt "NOTFOUND")
-
-add_subdirectory(extern/SPIRV-Cross EXCLUDE_FROM_ALL)
-
-set_sln_folder(spirv-cross SPIRV-Cross)
-set_sln_folder(spirv-cross-core SPIRV-Cross)
-set_sln_folder(spirv-cross-glsl SPIRV-Cross)
-set_sln_folder(spirv-cross-cpp SPIRV-Cross)
-set_sln_folder(spirv-cross-hlsl SPIRV-Cross)
-set_sln_folder(spirv-cross-msl SPIRV-Cross)
-set_sln_folder(spirv-cross-reflect SPIRV-Cross)
-set_sln_folder(spirv-cross-util SPIRV-Cross)
+#set_sln_folder(libshaderc_util Shaderc)
+#set_sln_folder(libshaderc Shaderc)
+#set_sln_folder(glslc Shaderc)
+#set_sln_folder(examples Shaderc)
 # -------------------------------
 
 # QuantumVk Library
@@ -128,6 +114,10 @@ target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/extern)
 # libraries that QuantumVk links to
 target_link_libraries(QuantumVk PUBLIC volk)
 target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
+target_link_libraries(QuantumVk PRIVATE libshaderc)
+
+target_link_libraries(QuantumVk PRIVATE ${VULKAN_SDK_DIR}/Lib/shaderc.lib)
+# target_link_libraries(QuantumVk PRIVATE glslang)
 
 # Src Directories
 set(QM_UTILS_DIR src/utils)
@@ -211,16 +201,12 @@ if (${CMAKE_BUILD_TYPE} MATCHES "Debug")
 endif()
 
 if (WIN32)
-	target_compile_definitions(QuantumVk PRIVATE QM_PLATFORM_WINDOWS)
-	target_compile_definitions(QuantumVk PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+	target_compile_definitions(QuantumVk PUBLIC QM_PLATFORM_WINDOWS)
+	target_compile_definitions(QuantumVk PUBLIC VK_USE_PLATFORM_WIN32_KHR)
 endif()
 	
 target_compile_options(QuantumVk PRIVATE ${QM_CXX_FLAGS})
 # --------------------------------
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/tests/example)
-
-if(MSVC)
-	set(VS_STARTUP_PROJECT Example)
-endif()
 

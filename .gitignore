@@ -1,9 +1,6 @@
-# Binaries
-**/bin/
-**/bin-int/
-
 # cmake output thingy
 
+bin/
 out/
 
 # ImGui config files
@@ -16,4 +13,3 @@ out/
 **.vcxproj.filters
 **.vcxproj.user
 
-CMakeSettings.json

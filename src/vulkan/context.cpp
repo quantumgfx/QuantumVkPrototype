@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <string.h>
 
+#include <shaderc/libshaderc/include/shaderc/shaderc.hpp>
+
 #include <vulkan/vulkan.h>
 
 #ifndef _WIN32
@@ -22,6 +24,8 @@ namespace Vulkan
 
 	bool Context::InitLoader(PFN_vkGetInstanceProcAddr addr)
 	{
+		shaderc::Compiler compile;
+
 		QM_LOG_INFO("Loading Vulkan Dynamic Library.\n");
 
 		std::lock_guard holder(loader_init_lock);
