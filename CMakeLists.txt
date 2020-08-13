@@ -70,37 +70,6 @@ endif()
 add_subdirectory(extern EXCLUDE_FROM_ALL)
 # -------------------------------
 
-# -----------shaderc-------------
-#override_option(SHADERC_ENABLE_SPVC OFF)
-##override_option(SHADERC_ENABLE_WGSL_OUTPUT OFF)
-#override_option(SHADERC_SKIP_INSTALL ON)
-#override_option(SHADERC_SKIP_TESTS ON)
-#override_option(SHADERC_SPVC_ENABLE_DIRECT_LOGGING OFF)
-#override_option(SHADERC_SPVC_DISABLE_CONTEXT_LOGGING OFF)
-#override_option(SHADERC_ENABLE_WERROR_COMPILE OFF)
-#override_option(SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS OFF)
-#override_option(SHADERC_ENABLE_SHARED_CRT OFF)
-
-#override_option(DISABLE_EXCEPTIONS OFF)
-#override_option(DISABLE_RTTI OFF)
-#override_option(ENABLE_CODE_COVERAGE OFF)
-
-#override_option(SHADERC_EFFCEE_DIR "Unnessasary")
-#override_option(SHADERC_RE2_DIR "Unnessasary")
-#override_option(SHADERC_SPIRV_CROSS_DIR "Unnessasary")
-#override_option(SHADERC_TINT_DIR "Unnessasary")
-#override_option(SHADERC_GOOGLE_TEST_DIR "Unnessasary")
-
-#override_option(ASCIIDOCTOR_EXE "Unnessasary")
-
-#add_subdirectory(extern/shaderc EXCLUDE_FROM_ALL)
-
-#set_sln_folder(libshaderc_util Shaderc)
-#set_sln_folder(libshaderc Shaderc)
-#set_sln_folder(glslc Shaderc)
-#set_sln_folder(examples Shaderc)
-# -------------------------------
-
 # QuantumVk Library
 add_library(QuantumVk STATIC)
 # Include Directories
@@ -114,7 +83,8 @@ target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/extern)
 # libraries that QuantumVk links to
 target_link_libraries(QuantumVk PUBLIC volk)
 target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
-target_link_libraries(QuantumVk PRIVATE libshaderc)
+target_link_libraries(QuantumVk PRIVATE glslang)
+target_link_libraries(QuantumVk PRIVATE SPIRV)
 
 target_link_libraries(QuantumVk PRIVATE ${VULKAN_SDK_DIR}/Lib/shaderc.lib)
 # target_link_libraries(QuantumVk PRIVATE glslang)

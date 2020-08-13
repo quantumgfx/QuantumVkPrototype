@@ -7,12 +7,12 @@
 #include "utils/bitops.hpp"
 #include <assert.h>
 #include <memory>
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "vulkan/vulkan_headers.hpp"
-#include <VulkanMemoryAllocator/vk_mem_alloc.h>
+#include <extern/VulkanMemoryAllocator/vk_mem_alloc.h>
 
 #ifdef QM_VULKAN_MT
 #include <mutex>

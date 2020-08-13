@@ -299,10 +299,11 @@ namespace Vulkan
 		void AddWaitSemaphore(CommandBuffer::Type type, Semaphore semaphore, VkPipelineStageFlags stages, bool flush);
 		CommandBuffer::Type GetPhysicalQueueType(CommandBuffer::Type queue_type) const;
 
-		// "Requests" essentially hash the object, check if it exists in the cache and if not creates a new object
-
 		// Creates a new shader using spirv code. Code is stored in 4 byte words. Size variable is the size of the code in bytes
 		ShaderHandle CreateShader(const uint32_t* code, size_t size);
+
+		ShaderHandle CreateShaderGLSL(const char* glsl_code, ShaderStage stage, std::vector<std::string> include_directories = {});
+
 		// Creates a graphics program consting of the shaders specified in shaders
 		ProgramHandle CreateGraphicsProgram(const GraphicsProgramShaders& shaders);
 		// Creates a compute program consting of the shaders specified in shaders
@@ -458,7 +459,9 @@ namespace Vulkan
 		//Creates every type of stock sampler (by creating 1 sampler for each enum type)
 		void InitStockSamplers();
 		void InitTimelineSemaphores();
+		void InitGlslang();
 		void DeinitTimelineSemaphores();
+		void DeinitGlslang();
 
 		// Make sure this is deleted last.
 		HandlePool handle_pool;

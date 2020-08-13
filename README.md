@@ -126,7 +126,6 @@ QuantumVk uses a few libraries internally (they are mostly contained as submodul
 
 - [Volk](https://github.com/zeux/volk): A meta-loader for Vulkan.
 - [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator): A simple to use memory allocation library for Vulkan.
-- [Fossilize](https://github.com/ValveSoftware/Fossilize): Vulkan object serializer, similar to VkPipelineCache but for more objects.
 - [SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross): Library for parsing SPIRV and converting it to and from other languages.
 
 # Current Work

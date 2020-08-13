@@ -319,8 +319,9 @@ namespace Vulkan
 		InitWorkarounds();
 
 		InitStockSamplers();
-
 		InitTimelineSemaphores();
+
+		InitGlslang();
 
 #ifdef ANDROID
 		InitFrameContexts(3); // Android needs a bit more ... ;)
@@ -699,6 +700,7 @@ namespace Vulkan
 
 		//DeinitBindless();
 		DeinitTimelineSemaphores();
+		DeinitGlslang();
 	}
 
 	void Device::DeinitTimelineSemaphores()
@@ -725,6 +727,7 @@ namespace Vulkan
 			frame->transfer_timeline_semaphore = VK_NULL_HANDLE;
 		}
 	}
+
 
 	/*void Device::DeinitBindless()
 	{
