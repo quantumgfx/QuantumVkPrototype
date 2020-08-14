@@ -8,6 +8,9 @@ namespace Vulkan
 #ifdef QM_VULKAN_MT
 		std::lock_guard lock(m_mutex);
 #endif
+
+		mem_props = device->GetMemoryProperties();
+
 		const VolkDeviceTable& table = device->GetDeviceTable();
 
 		VmaVulkanFunctions vulkan_function_ptrs;

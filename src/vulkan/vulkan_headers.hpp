@@ -13,7 +13,7 @@
 #endif
 
 #ifdef VULKAN_DEBUG
-#define VK_ASSERT(x) if(!(x)) { QM_LOG_ERROR("Asertion Failed"); abort(); }
+#define VK_ASSERT(x) if(!(x)) { QM_LOG_ERROR("Asertion Failed at %s:%d", __FILE__, __LINE__); abort(); }
 
 #else
 #define VK_ASSERT(x) ((void)0)

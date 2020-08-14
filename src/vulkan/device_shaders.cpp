@@ -142,7 +142,7 @@ namespace Vulkan
         return ShaderHandle(handle_pool.shaders.allocate(this, code, size));
     }
 
-    ShaderHandle Device::CreateShaderGLSL(const char* glsl_code, ShaderStage stage, std::vector<std::string> include_dirs)
+    ShaderHandle Device::CreateShaderGLSL(const char* glsl_code, ShaderStage stage, uint32_t include_directory_count, std::string* include_directories)
 	{
 		EShLanguage shader_type = GetStage(stage);
 		glslang::TShader shader(shader_type);
@@ -163,9 +163,9 @@ namespace Vulkan
 
 		DirStackFileIncluder includer;
 
-        for (auto& dir : include_dirs)
+        for (uint32_t i = 0; i < include_directory_count; i++)
         {
-            includer.pushExternalLocalDirectory(dir);
+            includer.pushExternalLocalDirectory(*(include_directories + i));
         }
 
 		EShMessages messages = (EShMessages)(EShMsgSpvRules | EShMsgVulkanRules);
@@ -174,9 +174,9 @@ namespace Vulkan
 
 		if (!shader.preprocess(default_t_built_in_resources, defualt_version, ENoProfile, false, false, messages, &preprocessed_glsl, includer))
 		{
-			QM_LOG_INFO("GLSL Preprocessing Failed\n");
-			QM_LOG_INFO("%s\n", shader.getInfoLog());
-			QM_LOG_INFO("%s\n", shader.getInfoDebugLog());
+            QM_LOG_ERROR("GLSL Preprocessing Failed\n");
+            QM_LOG_ERROR("%s\n", shader.getInfoLog());
+            QM_LOG_ERROR("%s\n", shader.getInfoDebugLog());
 
             return ShaderHandle{ nullptr };
 		}
@@ -186,9 +186,9 @@ namespace Vulkan
 
 		if (!shader.parse(default_t_built_in_resources, defualt_version, false, messages))
 		{
-			QM_LOG_INFO("GLSL Parsing Failed\n");
-			QM_LOG_INFO("%s\n", shader.getInfoLog());
-			QM_LOG_INFO("%s\n", shader.getInfoDebugLog());
+            QM_LOG_ERROR("GLSL Parsing Failed\n");
+            QM_LOG_ERROR("%s\n", shader.getInfoLog());
+            QM_LOG_ERROR("%s\n", shader.getInfoDebugLog());
 
             return ShaderHandle{ nullptr };
 		}

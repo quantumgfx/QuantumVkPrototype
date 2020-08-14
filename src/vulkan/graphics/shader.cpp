@@ -19,7 +19,6 @@ namespace Vulkan
 
 	PipelineLayout::~PipelineLayout()
 	{
-
 		if(vklayout != VK_NULL_HANDLE)
 			device->DestroyLayout(vklayout);
 
@@ -48,11 +47,11 @@ namespace Vulkan
 			if (!program.HasShader(shader_type))
 				continue;
 
-			auto shader = program.GetShader(static_cast<ShaderStage>(i));
+			auto& shader = program.GetShader(static_cast<ShaderStage>(i));
 
 			uint32_t stage_mask = 1u << i;
 
-			auto& shader_layout = shader->GetLayout();
+			const auto& shader_layout = shader->GetLayout();
 			for (unsigned set = 0; set < VULKAN_NUM_DESCRIPTOR_SETS; set++)
 			{
 				sets[set].sampled_image_mask |= shader_layout.sets[set].sampled_image_mask;
@@ -255,6 +254,7 @@ namespace Vulkan
 				entry.offset = offsetof(ResourceBinding, buffer_view) + sizeof(ResourceBinding) * binding;
 				entry.stride = sizeof(ResourceBinding);
 				});
+
 
 			for_each_bit(set_layout.sampled_image_mask, [&](uint32_t binding) {
 				unsigned array_size = set_layout.array_size[binding];

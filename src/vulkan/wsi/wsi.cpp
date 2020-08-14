@@ -110,10 +110,23 @@ namespace Vulkan
 		platform = platform_;
 	}
 
-	bool WSI::Init(unsigned num_thread_indices, uint8_t* initial_cache_data, size_t initial_cache_size)
+	bool WSI::Init(unsigned num_thread_indices, uint8_t* initial_cache_data, size_t initial_cache_size, const char** instance_ext_, uint32_t instance_ext_count_, const char** device_ext_, uint32_t device_ext_count_)
 	{
 		auto instance_ext = platform->GetInstanceExtensions();
 		auto device_ext = platform->GetDeviceExtensions();
+
+		instance_ext.reserve(instance_ext.size() + instance_ext_count_);
+		for (uint32_t i = 0; i < instance_ext_count_; i++)
+		{
+			instance_ext.push_back(*(instance_ext_ + i));
+		}
+
+		device_ext.reserve(device_ext.size() + device_ext_count_);
+		for (uint32_t i = 0; i < device_ext_count_; i++)
+		{
+			device_ext.push_back(*(device_ext_ + i));
+		}
+
 		context.reset(new Context());
 
 		context->SetNumThreadIndices(num_thread_indices);

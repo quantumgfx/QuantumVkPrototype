@@ -91,28 +91,41 @@ int main()
 
 			const char* vertex_code = R"(
 #version 450
-			
-layout(location = 0) in vec3 test;
+
+layout(location = 0) in vec2 in_pos;
+layout(location = 1) in vec3 in_col;
+
+layout(location = 0) out vec3 frag_col;
+
+layout(set = 0, binding = 0) uniform UBO {
+	
+	vec2 offset;
+
+} off;
+
 
 void main()
 {
-	gl_Position = vec4(1.0, 0.0, 0.0, 1.0);
-}
 
+	gl_Position = vec4(in_pos.x + off.offset.x, in_pos.y + off.offset.y, 0.0, 1.0);
+	frag_col = in_col;
+
+}
 )";
 			Vulkan::ShaderHandle vert_shader = device.CreateShaderGLSL(vertex_code, Vulkan::ShaderStage::Vertex);
 
 
 			const char* frag_code = R"(
 #version 450
-			
-layout(location = 0) in vec3 test;
+
+layout(location = 0) in vec3 frag_col;
+
+layout(location = 0) out vec4 out_color;
 
 void main()
 {
-	gl_Position = vec4(1.0, 0.0, 0.0, 1.0);
+	out_color = vec4(frag_col, 1.0);
 }
-
 )";
 			Vulkan::ShaderHandle frag_shader = device.CreateShaderGLSL(frag_code, Vulkan::ShaderStage::Fragment);
 
@@ -122,14 +135,13 @@ void main()
 
 			Vulkan::ProgramHandle program = device.CreateGraphicsProgram(p_shaders);
 
-				Util::Timer timer;
-			timer.start();
 
-
-			uint64_t loops = 0;
 			while (platform.Alive(wsi))
 			{
-				//std::this_thread::sleep_for(std::chrono::milliseconds(16));
+
+				Util::Timer timer;
+				timer.start();
+
 				wsi.BeginFrame();
 				{
 					auto cmd = device.RequestCommandBuffer();
@@ -143,8 +155,32 @@ void main()
 					rp.clear_color[0].float32[2] = 0.3f;
 					cmd->BeginRenderPass(rp);
 
-					//cmd->SetProgram(program);
+					cmd->SetOpaqueState();
 
+					cmd->SetProgram(program.Get());
+					cmd->SetVertexAttrib(0, 0, VK_FORMAT_R32G32_SFLOAT, 0);
+					cmd->SetVertexAttrib(1, 0, VK_FORMAT_R32G32B32_SFLOAT, 8);
+					cmd->SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+					cmd->SetCullMode(VK_CULL_MODE_NONE);
+
+					float vert_data[30] = { -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
+											0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+											0.0f, 0.5f, 0.0f, 0.0f, 1.0f,
+											-1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+											1.0f, -1.0f, 0.0f, 1.0f, 1.0f,
+											0.0f, 0.0f, 0.0f, 0.0f, 1.0f };
+
+
+					void* vertex_data = cmd->AllocateVertexData(0, sizeof(float) * 10 * 6, sizeof(float) * 5);
+
+					memcpy(vertex_data, vert_data, sizeof(float) * 5 * 6);
+
+					void* uniform_data = cmd->AllocateConstantData(0, 0, 8);
+
+					float offsets[2] = { 0.0, 0.0 };
+					memcpy(uniform_data, offsets, 8);
+
+					cmd->Draw(6);
 
 					cmd->EndRenderPass();
 					device.Submit(cmd);
@@ -152,12 +188,10 @@ void main()
 
 				wsi.EndFrame();
 
-				loops++;
+				float time_milli = timer.end() * 1000;
+
+				//QM_LOG_INFO("Frame time (ms): %f\n", time_milli);
 			}
-
-			float time_milli = timer.end() / (float)loops * 1000;
-
-			QM_LOG_INFO("Average Frame time (ms): %f\n", time_milli);
 		}
 
 	}

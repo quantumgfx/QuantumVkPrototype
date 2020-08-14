@@ -86,9 +86,6 @@ target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
 target_link_libraries(QuantumVk PRIVATE glslang)
 target_link_libraries(QuantumVk PRIVATE SPIRV)
 
-target_link_libraries(QuantumVk PRIVATE ${VULKAN_SDK_DIR}/Lib/shaderc.lib)
-# target_link_libraries(QuantumVk PRIVATE glslang)
-
 # Src Directories
 set(QM_UTILS_DIR src/utils)
 set(QM_VK_DIR src/vulkan)

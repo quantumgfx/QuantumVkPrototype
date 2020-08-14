@@ -301,8 +301,13 @@ namespace Vulkan
 
 		// Creates a new shader using spirv code. Code is stored in 4 byte words. Size variable is the size of the code in bytes
 		ShaderHandle CreateShader(const uint32_t* code, size_t size);
-
-		ShaderHandle CreateShaderGLSL(const char* glsl_code, ShaderStage stage, std::vector<std::string> include_directories = {});
+		// Creates a shader from glsl code. Converts glsl to spirv using glslang library. Adds user defined include directories for #include statements.
+		ShaderHandle CreateShaderGLSL(const char* glsl_code, ShaderStage stage, uint32_t include_directory_count, std::string* include_directories);
+		// Creates a shader from glsl code. Converts glsl to spirv using glslang library.
+		ShaderHandle CreateShaderGLSL(const char* glsl_code, ShaderStage stage)
+		{
+			return CreateShaderGLSL(glsl_code, stage, 0, nullptr);
+		}
 
 		// Creates a graphics program consting of the shaders specified in shaders
 		ProgramHandle CreateGraphicsProgram(const GraphicsProgramShaders& shaders);
@@ -475,6 +480,9 @@ namespace Vulkan
 
 		DeviceLock lock;
 
+		// Must be freed after per_frame stuff
+		VulkanIntrusiveObjectPool<DescriptorSetAllocator> descriptor_set_allocators;
+
 		// The per frame structure must be destroyed after
 		// the hashmap data structures below, so it must be declared before.
 		std::vector<std::unique_ptr<PerFrame>> per_frame;
@@ -508,8 +516,6 @@ namespace Vulkan
 		uint32_t transfer_queue_family_index = 0;
 
 		SamplerHandle samplers[static_cast<unsigned>(StockSampler::Count)];
-
-		VulkanIntrusiveObjectPool<DescriptorSetAllocator> descriptor_set_allocators;
 
 		VulkanCache<RenderPass> render_passes;
 

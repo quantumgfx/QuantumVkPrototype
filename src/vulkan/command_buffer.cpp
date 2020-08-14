@@ -475,7 +475,7 @@ namespace Vulkan
 		current_pipeline = VK_NULL_HANDLE;
 		current_pipeline_layout = VK_NULL_HANDLE;
 		current_layout = nullptr;
-		pipeline_state.program.Reset();
+		pipeline_state.program = nullptr;
 		memset(bindings.cookies, 0, sizeof(bindings.cookies));
 		memset(bindings.secondary_cookies, 0, sizeof(bindings.secondary_cookies));
 		memset(&index_state, 0, sizeof(index_state));
@@ -654,6 +654,8 @@ namespace Vulkan
 
 	VkPipeline CommandBuffer::BuildComputePipeline(Device* device, DeferredPipelineCompile& compile)
 	{
+		VK_ASSERT(compile.program->HasShader(ShaderStage::Compute));
+
 		auto& shader = *compile.program->GetShader(ShaderStage::Compute);
 		VkComputePipelineCreateInfo info = { VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
 		info.layout = compile.program->GetLayout().GetVkLayout();
@@ -932,7 +934,7 @@ namespace Vulkan
 		for (unsigned i = 0; i < static_cast<unsigned>(ShaderStage::Count); i++)
 		{
 			auto stage = static_cast<ShaderStage>(i);
-			if (!compile.program->GetShader(stage))
+			if (!compile.program->HasShader(stage))
 				continue;
 
 			auto& s = stages[num_stages++];
@@ -1244,7 +1246,7 @@ namespace Vulkan
 		if (vbo.buffers[binding] != vkbuffer || vbo.offsets[binding] != offset)
 			dirty_vbos |= 1u << binding; //Indicate wich bindings in the vbo are now dirty
 		if (pipeline_state.strides[binding] != stride || pipeline_state.input_rates[binding] != step_rate)
-			set_dirty(COMMAND_BUFFER_DIRTY_STATIC_VERTEX_BIT); //If size or step_rate changes, indicate that the whole vertex_state is dirty.
+			set_dirty(COMMAND_BUFFER_DIRTY_STATIC_VERTEX_BIT); //If stride or step_rate changes, indicate that the whole vertex_state is dirty.
 
 		vbo.buffers[binding] = vkbuffer;
 		vbo.offsets[binding] = offset;
@@ -1281,7 +1283,7 @@ namespace Vulkan
 		set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
 	}
 
-	void CommandBuffer::SetProgram(ProgramHandle program)
+	void CommandBuffer::SetProgram(Program* program)
 	{
 		//If this is already set as the program, ignore this call
 		if (pipeline_state.program == program)
@@ -1296,8 +1298,7 @@ namespace Vulkan
 			return;
 
 		//Make sure there is at least either a Compute or Vertex shader
-		VK_ASSERT((framebuffer && pipeline_state.program->GetShader(ShaderStage::Vertex)) ||
-			(!framebuffer && pipeline_state.program->GetShader(ShaderStage::Compute)));
+		VK_ASSERT((framebuffer && pipeline_state.program->HasShader(ShaderStage::Vertex)) || (!framebuffer && pipeline_state.program->HasShader(ShaderStage::Compute)));
 
 		//If the previous pipeline didn't have a layout
 		if (!current_layout)
@@ -2256,6 +2257,9 @@ namespace Vulkan
 			device->RequestUniformBlockNolock(ubo_block, 0);
 		if (staging_block.mapped)
 			device->RequestStagingBlockNolock(staging_block, 0);
+
+		// Just here so that program isn't an invalid pointer. pipeline_state.program
+		pipeline_state.program = nullptr;
 	}
 
 	//////////////////////////////////

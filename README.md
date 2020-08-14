@@ -4,6 +4,17 @@ development, remove boiler-plate and provide a higher-level API for Vulkan, with
 QuantumVk takes inspiration from [Granite Engine](https://github.com/Themaister/Granite), created by the Themaister
 (specifically Granite's Vulkan backend).
 
+# Building
+In order to build QuantumVk, you must have downloaded the following, regardless of platform:
+- [Git](https://git-scm.com/downloads): To retrieve the repository.
+- [Cmake](https://cmake.org/): QuantumVk uses Cmake as a build system.
+- [Python 3](https://www.python.org/downloads/): Glslang (one of QuantumVk's dependencies) requires python to build.
+- [Vulkan SDK](https://vulkan.lunarg.com/): The vulkan sdk is used to access vulkan functionality. QuantumVk doesn't link directly to the vulkan library. Instead [volk](https://github.com/zeux/volk) is used to link dynamically to the vulkan .dll/.so/.dylib depending on the platform.
+
+#### Windows
+Windows is currently the only tested platform, though Linux, Andriod, Mac OSX and ios support is currently being worked on (Mac and ios via MoltenVk).
+- [Visual Studio 2019](https://visualstudio.microsoft.com/vs/): The suggested developement IDE on Windows for QuantumVk.
+
 # Features
 QuantumVk provides many helper classes and functions without completely obscuring the Vulkan element. For example you can use the library 
 and never call a vk command once, but QuantumVk also allows you to access raw vulkan resources. For example:
@@ -52,6 +63,25 @@ Vulkan::Context::InitLoader(GetInstanceProcAddr);
 ```
 
 #### Extension Support
+QuantumVk exposes extension functionality to the user. Any innately supported extensions (that it extensions that are either used
+by QuantumVk to make it faster, or extensions I find are extremely useful and thus deserve their own API) are enabled automatically
+by QuantumVk. QuantumVk will run on any (vulkan) device even if these extensions are unsupported.
+A list of innate extensions is as follows...
+
+Layers:
+- VK_LAYER_KHRONOS_validation (validation layer, only in debug)
+- VK_LAYER_LUNARG_standard_validation (only if no Khronos validation, only in debug)
+
+Instance Extensions:
+- VK_KHR_get_physical_device_properties2 (core for Vulkan 1.1 and higher)
+- VK_KHR_external_memory_capabilities (core for Vulkan 1.1 and higher. Only enabled if device_props 2 is also supported)
+- VK_KHR_external_semaphore_capabilities (core for Vulkan 1.1 and higher. Only enabled if device_props 2 is also supported)
+- VK_EXT_debug_utils (only for debugging info)
+- VK_KHR_get_surface_capabilities2 (if khr surface is enabled by WSI)
+- VK_KHR_debug_report (if VK_EXT_debug_utils not supported, only in debugging)
+
+Device Extensions:
+
 
 #### Automatic memory management
 QuantumVk uses Amd's [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator) to create
@@ -107,7 +137,6 @@ memcpy(buffer_data, my_data, 1024);
 device->UnmapHostBuffer(*buffer, MEMORY_ACCESS_WRITE_BIT)
 
 ```
-#### Window System Integration
 
 # Design
 
@@ -115,18 +144,8 @@ device->UnmapHostBuffer(*buffer, MEMORY_ACCESS_WRITE_BIT)
 Something QuantumVk does quite often is lazily create objects and resources. Particularly with the render state. It is just very hard and annoying to be
 completely explicit 100% of the time. Instead of having you (the user) fill in the entire VkGraphicsPipelineCreateInfo structure, fill out the VkPipelineLayout
 explicity call vkCreateGraphicsPipelines, manage some pipeline object, and make sure it isn't in use when you delete it, QuantumVk abstracts this all away via 
-lazy creation and [Hashmaps and Caches](#Hashmaps-and-Caches). QuantumVk instead has you set some basic state info in the command buffer, and either generates a
+lazy creation and hashmaps and caches. QuantumVk instead has you set some basic state info in the command buffer, and either generates a
 new renderpass/pipeline or retrieves a previously used resource via hashmaps.
-
-## Hashmaps and Caches
-
-
-# Dependencies
-QuantumVk uses a few libraries internally (they are mostly contained as submodules).
-
-- [Volk](https://github.com/zeux/volk): A meta-loader for Vulkan.
-- [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator): A simple to use memory allocation library for Vulkan.
-- [SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross): Library for parsing SPIRV and converting it to and from other languages.
 
 # Current Work
 The basic library is now functional. I am currently working on removing previous limitations and adding more features.
@@ -134,6 +153,6 @@ My current TODO list includes:
 
 - Add descriptor set arrays.
 - Add true support for VK_EXT_descriptor_indexing.
+- Multiplatform support (probably Mac OSX first)
 - Add GPU profiling.
 - Add RenderDoc support.
-- Add SPIRV runtime compilation (currently creating a shader involves passing in raw SPIRV, I am adding helper functions to compile from other languages into SPIRV at runtime).

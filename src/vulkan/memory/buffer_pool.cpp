@@ -52,8 +52,8 @@ namespace Vulkan
 		{
 			VK_ASSERT(block.gpu->GetAllocation().persistantly_mapped);
 
-			block.mapped = static_cast<uint8_t*>(device->MapHostBuffer(*block.cpu, MEMORY_ACCESS_WRITE_BIT));
 			block.cpu = block.gpu;
+			block.mapped = static_cast<uint8_t*>(device->MapHostBuffer(*block.cpu, MEMORY_ACCESS_WRITE_BIT));
 		}
 		else
 		{

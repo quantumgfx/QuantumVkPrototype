@@ -170,7 +170,7 @@ namespace Vulkan
 
 	struct DeferredPipelineCompile
 	{
-		ProgramHandle program;
+		Program* program;
 		const RenderPass* compatible_render_pass;
 		PipelineState static_state;
 		PotentialState potential_static_state;
@@ -381,7 +381,8 @@ namespace Vulkan
 		Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(unsigned thread_index, unsigned subpass);
 		static Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(Device& device, const RenderPassInfo& rp, unsigned thread_index, unsigned subpass);
 
-		void SetProgram(ProgramHandle program);
+		// Program must remain valid until submission of cmd
+		void SetProgram(Program* program);
 		//-------------------Setting Uniforms----------------------------
 
 		void SetBufferView(unsigned set, unsigned binding, const BufferView& view);
@@ -441,7 +442,7 @@ namespace Vulkan
 		void SetVertexAttrib(uint32_t attrib, uint32_t binding, VkFormat format, VkDeviceSize offset);
 		//Binds a buffer to a vertex binding
 		void SetVertexBinding(uint32_t binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize stride, VkVertexInputRate step_rate = VK_VERTEX_INPUT_RATE_VERTEX);
-		//Bind an index buffer
+		//Bind an index buffer for DrawIndexed calls
 		void SetIndexBuffer(const Buffer& buffer, VkDeviceSize offset, VkIndexType index_type);
 		//Submit a draw call
 		void Draw(uint32_t vertex_count, uint32_t instance_count = 1, uint32_t first_vertex = 0, uint32_t first_instance = 0);
@@ -780,27 +781,6 @@ namespace Vulkan
 		//Recalculates a compute pipeline's hash
 		static void UpdateHashComputePipeline(DeferredPipelineCompile& compile);
 	};
-
-#ifdef QM_VULKAN_FILESYSTEM
-	struct CommandBufferUtil
-	{
-		static void draw_fullscreen_quad(CommandBuffer& cmd, const std::string& vertex, const std::string& fragment,
-			const std::vector<std::pair<std::string, int>>& defines = {});
-		static void draw_fullscreen_quad_depth(CommandBuffer& cmd, const std::string& vertex, const std::string& fragment,
-			bool depth_test, bool depth_write, VkCompareOp depth_compare,
-			const std::vector<std::pair<std::string, int>>& defines = {});
-		static void set_fullscreen_quad_vertex_state(CommandBuffer& cmd);
-		static void set_quad_vertex_state(CommandBuffer& cmd);
-
-		static void setup_fullscreen_quad(CommandBuffer& cmd, const std::string& vertex, const std::string& fragment,
-			const std::vector<std::pair<std::string, int>>& defines = {},
-			bool depth_test = false, bool depth_write = false,
-			VkCompareOp depth_compare = VK_COMPARE_OP_ALWAYS);
-
-		static void draw_fullscreen_quad(CommandBuffer& cmd, unsigned instances = 1);
-		static void draw_quad(CommandBuffer& cmd, unsigned instances = 1);
-	};
-#endif
 
 	using CommandBufferHandle = Util::IntrusivePtr<CommandBuffer>;
 

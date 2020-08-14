@@ -36,13 +36,14 @@ namespace Util
 
 		~IntrusiveObjectPool()
 		{
-
-			if(!objects.empty())
-				QM_LOG_ERROR("Some objects still in use at time of object pool destruction\n");
 			for (T* object : objects)
 			{
 				if (object)
+				{
+					QM_LOG_ERROR("Object still in use at time of intrusive object pool destruction\n");
 					object->~T();
+				}
+					
 			}
 		}
 

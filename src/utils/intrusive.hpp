@@ -142,10 +142,9 @@ namespace Util
 			return data;
 		}
 
-		explicit operator bool() const
-		{
-			return data != nullptr;
-		}
+		operator bool() { return data != nullptr; }
+		operator bool() const { return data != nullptr; }
+
 
 		bool operator==(const IntrusivePtr& other) const
 		{

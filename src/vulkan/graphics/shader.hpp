@@ -212,11 +212,25 @@ namespace Vulkan
 		bool HasShader(ShaderStage stage) const
 		{
 			if (shaders.index() == 0)
-				if (stage == ShaderStage::Vertex || stage == ShaderStage::Fragment || stage == ShaderStage::TessControl || stage == ShaderStage::TessEvaluation || stage == ShaderStage::Geometry)
-					return true;
+			{
+				auto& stages = std::get<0>(shaders);
+				if (stage == ShaderStage::Vertex)
+					return stages.vertex;
+				if (stage == ShaderStage::Fragment)
+					return stages.fragment;
+				if (stage == ShaderStage::TessControl)
+					return stages.tess_control;
+				if (stage == ShaderStage::TessEvaluation)
+					return stages.tess_eval;
+				if (stage == ShaderStage::Geometry)
+					return stages.geometry;
+			}
 			if (shaders.index() == 1)
+			{
+				auto& stages = std::get<1>(shaders);
 				if (stage == ShaderStage::Compute)
-					return true;
+					return stages.compute;
+			}
 			return false;
 		}
 

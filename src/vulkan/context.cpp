@@ -506,7 +506,7 @@ namespace Vulkan
 				gpu = choose_gpu_func(gpus);
 
 			if (gpu == VK_NULL_HANDLE)
-				gpu = gpus.front();
+				gpu = gpus.back();
 		}
 
 		uint32_t ext_count = 0;
