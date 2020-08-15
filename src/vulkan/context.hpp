@@ -103,9 +103,12 @@ namespace Vulkan
 		// and we can bootstrap ourselves straight from vkGetInstanceProcAddr rather
 		// than loading Vulkan dynamically. This is common for GLFW for example.
 		static bool InitLoader(PFN_vkGetInstanceProcAddr addr);
-
+		// Creates the VkInstance and device. Simply pass in a number of instance 
+		// extensions and device extensions and QuantumVk will d the rest.
 		bool InitInstanceAndDevice(const char** instance_ext, uint32_t instance_ext_count, const char** device_ext, uint32_t device_ext_count, ContextCreationFlags flags = 0);
+		// This inits QuantumVk from an externaly created instance and device.
 		bool InitFromInstanceAndDevice(VkInstance instance, VkPhysicalDevice gpu, VkDevice device, VkQueue queue, uint32_t queue_family);
+		// Inits QuantumVk from and externally created instance.
 		bool InitDeviceFromInstance(VkInstance instance, VkPhysicalDevice gpu, VkSurfaceKHR surface, const char** required_device_extensions,
 			unsigned num_required_device_extensions, const char** required_device_layers,
 			unsigned num_required_device_layers, const VkPhysicalDeviceFeatures* required_features,
@@ -134,8 +137,11 @@ namespace Vulkan
 		// Returns the gpu's memory properties.
 		const VkPhysicalDeviceMemoryProperties& GetMemProps() const { return mem_props; }
 
+		// Returns the graphics queue that most work is done on.
 		VkQueue GetGraphicsQueue() const { return graphics_queue; }
+		// Returns the compute queue that asyn compute comands are subitted on.
 		VkQueue GetComputeQueue() const { return compute_queue; }
+		// Returns the transfer queue used for dma operations.
 		VkQueue GetTransferQueue() const { return transfer_queue; }
 
 		uint32_t GetGraphicsQueueFamily() const { return graphics_queue_family; }

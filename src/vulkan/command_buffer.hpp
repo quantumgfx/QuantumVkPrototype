@@ -22,7 +22,7 @@ namespace Vulkan
 {
 	class DebugChannelInterface;
 
-	//Contains a list of wait has been changed, or what parts of the pipeline state are "dirty"
+	//Contains a list of what has been changed, or what parts of the pipeline state are "dirty"
 	enum CommandBufferDirtyBits
 	{
 		COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT = 1 << 0,
@@ -37,9 +37,7 @@ namespace Vulkan
 
 		COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT = 1 << 7,
 
-		COMMAND_BUFFER_DYNAMIC_BITS = COMMAND_BUFFER_DIRTY_VIEWPORT_BIT | COMMAND_BUFFER_DIRTY_SCISSOR_BIT |
-		COMMAND_BUFFER_DIRTY_DEPTH_BIAS_BIT |
-		COMMAND_BUFFER_DIRTY_STENCIL_REFERENCE_BIT
+		COMMAND_BUFFER_DYNAMIC_BITS = COMMAND_BUFFER_DIRTY_VIEWPORT_BIT | COMMAND_BUFFER_DIRTY_SCISSOR_BIT | COMMAND_BUFFER_DIRTY_DEPTH_BIAS_BIT | COMMAND_BUFFER_DIRTY_STENCIL_REFERENCE_BIT
 	};
 	using CommandBufferDirtyFlags = uint32_t;
 
@@ -94,9 +92,13 @@ namespace Vulkan
 			unsigned subgroup_maximum_size_log2 : 3;
 			unsigned conservative_raster : 1;
 
+			unsigned patch_control_points : 32;
+			unsigned domain_origin : 1;
+
 			uint32_t write_mask;
 		} state;
-		uint32_t words[4];
+		// I am pretty sure this pads the struct, allowing hasher to hash entire object. Increase as object gets larger.
+		uint32_t words[5];
 	};
 
 	struct PotentialState
@@ -400,7 +402,7 @@ namespace Vulkan
 		void SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer);
 		void SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range);
 
-		void SetBindless(unsigned set, VkDescriptorSet desc_set);
+		// void SetBindless(unsigned set, VkDescriptorSet desc_set);
 
 		void PushConstants(const void* data, VkDeviceSize offset, VkDeviceSize range);
 
@@ -605,6 +607,16 @@ namespace Vulkan
 			SET_POTENTIALLY_STATIC_STATE(blend_constants[3]);
 		}
 
+		inline void SetPatchControlPoints(uint32_t patch_control_points)
+		{
+			SET_STATIC_STATE(patch_control_points);
+		}
+
+		inline void SetDomainOrigin(VkTessellationDomainOrigin domain_origin)
+		{
+			SET_STATIC_STATE(domain_origin);
+		}
+
 		inline void SetSpecializationConstantMask(uint32_t spec_constant_mask)
 		{
 			VK_ASSERT((spec_constant_mask & ~((1u << VULKAN_NUM_SPEC_CONSTANTS) - 1u)) == 0u);
@@ -713,7 +725,7 @@ namespace Vulkan
 		IndexState index_state = {};
 		VertexBindingState vbo = {};
 		ResourceBindings bindings;
-		VkDescriptorSet bindless_sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
+		// VkDescriptorSet bindless_sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
 		VkDescriptorSet allocated_sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
 
 		VkPipeline current_pipeline = VK_NULL_HANDLE;

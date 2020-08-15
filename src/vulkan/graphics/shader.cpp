@@ -88,10 +88,10 @@ namespace Vulkan
 					shader_layout.sets[set].separate_image_mask;
 
 				if (active_binds)
-					sets[set].stages |= stage_mask;
+					stages_for_sets[set] |= stage_mask;
 
 				Util::for_each_bit(active_binds, [&](uint32_t bit) {
-					sets[set].binding_stages[bit] |= stage_mask;
+					stages_for_bindings[set][bit] |= stage_mask;
 
 					auto& combined_size = sets[set].array_size[bit];
 					auto& shader_size = shader_layout.sets[set].array_size[bit];
@@ -117,7 +117,7 @@ namespace Vulkan
 
 		for (unsigned set = 0; set < VULKAN_NUM_DESCRIPTOR_SETS; set++)
 		{
-			if (sets[set].stages != 0)
+			if (stages_for_sets[set] != 0)
 			{
 				descriptor_set_mask |= 1u << set;
 
@@ -143,7 +143,7 @@ namespace Vulkan
 					{
 						for (unsigned i = 1; i < array_size; i++)
 						{
-							if (sets[set].binding_stages[binding + i] != 0)
+							if (stages_for_bindings[set][binding + i] != 0)
 							{
 								QM_LOG_ERROR("Detected binding aliasing for (%u, %u). Binding array with %u elements starting at (%u, %u) overlaps.\n", set, binding + i, array_size, set, binding);
 							}
@@ -335,8 +335,7 @@ namespace Vulkan
 			info.set = desc_set;
 			info.descriptorUpdateEntryCount = update_count;
 			info.pDescriptorUpdateEntries = update_entries;
-			info.pipelineBindPoint = (set_layout.stages & VK_SHADER_STAGE_COMPUTE_BIT) ?
-				VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
+			info.pipelineBindPoint = (stages_for_sets[desc_set] & VK_SHADER_STAGE_COMPUTE_BIT) ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
 
 			if (table.vkCreateDescriptorUpdateTemplateKHR(device->GetDevice(), &info, nullptr, &update_templates[desc_set]) != VK_SUCCESS)
 			{

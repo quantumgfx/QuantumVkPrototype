@@ -923,6 +923,26 @@ namespace Vulkan
 			}
 		}
 
+		// Tessellation
+		VkPipelineTessellationStateCreateInfo tessel = { VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO };
+		tessel.flags = 0;
+		tessel.patchControlPoints = static_cast<uint32_t>(compile.static_state.state.patch_control_points);
+		
+		VkPipelineTessellationDomainOriginStateCreateInfo domain_origin = { VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO };
+		if (static_cast<VkTessellationDomainOrigin>(compile.static_state.state.domain_origin) != VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT)
+		{
+			if (device->GetDeviceFeatures().supports_maintenance_2)
+			{
+				tessel.pNext = &domain_origin;
+				domain_origin.domainOrigin = static_cast<VkTessellationDomainOrigin>(compile.static_state.state.domain_origin);
+			}
+			else
+			{
+				QM_LOG_ERROR("KHR Maintenance 2 is not supported on this device.\n");
+				return VK_NULL_HANDLE;
+			}
+		}
+		
 		// Stages
 		VkPipelineShaderStageCreateInfo stages[static_cast<unsigned>(ShaderStage::Count)];
 		unsigned num_stages = 0;
@@ -976,6 +996,7 @@ namespace Vulkan
 		pipe.pInputAssemblyState = &ia;
 		pipe.pMultisampleState = &ms;
 		pipe.pRasterizationState = &raster;
+		pipe.pTessellationState = &tessel;
 		pipe.pStages = stages;
 		pipe.stageCount = num_stages;
 
@@ -1074,8 +1095,7 @@ namespace Vulkan
 			bool b2 = needs_blend_constant(static_cast<VkBlendFactor>(compile.static_state.state.dst_color_blend));
 			bool b3 = needs_blend_constant(static_cast<VkBlendFactor>(compile.static_state.state.dst_alpha_blend));
 			if (b0 || b1 || b2 || b3)
-				h.data(reinterpret_cast<const uint32_t*>(compile.potential_static_state.blend_constants),
-					sizeof(compile.potential_static_state.blend_constants));
+				h.data(reinterpret_cast<const uint32_t*>(compile.potential_static_state.blend_constants), sizeof(compile.potential_static_state.blend_constants));
 		}
 
 		// Spec constants.
@@ -1570,12 +1590,12 @@ namespace Vulkan
 		dirty_sets |= 1u << set;
 	}
 
-	void CommandBuffer::SetBindless(unsigned set, VkDescriptorSet desc_set)
+	/*void CommandBuffer::SetBindless(unsigned set, VkDescriptorSet desc_set)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		bindless_sets[set] = desc_set;
 		dirty_sets |= 1u << set;
-	}
+	}*/
 
 
 	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view)

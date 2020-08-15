@@ -6,6 +6,8 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
+static void fb_size_cb(GLFWwindow* window, int width, int height);
+
 struct GLFWPlatform : public Vulkan::WSIPlatform
 {
 
@@ -14,8 +16,10 @@ struct GLFWPlatform : public Vulkan::WSIPlatform
 		width = 1280;
 		height = 720;
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 		window = glfwCreateWindow(width, height, "GLFW Window", nullptr, nullptr);
+
+		glfwSetWindowUserPointer(window, this);
+		glfwSetFramebufferSizeCallback(window, fb_size_cb);
 	}
 
 	virtual ~GLFWPlatform() 
@@ -64,11 +68,26 @@ struct GLFWPlatform : public Vulkan::WSIPlatform
 		glfwPollEvents();
 	}
 
+	void NotifyResize(int width_, int height_)
+	{
+		resize = true;
+		width = static_cast<uint32_t>(width_);
+		height = static_cast<uint32_t>(height_);
+	}
+
+private:
+
 	GLFWwindow* window = nullptr;
 	unsigned width = 0;
 	unsigned height = 0;
 
 };
+
+static void fb_size_cb(GLFWwindow* window, int width, int height)
+{
+	auto* glfw = static_cast<GLFWPlatform*>(glfwGetWindowUserPointer(window));
+	glfw->NotifyResize(width, height);
+}
 
 int main() 
 {

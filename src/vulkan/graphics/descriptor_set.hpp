@@ -23,10 +23,6 @@ namespace Vulkan
 	//Descriptor set layout
 	struct DescriptorSetLayout
 	{
-		//Stages the decriptor set is used in
-		uint32_t stages;
-		//Stages each binding is used in
-		uint32_t binding_stages[VULKAN_NUM_BINDINGS] = {};
 		//Size of array at each binding
 		uint32_t array_size[VULKAN_NUM_BINDINGS] = {};
 

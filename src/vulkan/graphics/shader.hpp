@@ -172,6 +172,9 @@ namespace Vulkan
 		//uint32_t bindless_descriptor_set_mask = 0;
 
 		DescriptorSetLayout sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
+
+		uint32_t stages_for_sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
+		uint32_t stages_for_bindings[VULKAN_NUM_DESCRIPTOR_SETS][VULKAN_NUM_BINDINGS] = {};
 		DescriptorSetAllocator* set_allocators[VULKAN_NUM_DESCRIPTOR_SETS] = {};
 		VkDescriptorUpdateTemplateKHR update_templates[VULKAN_NUM_DESCRIPTOR_SETS] = {};
 
