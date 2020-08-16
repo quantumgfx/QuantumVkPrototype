@@ -3,7 +3,6 @@
 #include "device.hpp"
 
 #include "images/format.hpp"
-
 #include <cstring>
 
 namespace Vulkan
@@ -19,7 +18,6 @@ namespace Vulkan
 		BeginCompute();
 		SetOpaqueState();
 		memset(&pipeline_state.static_state, 0, sizeof(pipeline_state.static_state));
-		memset(&bindings, 0, sizeof(bindings));
 	}
 
 	CommandBuffer::~CommandBuffer()
@@ -476,8 +474,6 @@ namespace Vulkan
 		current_pipeline_layout = VK_NULL_HANDLE;
 		current_layout = nullptr;
 		pipeline_state.program = nullptr;
-		memset(bindings.cookies, 0, sizeof(bindings.cookies));
-		memset(bindings.secondary_cookies, 0, sizeof(bindings.secondary_cookies));
 		memset(&index_state, 0, sizeof(index_state));
 		memset(vbo.buffers, 0, sizeof(vbo.buffers));
 	}
@@ -663,12 +659,6 @@ namespace Vulkan
 		info.stage.module = shader.GetModule();
 		info.stage.pName = "main";
 		info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-
-#ifdef GRANITE_SPIRV_DUMP
-		LOGI("Compiling SPIR-V file: (%s) %s\n",
-			Shader::stage_to_name(ShaderStage::Compute),
-			(to_string(shader.get_hash()) + ".spv").c_str());
-#endif
 
 		VkSpecializationInfo spec_info = {};
 		VkSpecializationMapEntry spec_entries[VULKAN_NUM_SPEC_CONSTANTS];
@@ -1028,6 +1018,8 @@ namespace Vulkan
 
 	bool CommandBuffer::FlushGraphicsPipeline(bool synchronous)
 	{
+		VK_ASSERT(current_layout);
+
 		UpdateHashGraphicsPipeline(pipeline_state, active_vbos);
 		current_pipeline = pipeline_state.program->GetPipeline(pipeline_state.hash);
 
@@ -1139,9 +1131,7 @@ namespace Vulkan
 			if (range.stageFlags != 0)
 			{
 				VK_ASSERT(range.offset == 0);
-				table.vkCmdPushConstants(cmd, current_pipeline_layout, range.stageFlags,
-					0, range.size,
-					bindings.push_constant_data);
+				table.vkCmdPushConstants(cmd, current_pipeline_layout, range.stageFlags, 0, range.size, push_constant_data);
 			}
 		}
 
@@ -1182,7 +1172,7 @@ namespace Vulkan
 			if (range.stageFlags != 0)
 			{
 				VK_ASSERT(range.offset == 0);
-				table.vkCmdPushConstants(cmd, current_pipeline_layout, range.stageFlags, 0, range.size, bindings.push_constant_data);
+				table.vkCmdPushConstants(cmd, current_pipeline_layout, range.stageFlags, 0, range.size, push_constant_data);
 			}
 		}
 
@@ -1299,7 +1289,8 @@ namespace Vulkan
 	void CommandBuffer::PushConstants(const void* data, VkDeviceSize offset, VkDeviceSize range)
 	{
 		VK_ASSERT(offset + range <= VULKAN_PUSH_CONSTANT_SIZE);
-		memcpy(bindings.push_constant_data + offset, data, range);
+		VK_ASSERT(current_layout);
+		memcpy(push_constant_data + offset, data, range);
 		set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
 	}
 
@@ -1316,56 +1307,21 @@ namespace Vulkan
 		set_dirty(COMMAND_BUFFER_DIRTY_PIPELINE_BIT | COMMAND_BUFFER_DYNAMIC_BITS);
 		if (!program)
 			return;
-
 		//Make sure there is at least either a Compute or Vertex shader
 		VK_ASSERT((framebuffer && pipeline_state.program->HasShader(ShaderStage::Vertex)) || (!framebuffer && pipeline_state.program->HasShader(ShaderStage::Compute)));
 
-		//If the previous pipeline didn't have a layout
-		if (!current_layout)
-		{
-			//Indicate that all sets must be changed
-			dirty_sets = ~0u;
-			//As well as the push constants
-			set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
-			//Set the layout
-			current_layout = &program->GetLayout();
-			current_pipeline_layout = current_layout->GetVkLayout();
-		}
-		else if (program->GetLayout().GetHash() != current_layout->GetHash())
-		{
-			//New layout to switch to
-			auto& new_layout = program->GetLayout();
-			//Old layout to switch from
-			auto& old_layout = current_layout;
+		program->ResetUniforms();
 
-			// If the push constant layout changes, all descriptor sets
-			// are invalidated.
-			if (new_layout.GetPushConstantRange().size != old_layout->GetPushConstantRange().size || 
-				new_layout.GetPushConstantRange().stageFlags != old_layout->GetPushConstantRange().stageFlags)
-			{
-				dirty_sets = ~0u;
-				set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
-			}
-			else
-			{
-				// Find the first set whose descriptor set layout differs.
-				for (unsigned set = 0; set < VULKAN_NUM_DESCRIPTOR_SETS; set++)
-				{
-					//If the sets differ
-					if (new_layout.GetSetAllocator(set) != current_layout->GetSetAllocator(set))
-					{
-						//Indicate that set must be changed
-						dirty_sets |= ~((1u << set) - 1);
-						break;
-					}
-				}
-			}
-			current_layout = &program->GetLayout();
-			current_pipeline_layout = current_layout->GetVkLayout();
-		}
+		//Indicate that all sets must be changed
+		dirty_sets = ~0u;
+		//As well as the push constants
+		set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
+		//Set the layout
+		current_layout = &program->GetLayout();
+		current_pipeline_layout = current_layout->GetVkLayout();
 	}
 
-	void* CommandBuffer::AllocateConstantData(unsigned set, unsigned binding, VkDeviceSize size)
+	void* CommandBuffer::AllocateConstantData(unsigned set, unsigned binding, VkDeviceSize size, unsigned array_index)
 	{
 		VK_ASSERT(size <= VULKAN_MAX_UBO_SIZE);
 		auto data = ubo_block.Allocate(size);
@@ -1374,7 +1330,7 @@ namespace Vulkan
 			device->RequestUniformBlock(ubo_block, size);
 			data = ubo_block.Allocate(size);
 		}
-		SetUniformBuffer(set, binding, *ubo_block.gpu, data.offset, data.padded_size);
+		SetUniformBuffer(set, binding, *ubo_block.gpu, data.offset, data.padded_size, array_index);
 		return data.host;
 	}
 
@@ -1456,86 +1412,100 @@ namespace Vulkan
 		return UpdateImage(image, { 0, 0, 0 }, { image.GetWidth(), image.GetHeight(), image.GetDepth() }, row_length, image_height, subresource);
 	}
 
-	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
+	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range, unsigned array_index)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(buffer.GetCreateInfo().usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-		auto& b = bindings.bindings[set][binding];
+		VK_ASSERT(current_layout);
+		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
 
-		if (buffer.GetCookie() == bindings.cookies[set][binding] && b.buffer.range == range)
+		auto& b = current_layout->GetDescriptor(set, binding, array_index);
+
+		if (buffer.GetCookie() == b.cookie && b.resource.buffer.range == range)
 		{
-			if (b.dynamic_offset != offset)
+			if (b.resource.dynamic_offset != offset)
 			{
 				//If just the offset changed, indicate that the dynamic set is dirty
 				dirty_sets_dynamic |= 1u << set;
-				b.dynamic_offset = offset;
+				b.resource.dynamic_offset = offset;
 			}
 		}
 		else
 		{
-			b.buffer = { buffer.GetBuffer(), 0, range };
-			b.dynamic_offset = offset;
-			bindings.cookies[set][binding] = buffer.GetCookie();
-			bindings.secondary_cookies[set][binding] = 0;
+			b.resource.buffer = { buffer.GetBuffer(), 0, range };
+			b.resource.dynamic_offset = offset;
+			b.cookie = buffer.GetCookie();
+			b.secondary_cookie = 0;
 			//Indicate that a static set is dirty
 			dirty_sets |= 1u << set;
 		}
 	}
 
-	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
+	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range, unsigned array_index)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(buffer.GetCreateInfo().usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-		auto& b = bindings.bindings[set][binding];
+		VK_ASSERT(current_layout);
+		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
+		auto& b = current_layout->GetDescriptor(set, binding, array_index);
 
-		if (buffer.GetCookie() == bindings.cookies[set][binding] && b.buffer.offset == offset && b.buffer.range == range)
+		if (buffer.GetCookie() == b.cookie && b.resource.buffer.offset == offset && b.resource.buffer.range == range)
 			return;
 
-		b.buffer = { buffer.GetBuffer(), offset, range };
-		b.dynamic_offset = 0;
-		bindings.cookies[set][binding] = buffer.GetCookie();
-		bindings.secondary_cookies[set][binding] = 0;
+		b.resource.buffer = { buffer.GetBuffer(), offset, range };
+		b.resource.dynamic_offset = 0;
+		b.cookie = buffer.GetCookie();
+		b.secondary_cookie = 0;
 		dirty_sets |= 1u << set;
 	}
 
-	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer)
+	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, unsigned array_index)
 	{
-		SetUniformBuffer(set, binding, buffer, 0, buffer.GetCreateInfo().size);
+		SetUniformBuffer(set, binding, buffer, 0, buffer.GetCreateInfo().size, array_index);
 	}
 
-	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer)
+	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, unsigned array_index)
 	{
-		SetStorageBuffer(set, binding, buffer, 0, buffer.GetCreateInfo().size);
+		SetStorageBuffer(set, binding, buffer, 0, buffer.GetCreateInfo().size, array_index);
 	}
 
-	void CommandBuffer::SetSampler(unsigned set, unsigned binding, const Sampler& sampler)
+	void CommandBuffer::SetSampler(unsigned set, unsigned binding, const Sampler& sampler, unsigned array_index)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
-		if (sampler.GetCookie() == bindings.secondary_cookies[set][binding])
+		VK_ASSERT(current_layout);
+		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
+
+		auto& b = current_layout->GetDescriptor(set, binding, array_index);
+
+		if (sampler.GetCookie() == b.secondary_cookie)
 			return;
 
-		auto& b = bindings.bindings[set][binding];
-		b.image.fp.sampler = sampler.get_sampler();
-		b.image.integer.sampler = sampler.get_sampler();
+		b.resource.image.fp.sampler = sampler.get_sampler();
+		b.resource.image.integer.sampler = sampler.get_sampler();
 		//Indicate that the set must be updated
 		dirty_sets |= 1u << set;
-		bindings.secondary_cookies[set][binding] = sampler.GetCookie();
+		b.secondary_cookie = sampler.GetCookie();
 	}
 
-	void CommandBuffer::SetBufferView(unsigned set, unsigned binding, const BufferView& view)
+	void CommandBuffer::SetBufferView(unsigned set, unsigned binding, const BufferView& view, unsigned array_index)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
+		VK_ASSERT(current_layout);
+		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
 		VK_ASSERT(view.GetBuffer().GetCreateInfo().usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
-		if (view.GetCookie() == bindings.cookies[set][binding])
+
+		auto& b = current_layout->GetDescriptor(set, binding, array_index);
+
+		if (view.GetCookie() == b.cookie)
 			return;
-		auto& b = bindings.bindings[set][binding];
-		b.buffer_view = view.GetView();
-		bindings.cookies[set][binding] = view.GetCookie();
-		bindings.secondary_cookies[set][binding] = 0;
+
+		b.resource.buffer_view = view.GetView();
+		b.cookie = view.GetCookie();
+		b.secondary_cookie = 0;
 		dirty_sets |= 1u << set;
 	}
 
@@ -1554,18 +1524,18 @@ namespace Vulkan
 			VK_ASSERT(view);
 			VK_ASSERT(view->GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
 
-			if (view->GetCookie() == bindings.cookies[set][start_binding + i] &&
-				bindings.bindings[set][start_binding + i].image.fp.imageLayout == ref.layout)
+			auto& b = current_layout->GetDescriptor(set, start_binding + i, 0);
+
+			if (view->GetCookie() == b.cookie && b.resource.image.fp.imageLayout == ref.layout)
 			{
 				continue;
 			}
 
-			auto& b = bindings.bindings[set][start_binding + i];
-			b.image.fp.imageLayout = ref.layout;
-			b.image.integer.imageLayout = ref.layout;
-			b.image.fp.imageView = view->GetFloatView();
-			b.image.integer.imageView = view->GetIntegerView();
-			bindings.cookies[set][start_binding + i] = view->GetCookie();
+			b.resource.image.fp.imageLayout = ref.layout;
+			b.resource.image.integer.imageLayout = ref.layout;
+			b.resource.image.fp.imageView = view->GetFloatView();
+			b.resource.image.integer.imageView = view->GetIntegerView();
+			b.cookie = view->GetCookie();
 			dirty_sets |= 1u << set;
 		}
 	}
@@ -1573,20 +1543,24 @@ namespace Vulkan
 	void CommandBuffer::SetTexture(unsigned set, unsigned binding,
 		VkImageView float_view, VkImageView integer_view,
 		VkImageLayout layout,
-		uint64_t cookie)
+		uint64_t cookie, unsigned array_index)
 	{
+
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
+		VK_ASSERT(current_layout);
+		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
 
-		if (cookie == bindings.cookies[set][binding] && bindings.bindings[set][binding].image.fp.imageLayout == layout)
+		auto& b = current_layout->GetDescriptor(set, binding, array_index);
+
+		if (cookie == b.cookie && b.resource.image.fp.imageLayout == layout)
 			return;
 
-		auto& b = bindings.bindings[set][binding];
-		b.image.fp.imageLayout = layout;
-		b.image.fp.imageView = float_view;
-		b.image.integer.imageLayout = layout;
-		b.image.integer.imageView = integer_view;
-		bindings.cookies[set][binding] = cookie;
+		b.resource.image.fp.imageLayout = layout;
+		b.resource.image.fp.imageView = float_view;
+		b.resource.image.integer.imageLayout = layout;
+		b.resource.image.integer.imageView = integer_view;
+		b.cookie = cookie;
 		dirty_sets |= 1u << set;
 	}
 
@@ -1598,10 +1572,10 @@ namespace Vulkan
 	}*/
 
 
-	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view)
+	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index)
 	{
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
-		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie());
+		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie(), array_index);
 	}
 
 	enum CookieBits
@@ -1610,214 +1584,55 @@ namespace Vulkan
 		COOKIE_BIT_SRGB = 1 << 1
 	};
 
-	void CommandBuffer::SetUnormTexture(unsigned set, unsigned binding, const ImageView& view)
+	void CommandBuffer::SetUnormTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index)
 	{
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
 		auto unorm_view = view.GetUnormView();
 		VK_ASSERT(unorm_view != VK_NULL_HANDLE);
-		SetTexture(set, binding, unorm_view, unorm_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie() | COOKIE_BIT_UNORM);
+		SetTexture(set, binding, unorm_view, unorm_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie() | COOKIE_BIT_UNORM, array_index);
 	}
 
-	void CommandBuffer::SetSrgbTexture(unsigned set, unsigned binding, const ImageView& view)
+	void CommandBuffer::SetSrgbTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index)
 	{
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
 		auto srgb_view = view.GetSRGBView();
 		VK_ASSERT(srgb_view != VK_NULL_HANDLE);
-		SetTexture(set, binding, srgb_view, srgb_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie() | COOKIE_BIT_SRGB);
+		SetTexture(set, binding, srgb_view, srgb_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie() | COOKIE_BIT_SRGB, array_index);
 	}
 
-	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view, const Sampler& sampler)
+	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view, const Sampler& sampler, unsigned array_index)
 	{
 		SetSampler(set, binding, sampler);
-		SetTexture(set, binding, view);
+		SetTexture(set, binding, view, array_index);
 	}
 
-	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view, StockSampler stock)
+	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view, StockSampler stock, unsigned array_index)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
 		const auto& sampler = device->GetStockSampler(stock);
-		SetTexture(set, binding, view, sampler);
+		SetTexture(set, binding, view, sampler, array_index);
 	}
 
-	void CommandBuffer::SetSampler(unsigned set, unsigned binding, StockSampler stock)
+	void CommandBuffer::SetSampler(unsigned set, unsigned binding, StockSampler stock, unsigned array_index)
 	{
 		const auto& sampler = device->GetStockSampler(stock);
-		SetSampler(set, binding, sampler);
+		SetSampler(set, binding, sampler, array_index);
 	}
 
-	void CommandBuffer::SetStorageTexture(unsigned set, unsigned binding, const ImageView& view)
+	void CommandBuffer::SetStorageTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index)
 	{
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_STORAGE_BIT);
-		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_GENERAL), view.GetCookie());
-	}
-
-	static void UpdateDescriptorSetLegacy(Device& device, VkDescriptorSet desc_set, const DescriptorSetLayout& set_layout, const ResourceBinding* bindings)
-	{
-		//TODO figure out how this works without overflowwing writes
-
-		auto& table = device.GetDeviceTable();
-		//Get the maximum number of bindings
-		uint32_t write_count = 0;
-		VkWriteDescriptorSet writes[VULKAN_NUM_BINDINGS];
-
-		Util::for_each_bit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
-				auto& write = writes[write_count++];
-				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				write.pNext = nullptr;
-				write.descriptorCount = 1;
-				write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-				write.dstArrayElement = i;
-				write.dstBinding = binding;
-				write.dstSet = desc_set;
-				write.pBufferInfo = &bindings[binding + i].buffer;
-			}
-			});
-
-		Util::for_each_bit(set_layout.storage_buffer_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
-				auto& write = writes[write_count++];
-				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				write.pNext = nullptr;
-				write.descriptorCount = 1;
-				write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-				write.dstArrayElement = i;
-				write.dstBinding = binding;
-				write.dstSet = desc_set;
-				write.pBufferInfo = &bindings[binding + i].buffer;
-			}
-			});
-
-		Util::for_each_bit(set_layout.sampled_buffer_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
-				auto& write = writes[write_count++];
-				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				write.pNext = nullptr;
-				write.descriptorCount = 1;
-				write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-				write.dstArrayElement = i;
-				write.dstBinding = binding;
-				write.dstSet = desc_set;
-				write.pTexelBufferView = &bindings[binding + i].buffer_view;
-			}
-			});
-
-		Util::for_each_bit(set_layout.sampled_image_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
-				auto& write = writes[write_count++];
-				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				write.pNext = nullptr;
-				write.descriptorCount = 1;
-				write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-				write.dstArrayElement = i;
-				write.dstBinding = binding;
-				write.dstSet = desc_set;
-
-				if (set_layout.fp_mask & (1u << binding))
-					write.pImageInfo = &bindings[binding + i].image.fp;
-				else
-					write.pImageInfo = &bindings[binding + i].image.integer;
-			}
-			});
-
-		Util::for_each_bit(set_layout.separate_image_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
-				auto& write = writes[write_count++];
-				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				write.pNext = nullptr;
-				write.descriptorCount = 1;
-				write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-				write.dstArrayElement = i;
-				write.dstBinding = binding;
-				write.dstSet = desc_set;
-
-				if (set_layout.fp_mask & (1u << binding))
-					write.pImageInfo = &bindings[binding + i].image.fp;
-				else
-					write.pImageInfo = &bindings[binding + i].image.integer;
-			}
-			});
-
-		Util::for_each_bit(set_layout.sampler_mask & ~set_layout.immutable_sampler_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
-				auto& write = writes[write_count++];
-				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				write.pNext = nullptr;
-				write.descriptorCount = 1;
-				write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-				write.dstArrayElement = i;
-				write.dstBinding = binding;
-				write.dstSet = desc_set;
-				write.pImageInfo = &bindings[binding + i].image.fp;
-			}
-			});
-
-		Util::for_each_bit(set_layout.storage_image_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
-				auto& write = writes[write_count++];
-				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				write.pNext = nullptr;
-				write.descriptorCount = 1;
-				write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-				write.dstArrayElement = i;
-				write.dstBinding = binding;
-				write.dstSet = desc_set;
-
-				if (set_layout.fp_mask & (1u << binding))
-					write.pImageInfo = &bindings[binding + i].image.fp;
-				else
-					write.pImageInfo = &bindings[binding + i].image.integer;
-			}
-			});
-
-		Util::for_each_bit(set_layout.input_attachment_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				VK_ASSERT(write_count < VULKAN_NUM_BINDINGS);
-				auto& write = writes[write_count++];
-				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				write.pNext = nullptr;
-				write.descriptorCount = 1;
-				write.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-				write.dstArrayElement = i;
-				write.dstBinding = binding;
-				write.dstSet = desc_set;
-				if (set_layout.fp_mask & (1u << binding))
-					write.pImageInfo = &bindings[binding + i].image.fp;
-				else
-					write.pImageInfo = &bindings[binding + i].image.integer;
-			}
-			});
-
-		table.vkUpdateDescriptorSets(device.GetDevice(), write_count, writes, 0, nullptr);
+		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_GENERAL), view.GetCookie(), array_index);
 	}
 
 	void CommandBuffer::RebindDescriptorSet(uint32_t set)
 	{
+		VK_ASSERT(current_layout);
+
+		if (!current_layout->HasDescriptorSet(set))
+			return;
 		//auto& layout = current_layout->GetResourceLayout();
 		////Bind any bindless descriptors
 		//if (layout.bindless_descriptor_set_mask & (1u << set))
@@ -1827,25 +1642,31 @@ namespace Vulkan
 		//	return;
 		//}
 
-		auto& set_layout = current_layout->GetSetLayout(set);
+		auto& set_layout = current_layout->GetDecriptorSet(set)->set_layout;
+		
 		uint32_t num_dynamic_offsets = 0;
-		uint32_t dynamic_offsets[VULKAN_NUM_BINDINGS];
+		// Allocate the max needed array size. This type of allocation is basically free, so this is fine
+		Util::RetainedDynamicArray<uint32_t> dynamic_offsets = device->AllocateHeapArray<uint32_t>(current_layout->GetDescriptorCount(set));
 
 		// UBOs
 		Util::for_each_bit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
 			unsigned array_size = set_layout.array_size[binding];
 			for (unsigned i = 0; i < array_size; i++)
 			{
-				VK_ASSERT(num_dynamic_offsets < VULKAN_NUM_BINDINGS);
-				dynamic_offsets[num_dynamic_offsets++] = bindings.bindings[set][binding + i].dynamic_offset;
+				dynamic_offsets[num_dynamic_offsets++] = current_layout->GetDescriptor(set, binding, i).resource.dynamic_offset;
 			}
 			});
 
-		table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &allocated_sets[set], num_dynamic_offsets, dynamic_offsets);
+		table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &allocated_sets[set], num_dynamic_offsets, dynamic_offsets.Data());
+
+		device->FreeHeapArray(dynamic_offsets);
 	}
 
 	void CommandBuffer::FlushDescriptorSet(uint32_t set)
 	{
+		VK_ASSERT(current_layout);
+		if (!current_layout->HasDescriptorSet(set))
+			return;
 		/*if (layout.bindless_descriptor_set_mask & (1u << set))
 		{
 			VK_ASSERT(bindless_sets[set]);
@@ -1854,126 +1675,29 @@ namespace Vulkan
 			return;
 		}*/
 
-		auto& set_layout = current_layout->GetSetLayout(set);
+		auto& set_layout = current_layout->GetDecriptorSet(set)->set_layout;
+
 		uint32_t num_dynamic_offsets = 0;
-		uint32_t dynamic_offsets[VULKAN_NUM_BINDINGS];
-		Util::Hasher h;
+		// Allocate the max needed array size. This type of allocation is basically free, so this is fine
+		Util::RetainedDynamicArray<uint32_t> dynamic_offsets = device->AllocateHeapArray<uint32_t>(current_layout->GetDescriptorCount(set));
 
-		h.u32(set_layout.fp_mask);
-
-		// UBOs
+		// Retrieve dynamic offsets
 		Util::for_each_bit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
 			unsigned array_size = set_layout.array_size[binding];
 			for (unsigned i = 0; i < array_size; i++)
 			{
-				h.u64(bindings.cookies[set][binding + i]);
-				h.u32(bindings.bindings[set][binding + i].buffer.range);
-				VK_ASSERT(bindings.bindings[set][binding + i].buffer.buffer != VK_NULL_HANDLE);
-
-				VK_ASSERT(num_dynamic_offsets < VULKAN_NUM_BINDINGS);
-				dynamic_offsets[num_dynamic_offsets++] = bindings.bindings[set][binding + i].dynamic_offset;
+				dynamic_offsets[num_dynamic_offsets++] = current_layout->GetDescriptor(set, binding, i).resource.dynamic_offset;
 			}
 			});
 
-		// SSBOs
-		Util::for_each_bit(set_layout.storage_buffer_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				h.u64(bindings.cookies[set][binding + i]);
-				h.u32(bindings.bindings[set][binding + i].buffer.offset);
-				h.u32(bindings.bindings[set][binding + i].buffer.range);
-				VK_ASSERT(bindings.bindings[set][binding + i].buffer.buffer != VK_NULL_HANDLE);
-			}
-			});
+		// Gets the descriptor set (updates if the descriptor set has been changed)
+		VkDescriptorSet desc_set = current_layout->FlushDescriptorSet(thread_index, set);
 
-		// Sampled buffers
-		Util::for_each_bit(set_layout.sampled_buffer_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				h.u64(bindings.cookies[set][binding + i]);
-				VK_ASSERT(bindings.bindings[set][binding + i].buffer_view != VK_NULL_HANDLE);
-			}
-			});
+		table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &desc_set, num_dynamic_offsets, dynamic_offsets.Data());
 
-		// Sampled images
-		Util::for_each_bit(set_layout.sampled_image_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				h.u64(bindings.cookies[set][binding + i]);
-				if (!HasImmutableSampler(set_layout, binding + i))
-				{
-					h.u64(bindings.secondary_cookies[set][binding + i]);
-					VK_ASSERT(bindings.bindings[set][binding + i].image.fp.sampler != VK_NULL_HANDLE);
-				}
-				h.u32(bindings.bindings[set][binding + i].image.fp.imageLayout);
-				VK_ASSERT(bindings.bindings[set][binding + i].image.fp.imageView != VK_NULL_HANDLE);
-			}
-			});
+		device->FreeHeapArray(dynamic_offsets);
 
-		// Separate images
-		Util::for_each_bit(set_layout.separate_image_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				h.u64(bindings.cookies[set][binding + i]);
-				h.u32(bindings.bindings[set][binding + i].image.fp.imageLayout);
-				VK_ASSERT(bindings.bindings[set][binding + i].image.fp.imageView != VK_NULL_HANDLE);
-			}
-			});
-
-		// Separate samplers
-		Util::for_each_bit(set_layout.sampler_mask & ~set_layout.immutable_sampler_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				h.u64(bindings.secondary_cookies[set][binding + i]);
-				VK_ASSERT(bindings.bindings[set][binding + i].image.fp.sampler != VK_NULL_HANDLE);
-			}
-			});
-
-		// Storage images
-		Util::for_each_bit(set_layout.storage_image_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				h.u64(bindings.cookies[set][binding + i]);
-				h.u32(bindings.bindings[set][binding + i].image.fp.imageLayout);
-				VK_ASSERT(bindings.bindings[set][binding + i].image.fp.imageView != VK_NULL_HANDLE);
-			}
-			});
-
-		// Input attachments
-		Util::for_each_bit(set_layout.input_attachment_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				h.u64(bindings.cookies[set][binding + i]);
-				h.u32(bindings.bindings[set][binding + i].image.fp.imageLayout);
-				VK_ASSERT(bindings.bindings[set][binding + i].image.fp.imageView != VK_NULL_HANDLE);
-			}
-			});
-
-		Util::Hash hash = h.get();
-		auto allocated = current_layout->GetSetAllocator(set)->Find(thread_index, hash);
-
-		// The descriptor set was not successfully cached, rebuild.
-		if (!allocated.second)
-		{
-			auto update_template = current_layout->GetSetUpdateTemplate(set);
-
-			if (update_template != VK_NULL_HANDLE)
-			{
-				table.vkUpdateDescriptorSetWithTemplateKHR(device->GetDevice(), allocated.first, update_template, bindings.bindings[set]);
-			}
-			else
-				UpdateDescriptorSetLegacy(*device, allocated.first, current_layout->GetSetLayout(set), bindings.bindings[set]);
-		}
-
-		table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &allocated.first, num_dynamic_offsets, dynamic_offsets);
-		allocated_sets[set] = allocated.first;
+		allocated_sets[set] = desc_set;
 	}
 
 	void CommandBuffer::FlushDescriptorSets()
@@ -2172,7 +1896,7 @@ namespace Vulkan
 		set_dirty(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT);
 	}
 
-	void CommandBuffer::SaveState(CommandBufferSaveStateFlags flags, CommandBufferSavedState& state)
+	/*void CommandBuffer::SaveState(CommandBufferSaveStateFlags flags, CommandBufferSavedState& state)
 	{
 		for (unsigned i = 0; i < VULKAN_NUM_DESCRIPTOR_SETS; i++)
 		{
@@ -2180,8 +1904,7 @@ namespace Vulkan
 			{
 				memcpy(state.bindings.bindings[i], bindings.bindings[i], sizeof(bindings.bindings[i]));
 				memcpy(state.bindings.cookies[i], bindings.cookies[i], sizeof(bindings.cookies[i]));
-				memcpy(state.bindings.secondary_cookies[i], bindings.secondary_cookies[i],
-					sizeof(bindings.secondary_cookies[i]));
+				memcpy(state.bindings.secondary_cookies[i], bindings.secondary_cookies[i], sizeof(bindings.secondary_cookies[i]));
 			}
 		}
 
@@ -2262,7 +1985,7 @@ namespace Vulkan
 				set_dirty(COMMAND_BUFFER_DIRTY_STENCIL_REFERENCE_BIT | COMMAND_BUFFER_DIRTY_DEPTH_BIAS_BIT);
 			}
 		}
-	}
+	}*/
 
 	void CommandBuffer::End()
 	{
@@ -2277,9 +2000,6 @@ namespace Vulkan
 			device->RequestUniformBlockNolock(ubo_block, 0);
 		if (staging_block.mapped)
 			device->RequestStagingBlockNolock(staging_block, 0);
-
-		// Just here so that program isn't an invalid pointer. pipeline_state.program
-		pipeline_state.program = nullptr;
 	}
 
 	//////////////////////////////////

@@ -2428,9 +2428,9 @@ namespace Vulkan
 		return *ret;
 	}
 
-	DescriptorSetAllocator* Device::CreateSetAllocator(const DescriptorSetLayout& layout)
+	DescriptorSetAllocator* Device::CreateSetAllocator(const DescriptorSetLayout& layout, const uint32_t* stages_for_bindings)
 	{
-		return descriptor_set_allocators.allocate(this, layout);
+		return descriptor_set_allocators.allocate(this, layout, stages_for_bindings);
 	}
 
 	void Device::FreeSetAllocator(DescriptorSetAllocator* allocator)

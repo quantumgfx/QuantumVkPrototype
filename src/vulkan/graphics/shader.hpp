@@ -40,7 +40,7 @@ namespace Vulkan
 		Compute
 	};
 
-	// Specifies the layout of resources in a shader
+	// Specifies the layout of resources in a signle shader module
 	struct ResourceLayout
 	{
 		uint32_t input_mask = 0;
@@ -48,12 +48,15 @@ namespace Vulkan
 		uint32_t push_constant_size = 0;
 		uint32_t spec_constant_mask = 0;
 		//uint32_t bindless_set_mask = 0;
+		uint32_t set_mask = 0;
 		DescriptorSetLayout sets[VULKAN_NUM_DESCRIPTOR_SETS];
 	};
 
+	// Represents a single descriptor in a descriptor set. 
 	struct ResourceBinding
 	{
-		union {
+		union 
+		{
 			VkDescriptorBufferInfo buffer;
 			struct
 			{
@@ -63,14 +66,6 @@ namespace Vulkan
 			VkBufferView buffer_view;
 		};
 		VkDeviceSize dynamic_offset;
-	};
-
-	struct ResourceBindings
-	{
-		ResourceBinding bindings[VULKAN_NUM_DESCRIPTOR_SETS][VULKAN_NUM_BINDINGS];
-		uint64_t cookies[VULKAN_NUM_DESCRIPTOR_SETS][VULKAN_NUM_BINDINGS];
-		uint64_t secondary_cookies[VULKAN_NUM_DESCRIPTOR_SETS][VULKAN_NUM_BINDINGS];
-		uint8_t push_constant_data[VULKAN_PUSH_CONSTANT_SIZE];
 	};
 
 	class Shader;
@@ -122,41 +117,86 @@ namespace Vulkan
 
 	using ShaderHandle = Util::IntrusivePtr<Shader>;
 
+	// Contains extra infomation, wrapping a ResourceBinding
+	struct UniformBinding
+	{
+		// Resource bound to this uniform
+		ResourceBinding resource;
+		// Primary object cookie
+		uint64_t cookie = 0;
+		// Secondary object cookie (for example: sampler)
+		uint64_t secondary_cookie = 0;
+	};
+
+	struct PerDescriptorSet
+	{
+		uint32_t stages = 0;
+		uint32_t stages_for_bindings[VULKAN_NUM_BINDINGS] = {};
+		DescriptorSetLayout set_layout = {};
+		DescriptorSetAllocator* set_allocator = nullptr;
+		VkDescriptorUpdateTemplateKHR update_template;
+
+		// Descriptors
+		uint32_t offset[VULKAN_NUM_BINDINGS] = {};
+		uint32_t descriptor_count = 0;
+		UniformBinding* descriptor_array = nullptr;
+
+		void SetDescriptor(uint32_t binding, uint32_t array_index, const UniformBinding& resource)
+		{
+			*(descriptor_array + offset[binding] + array_index) = resource;
+		}
+
+		UniformBinding& GetDescriptor(uint32_t binding, uint32_t array_index) const
+		{
+			return *(descriptor_array + offset[binding] + array_index);
+		}
+	};
+
 	// Forward declaration
 	class Program;
 
 	// Contains imformation about the resources used by a program.
-	class PipelineLayout
+	class ProgramLayout
 	{
 
 	public:
 
-		PipelineLayout(Device* device);
-		~PipelineLayout();
-
-		Util::Hash GetHash() const { VK_ASSERT(hash); return hash; }
+		ProgramLayout(Device* device);
+		~ProgramLayout();
 
 		VkPipelineLayout GetVkLayout() const { return vklayout; }
+		// Masks
 		uint32_t GetAttribMask() const { return attribute_mask; }
 		uint32_t GetRenderTargetMask() const { return render_target_mask; }
 		uint32_t GetSpecConstantMask(ShaderStage stage) const { return spec_constant_mask[static_cast<uint32_t>(stage)]; }
 		uint32_t GetCombindedSpecConstantMask() const { return combined_spec_constant_mask; }
-		const VkPushConstantRange& GetPushConstantRange() const { return push_constant_range; }
-
-
 		uint32_t GetDescriptorSetMask() const { return descriptor_set_mask; }
-		//uint32_t GetBindlessDescriptorSetMask() const { return bindless_descriptor_set_mask; }
-		const DescriptorSetLayout& GetSetLayout(uint32_t set) const { return sets[set]; }
-		DescriptorSetAllocator* GetSetAllocator(uint32_t set) const { return set_allocators[set]; }
-		VkDescriptorUpdateTemplateKHR GetSetUpdateTemplate(uint32_t set) const { return update_templates[set]; }
-
+		// Push constants
+		const VkPushConstantRange& GetPushConstantRange() const { return push_constant_range; }
+		// Creates the layout
 		void CreateLayout(Program& program);
+
+		// Returns whether a descriptor set is active
+		bool HasDescriptorSet(uint32_t set) const { return (descriptor_set_mask & (1u << set)); }
+		// Returns a particular descriptor set
+		PerDescriptorSet* GetDecriptorSet(uint32_t set) const { return per_set_array + set; }
+
+		// Returns the number of descriptors a set has
+		uint32_t GetDescriptorCount(uint32_t set) const { return GetDecriptorSet(set)->descriptor_count; };
+		// Returns the array size of a particular binding
+		uint32_t GetArraySize(uint32_t set, uint32_t binding) const { return GetDecriptorSet(set)->set_layout.array_size[binding]; }
+		// Returns the descriptor stored at a particular (set, binding, array_index)
+		UniformBinding& GetDescriptor(uint32_t set, uint32_t binding, uint32_t array_index) const { return GetDecriptorSet(set)->GetDescriptor(binding, array_index); }
+
+		// Descriptor Sets
+		VkDescriptorSet FlushDescriptorSet(uint32_t thread_index, uint32_t set);
+
+		void ResetDescriptorSets();
 
 	private:
 
 		void CreateUpdateTemplates();
-
-		Util::Hash hash;
+		void UpdateDescriptorSetLegacy(VkDescriptorSet desc_set, const DescriptorSetLayout& set_layout, uint32_t set);
 
 		Device* device;
 
@@ -166,19 +206,22 @@ namespace Vulkan
 		uint32_t spec_constant_mask[Util::ecast(ShaderStage::Count)] = {};
 		uint32_t combined_spec_constant_mask = 0;
 
-		VkPushConstantRange push_constant_range = {};
-
 		uint32_t descriptor_set_mask = 0;
 		//uint32_t bindless_descriptor_set_mask = 0;
 
-		DescriptorSetLayout sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
+		size_t mem_size = 0;
+		uint8_t* desc_set_mem = nullptr;
 
-		uint32_t stages_for_sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
-		uint32_t stages_for_bindings[VULKAN_NUM_DESCRIPTOR_SETS][VULKAN_NUM_BINDINGS] = {};
-		DescriptorSetAllocator* set_allocators[VULKAN_NUM_DESCRIPTOR_SETS] = {};
-		VkDescriptorUpdateTemplateKHR update_templates[VULKAN_NUM_DESCRIPTOR_SETS] = {};
+		uint32_t desc_set_count = 0;
+		PerDescriptorSet* per_set_array = nullptr;
+		uint32_t descriptor_count = 0;
+		UniformBinding* descriptor_array = nullptr;
+
+		VkPushConstantRange push_constant_range = {};
 
 	};
+
+	// TODO make sure every loop involving VULKAN_NUM_DESCRIPTOR_SETS checks that the layout is valid first
 
 	// Functor to delete Program
 	struct ProgramDeleter
@@ -261,13 +304,18 @@ namespace Vulkan
 			return hash;
 		}
 
-		PipelineLayout& GetLayout()
+		ProgramLayout& GetLayout()
 		{
-			return pipeline_layout;
+			return program_layout;
 		}
 
 		VkPipeline GetPipeline(Util::Hash hash) const;
 		VkPipeline AddPipeline(Util::Hash hash, VkPipeline pipeline);
+
+		void ResetUniforms()
+		{
+			program_layout.ResetDescriptorSets();
+		}
 
 	private:
 
@@ -287,7 +335,7 @@ namespace Vulkan
 
 		VulkanCache<Util::IntrusivePODWrapper<VkPipeline>> pipelines;
 
-		PipelineLayout pipeline_layout;
+		ProgramLayout program_layout;
 	};
 
 	using ProgramHandle = Util::IntrusivePtr<Program>;

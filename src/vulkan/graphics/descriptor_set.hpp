@@ -82,7 +82,7 @@ namespace Vulkan
 	{
 	public:
 
-		DescriptorSetAllocator(Device* device, const DescriptorSetLayout& layout);
+		DescriptorSetAllocator(Device* device, const DescriptorSetLayout& layout, const uint32_t* stages_for_bindings);
 		~DescriptorSetAllocator();
 
 		void operator=(const DescriptorSetAllocator&) = delete;

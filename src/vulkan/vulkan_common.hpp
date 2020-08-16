@@ -6,6 +6,7 @@
 #include "utils/object_pool.hpp"
 #include "utils/intrusive_object_pool.hpp"
 #include "utils/intrusive_hash_map.hpp"
+#include "utils/retained_alloc.hpp"
 
 namespace Vulkan
 {
@@ -22,6 +23,8 @@ namespace Vulkan
 	using VulkanIntrusiveObjectPool = Util::ThreadSafeIntrusiveObjectPool<T>;
 	template <typename T>
 	using VulkanCache = Util::ThreadSafeIntrusiveHashMap<T>;
+
+	using VulkanDynamicArrayPool = Util::ThreadSafeDynamicArrayPool;
 #else
 	template <typename T>
 	using VulkanObjectPool = Util::ObjectPool<T>;
@@ -29,5 +32,7 @@ namespace Vulkan
 	using VulkanIntrusiveObjectPool = Util::IntrusiveObjectPool<T>;
 	template <typename T>
 	using VulkanCache = Util::IntrusiveHashMap<T>;
+
+	using VulkanDynamicArrayPool = Util::DynamicArrayPool;
 #endif
 }

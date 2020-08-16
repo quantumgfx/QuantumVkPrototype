@@ -226,7 +226,7 @@ namespace Vulkan
 		friend struct ShaderDeleter;
 		friend class Program;
 		friend struct ProgramDeleter;
-		friend class PipelineLayout;
+		friend class ProgramLayout;
 		friend class WSI;
 		friend class Cookie;
 		friend class Framebuffer;
@@ -454,7 +454,7 @@ namespace Vulkan
 		const Framebuffer& RequestFramebuffer(const RenderPassInfo& info);
 		const RenderPass& RequestRenderPass(const RenderPassInfo& info, bool compatible);
 
-		DescriptorSetAllocator* CreateSetAllocator(const DescriptorSetLayout& layout);
+		DescriptorSetAllocator* CreateSetAllocator(const DescriptorSetLayout& layout, const uint32_t* stages_for_bindings);
 		void FreeSetAllocator(DescriptorSetAllocator* allocator);
 
 		VkPhysicalDeviceMemoryProperties mem_props;
@@ -517,14 +517,30 @@ namespace Vulkan
 
 		SamplerHandle samplers[static_cast<unsigned>(StockSampler::Count)];
 
+		VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
 		VulkanCache<RenderPass> render_passes;
+
+		bool InitPipelineCache(const uint8_t* initial_cache_data, size_t initial_cache_size);
 
 		FramebufferAllocator framebuffer_allocator;
 		TransientAttachmentAllocator transient_allocator;
 
-		VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
+		VulkanDynamicArrayPool array_pool;
 
-		bool InitPipelineCache(const uint8_t* initial_cache_data, size_t initial_cache_size);
+		// Many vulkan functions take in arrays of structs as parameters. Allocating variable sized arrays for those calls is expensive.
+		// The heap array pool is the solution to this. It contains a pool of already allocated arrays. When a new array is requested
+		// the pool either allocates another array, finds an array big enough, or resizes a smaller array.
+		template<typename T>
+		Util::RetainedDynamicArray<T> AllocateHeapArray(size_t count)
+		{
+			return array_pool.RetainedAllocateArray<T>(count);
+		}
+
+		template<typename T>
+		void FreeHeapArray(Util::RetainedDynamicArray<T> heap_array)
+		{
+			array_pool.RetainedFreeArray(heap_array);
+		}
 
 		CommandPool& GetCommandPool(CommandBuffer::Type type, unsigned thread);
 		QueueData& GetQueueData(CommandBuffer::Type type);

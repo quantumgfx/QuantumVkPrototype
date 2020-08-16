@@ -8,7 +8,7 @@ using namespace Util;
 
 namespace Vulkan
 {
-	DescriptorSetAllocator::DescriptorSetAllocator(Device* device_, const DescriptorSetLayout& layout)
+	DescriptorSetAllocator::DescriptorSetAllocator(Device* device_, const DescriptorSetLayout& layout, const uint32_t* stages_for_bindings)
 		: device(device_)
 		, table(device_->GetDeviceTable())
 	{
@@ -37,7 +37,7 @@ namespace Vulkan
 
 		for (unsigned i = 0; i < VULKAN_NUM_BINDINGS; i++)
 		{
-			auto stages = layout.binding_stages[i];
+			auto stages = stages_for_bindings[i];
 			if (stages == 0)
 				continue;
 

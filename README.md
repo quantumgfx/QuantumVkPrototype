@@ -151,8 +151,9 @@ new renderpass/pipeline or retrieves a previously used resource via hashmaps.
 The basic library is now functional. I am currently working on removing previous limitations and adding more features.
 My current TODO list includes:
 
-- Add descriptor set arrays.
-- Add true support for VK_EXT_descriptor_indexing.
-- Multiplatform support (probably Mac OSX first)
-- Add GPU profiling.
-- Add RenderDoc support.
+- Add true support for VK_EXT_descriptor_indexing
+- Add task and mesh shaders
+- Add save/restore state to command buffers
+- Multiplatform support (probably Mac OSX via MoltenVk first)
+- Add GPU profiling
+- Add true support VK_KHR_ray_tracing (raytracing is still in beta, so maybe in some kind of optional implementation?)

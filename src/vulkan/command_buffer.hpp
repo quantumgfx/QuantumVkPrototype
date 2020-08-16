@@ -140,7 +140,7 @@ namespace Vulkan
 		VkDeviceSize offsets[VULKAN_NUM_VERTEX_BUFFERS];
 	};
 
-	enum CommandBufferSavedStateBits
+	/*enum CommandBufferSavedStateBits
 	{
 		COMMAND_BUFFER_SAVED_BINDINGS_0_BIT = 1u << 0,
 		COMMAND_BUFFER_SAVED_BINDINGS_1_BIT = 1u << 1,
@@ -154,21 +154,20 @@ namespace Vulkan
 		COMMAND_BUFFER_SAVED_SCISSOR_BIT = 1u << 9,
 		COMMAND_BUFFER_SAVED_RENDER_STATE_BIT = 1u << 10,
 		COMMAND_BUFFER_SAVED_PUSH_CONSTANT_BIT = 1u << 11
-	};
+	};*/
 	static_assert(VULKAN_NUM_DESCRIPTOR_SETS == 8, "Number of descriptor sets != 8.");
-	using CommandBufferSaveStateFlags = uint32_t;
+	/*using CommandBufferSaveStateFlags = uint32_t;
 
 	struct CommandBufferSavedState
 	{
 		CommandBufferSaveStateFlags flags = 0;
-		ResourceBindings bindings;
 		VkViewport viewport;
 		VkRect2D scissor;
 
 		PipelineState static_state;
 		PotentialState potential_static_state;
 		DynamicState dynamic_state;
-	};
+	};*/
 
 	struct DeferredPipelineCompile
 	{
@@ -383,38 +382,39 @@ namespace Vulkan
 		Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(unsigned thread_index, unsigned subpass);
 		static Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(Device& device, const RenderPassInfo& rp, unsigned thread_index, unsigned subpass);
 
-		// Program must remain valid until submission of cmd
+		// Program must remain valid until submission of cmd. A program MUST NOT be set by multiple command buffers at once.
+		// No uniforms are retained between submissions (though common descriptor sets are hashed, so don't worry about calling
+		// Set*uniform* too much). Meaning all uniforms must be set when Draw() methods are called.
 		void SetProgram(Program* program);
 		//-------------------Setting Uniforms----------------------------
 
-		void SetBufferView(unsigned set, unsigned binding, const BufferView& view);
+		void SetBufferView(unsigned set, unsigned binding, const BufferView& view, unsigned array_index = 0);
 		void SetInputAttachments(unsigned set, unsigned start_binding);
-		void SetTexture(unsigned set, unsigned binding, const ImageView& view);
-		void SetUnormTexture(unsigned set, unsigned binding, const ImageView& view);
-		void SetSrgbTexture(unsigned set, unsigned binding, const ImageView& view);
-		void SetTexture(unsigned set, unsigned binding, const ImageView& view, const Sampler& sampler);
-		void SetTexture(unsigned set, unsigned binding, const ImageView& view, StockSampler sampler);
-		void SetStorageTexture(unsigned set, unsigned binding, const ImageView& view);
-		void SetSampler(unsigned set, unsigned binding, const Sampler& sampler);
-		void SetSampler(unsigned set, unsigned binding, StockSampler sampler);
-		void SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer);
-		void SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range);
-		void SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer);
-		void SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range);
+		void SetTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index = 0);
+		void SetUnormTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index = 0);
+		void SetSrgbTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index = 0);
+		void SetTexture(unsigned set, unsigned binding, const ImageView& view, const Sampler& sampler, unsigned array_index = 0);
+		void SetTexture(unsigned set, unsigned binding, const ImageView& view, StockSampler sampler, unsigned array_index = 0);
+		void SetStorageTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index = 0);
+		void SetSampler(unsigned set, unsigned binding, const Sampler& sampler, unsigned array_index = 0);
+		void SetSampler(unsigned set, unsigned binding, StockSampler sampler, unsigned array_index = 0);
+		void SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, unsigned array_index = 0);
+		void SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range, unsigned array_index = 0);
+		void SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, unsigned array_index = 0);
+		void SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range, unsigned array_index = 0);
 
 		// void SetBindless(unsigned set, VkDescriptorSet desc_set);
-
 		void PushConstants(const void* data, VkDeviceSize offset, VkDeviceSize range);
 
 		//-----------------------------------------------------------------
 
 		//Allocates a uniform buffer from the command buffers internal pool. Binds it to the set and binding, than returns it's mapped data.
-		void* AllocateConstantData(unsigned set, unsigned binding, VkDeviceSize size);
+		void* AllocateConstantData(unsigned set, unsigned binding, VkDeviceSize size, unsigned array_index = 0);
 		//Allocates a uniform buffer from the command buffers internal pool. Binds it to the set and binding, than returns it's mapped data.
 		template <typename T>
-		T* AllocateTypedConstantData(unsigned set, unsigned binding, unsigned count)
+		T* AllocateTypedConstantData(unsigned set, unsigned binding, unsigned count, unsigned array_index = 0)
 		{
-			return static_cast<T*>(AllocateConstantData(set, binding, count * sizeof(T)));
+			return static_cast<T*>(AllocateConstantData(set, binding, count * sizeof(T), array_index));
 		}
 		//Allocates a vertex buffer from the command buffers internal pool. Binds it to the binding than returns it's mapped data.
 		void* AllocateVertexData(unsigned binding, VkDeviceSize size, VkDeviceSize stride, VkVertexInputRate step_rate = VK_VERTEX_INPUT_RATE_VERTEX);
@@ -466,8 +466,8 @@ namespace Vulkan
 		//No culling, src alpha blending, enables depth testing, triangle strip topology.
 		void SetTransparentSpriteState();
 
-		void SaveState(CommandBufferSaveStateFlags flags, CommandBufferSavedState& state);
-		void RestoreState(const CommandBufferSavedState& state);
+		/*void SaveState(CommandBufferSaveStateFlags flags, CommandBufferSavedState& state);
+		void RestoreState(const CommandBufferSavedState& state);*/
 
 #define SET_STATIC_STATE(value)                               \
 	do                                                        \
@@ -724,18 +724,19 @@ namespace Vulkan
 
 		IndexState index_state = {};
 		VertexBindingState vbo = {};
-		ResourceBindings bindings;
 		// VkDescriptorSet bindless_sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
 		VkDescriptorSet allocated_sets[VULKAN_NUM_DESCRIPTOR_SETS] = {};
 
 		VkPipeline current_pipeline = VK_NULL_HANDLE;
 		VkPipelineLayout current_pipeline_layout = VK_NULL_HANDLE;
-		PipelineLayout* current_layout = nullptr;
+		ProgramLayout* current_layout = nullptr;
 		VkSubpassContents current_contents = VK_SUBPASS_CONTENTS_INLINE;
 		unsigned thread_index = 0;
 
 		VkViewport viewport = {};
 		VkRect2D scissor = {};
+
+		uint8_t push_constant_data[VULKAN_PUSH_CONSTANT_SIZE];
 
 		CommandBufferDirtyFlags dirty = ~0u;
 		uint32_t dirty_sets = 0;
@@ -784,7 +785,7 @@ namespace Vulkan
 		BufferBlock ubo_block;
 		BufferBlock staging_block;
 
-		void SetTexture(unsigned set, unsigned binding, VkImageView float_view, VkImageView integer_view, VkImageLayout layout, uint64_t cookie);
+		void SetTexture(unsigned set, unsigned binding, VkImageView float_view, VkImageView integer_view, VkImageLayout layout, uint64_t cookie, unsigned array_index);
 
 		void InitViewportScissor(const RenderPassInfo& info, const Framebuffer* framebuffer);
 

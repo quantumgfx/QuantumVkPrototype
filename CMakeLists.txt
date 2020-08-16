@@ -100,6 +100,7 @@ target_sources(QuantumVk PRIVATE
 	${QM_UTILS_DIR}/enum_cast.hpp
 	${QM_UTILS_DIR}/hash.hpp
 	${QM_UTILS_DIR}/hashmap.hpp
+	${QM_UTILS_DIR}/retained_alloc.hpp
 	${QM_UTILS_DIR}/intrusive.hpp
 	${QM_UTILS_DIR}/intrusive_list.hpp
 	${QM_UTILS_DIR}/intrusive_hash_map.hpp
