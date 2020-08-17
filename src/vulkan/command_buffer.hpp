@@ -382,7 +382,7 @@ namespace Vulkan
 		Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(unsigned thread_index, unsigned subpass);
 		static Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(Device& device, const RenderPassInfo& rp, unsigned thread_index, unsigned subpass);
 
-		// Program must remain valid until submission of cmd. A program MUST NOT be set by multiple command buffers at once.
+        // A program MUST NOT be set by multiple command buffers at once.
 		// No uniforms are retained between submissions (though common descriptor sets are hashed, so don't worry about calling
 		// Set*uniform* too much). Meaning all uniforms must be set when Draw() methods are called.
 		void SetProgram(ProgramHandle& program);
