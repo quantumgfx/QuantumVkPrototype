@@ -176,7 +176,7 @@ void main()
 
 					cmd->SetOpaqueState();
 
-					cmd->SetProgram(program.Get());
+					cmd->SetProgram(program);
 					cmd->SetVertexAttrib(0, 0, VK_FORMAT_R32G32_SFLOAT, 0);
 					cmd->SetVertexAttrib(1, 0, VK_FORMAT_R32G32B32_SFLOAT, 8);
 					cmd->SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);

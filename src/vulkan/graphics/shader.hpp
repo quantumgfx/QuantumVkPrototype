@@ -76,7 +76,7 @@ namespace Vulkan
 	};
 
 	// Essentially just a vkShaderModule
-	class Shader : public Util::IntrusivePtrEnabled<Shader, ShaderDeleter, HandleCounter>, public InternalSyncEnabled
+	class Shader : public Util::IntrusivePtrEnabled<Shader, ShaderDeleter, HandleCounter>
 	{
 	public:
 
@@ -175,6 +175,7 @@ namespace Vulkan
 		const VkPushConstantRange& GetPushConstantRange() const { return push_constant_range; }
 		// Creates the layout
 		void CreateLayout(Program& program);
+		void DestroyLayout();
 
 		// Returns whether a descriptor set is active
 		bool HasDescriptorSet(uint32_t set) const { return (descriptor_set_mask & (1u << set)); }

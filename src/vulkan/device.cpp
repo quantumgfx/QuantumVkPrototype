@@ -701,6 +701,7 @@ namespace Vulkan
 		//DeinitBindless();
 		DeinitTimelineSemaphores();
 		DeinitGlslang();
+
 	}
 
 	void Device::DeinitTimelineSemaphores()
@@ -854,18 +855,6 @@ namespace Vulkan
 
 #endif
 
-	void Device::DestroyPipeline(VkPipeline pipeline)
-	{
-		LOCK();
-		DestroyPipelineNolock(pipeline);
-	}
-
-	void Device::DestroyLayout(VkPipelineLayout layout)
-	{
-		LOCK();
-		DestroyLayoutNolock(layout);
-	}
-
 	void Device::ResetFence(VkFence fence, bool observed_wait)
 	{
 		LOCK();
@@ -878,16 +867,20 @@ namespace Vulkan
 		DestroyBufferNolock(buffer, allocation);
 	}
 
-	void Device::DestroyDescriptorPool(VkDescriptorPool desc_pool)
+	void Device::DestroyProgram(Program* program)
 	{
-		LOCK();
-		DestroyDescriptorPoolNolock(desc_pool);
+#ifdef QM_VULKAN_MT
+		std::lock_guard holder_{ lock.program_lock };
+#endif
+		Frame().destroyed_programs.push_back(program);
 	}
 
-	void Device::DestroyDescriptorSetAllocator(DescriptorSetAllocator* allocator)
+	void Device::DestroyShader(Shader* shader)
 	{
-		LOCK();
-		DestroyDescriptorSetAllocatorNolock(allocator);
+#ifdef QM_VULKAN_MT
+		std::lock_guard holder_{ lock.shader_lock };
+#endif
+		Frame().destroyed_shaders.push_back(shader);
 	}
 
 	void Device::DestroyBufferView(VkBufferView view)
@@ -932,28 +925,10 @@ namespace Vulkan
 		DestroySamplerNolock(sampler);
 	}
 
-	void Device::DestroyShader(VkShaderModule shader)
-	{
-		LOCK();
-		DestroyShaderNolock(shader);
-	}
-
 	void Device::DestroyImageView(VkImageView view)
 	{
 		LOCK();
 		DestroyImageViewNolock(view);
-	}
-
-	void Device::DestroyPipelineNolock(VkPipeline pipeline)
-	{
-		VK_ASSERT(!exists(Frame().destroyed_pipelines, pipeline));
-		Frame().destroyed_pipelines.push_back(pipeline);
-	}
-
-	void Device::DestroyLayoutNolock(VkPipelineLayout layout)
-	{
-		VK_ASSERT(!exists(Frame().destroyed_layouts, layout));
-		Frame().destroyed_layouts.push_back(layout);
 	}
 
 	void Device::DestroyImageViewNolock(VkImageView view)
@@ -997,12 +972,6 @@ namespace Vulkan
 			Frame().recycle_fences.push_back(fence);
 	}
 
-	void Device::DestroyDescriptorSetAllocatorNolock(DescriptorSetAllocator* allocator)
-	{
-		VK_ASSERT(!exists(Frame().destroyed_set_allocators, allocator));
-		Frame().destroyed_set_allocators.push_back(allocator);
-	}
-
 	void Device::DestroyImageNolock(VkImage image, const DeviceAllocation& allocation)
 	{
 		//VK_ASSERT(!exists(Frame().destroyed_images, std::make_pair(image, allocation)));
@@ -1015,22 +984,10 @@ namespace Vulkan
 		Frame().destroyed_buffers.push_back(std::make_pair(buffer, allocation));
 	}
 
-	void Device::DestroyDescriptorPoolNolock(VkDescriptorPool desc_pool)
-	{
-		VK_ASSERT(!exists(Frame().destroyed_descriptor_pools, desc_pool));
-		Frame().destroyed_descriptor_pools.push_back(desc_pool);
-	}
-
 	void Device::DestroySamplerNolock(VkSampler sampler)
 	{
 		VK_ASSERT(!exists(Frame().destroyed_samplers, sampler));
 		Frame().destroyed_samplers.push_back(sampler);
-	}
-
-	void Device::DestroyShaderNolock(VkShaderModule shader)
-	{
-		VK_ASSERT(!exists(Frame().destroyed_shaders, shader));
-		Frame().destroyed_shaders.push_back(shader);
 	}
 
 	void Device::DestroyFramebufferNolock(VkFramebuffer framebuffer)
@@ -1105,12 +1062,6 @@ namespace Vulkan
 			table.vkDestroyFramebuffer(vkdevice, framebuffer, nullptr);
 		for (auto& sampler : destroyed_samplers)
 			table.vkDestroySampler(vkdevice, sampler, nullptr);
-		for (auto& shader : destroyed_shaders)
-			table.vkDestroyShaderModule(vkdevice, shader, nullptr);
-		for (auto& pipeline : destroyed_pipelines)
-			table.vkDestroyPipeline(vkdevice, pipeline, nullptr);
-		for (auto& layout : destroyed_layouts)
-			table.vkDestroyPipelineLayout(vkdevice, layout, nullptr);
 		for (auto& view : destroyed_image_views)
 			table.vkDestroyImageView(vkdevice, view, nullptr);
 		for (auto& view : destroyed_buffer_views)
@@ -1121,10 +1072,6 @@ namespace Vulkan
 			device.managers.memory.FreeBuffer(buffer.first, buffer.second);
 		for (auto& semaphore : destroyed_semaphores)
 			table.vkDestroySemaphore(vkdevice, semaphore, nullptr);
-		for (auto& pool : destroyed_descriptor_pools)
-			table.vkDestroyDescriptorPool(vkdevice, pool, nullptr);
-		for (auto& allocator : destroyed_set_allocators)
-			device.FreeSetAllocator(allocator);
 		for (auto& semaphore : recycled_semaphores)
 		{
 #if defined(VULKAN_DEBUG) && defined(SUBMIT_DEBUG)
@@ -1134,6 +1081,22 @@ namespace Vulkan
 		}
 		for (auto& event : recycled_events)
 			managers.event.RecycleEvent(event);
+
+		{
+#ifdef QM_VULKAN_MT
+			std::lock_guard program_holder_{ device.lock.program_lock };
+#endif
+			for (auto& program : destroyed_programs)
+				device.handle_pool.programs.free(program);
+		}
+
+		{
+#ifdef QM_VULKAN_MT
+			std::lock_guard shader_holder_{ device.lock.shader_lock };
+#endif
+			for (auto& shader : destroyed_shaders)
+				device.handle_pool.shaders.free(shader);
+		}
 
 		for (auto& block : vbo_blocks)
 			managers.vbo.RecycleBlock(move(block));
@@ -1151,21 +1114,19 @@ namespace Vulkan
 
 		destroyed_framebuffers.clear();
 		destroyed_samplers.clear();
-		destroyed_pipelines.clear();
-		destroyed_shaders.clear();
 		destroyed_image_views.clear();
 		destroyed_buffer_views.clear();
 		destroyed_images.clear();
 		destroyed_buffers.clear();
 		destroyed_semaphores.clear();
-		destroyed_descriptor_pools.clear();
-		destroyed_set_allocators.clear();
-		destroyed_layouts.clear();
 		recycled_semaphores.clear();
 		recycled_events.clear();
 
-		int64_t min_timestamp_us = std::numeric_limits<int64_t>::max();
-		int64_t max_timestamp_us = 0;
+		destroyed_shaders.clear();
+		destroyed_programs.clear();
+
+		//int64_t min_timestamp_us = std::numeric_limits<int64_t>::max();
+		//int64_t max_timestamp_us = 0;
 	}
 
 	PerFrame::~PerFrame()
@@ -2033,7 +1994,8 @@ namespace Vulkan
 		{
 			alloc_info.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 			alloc_info.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
-			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+			alloc_info.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 		}
 
 		if (!managers.memory.AllocateImage(info, alloc_info, &holder.image, &holder.allocation))
@@ -2426,16 +2388,6 @@ namespace Vulkan
 		if (!ret)
 			ret = render_passes.emplace_yield(hash, hash, this, info);
 		return *ret;
-	}
-
-	DescriptorSetAllocator* Device::CreateSetAllocator(const DescriptorSetLayout& layout, const uint32_t* stages_for_bindings)
-	{
-		return descriptor_set_allocators.allocate(this, layout, stages_for_bindings);
-	}
-
-	void Device::FreeSetAllocator(DescriptorSetAllocator* allocator)
-	{
-		descriptor_set_allocators.free(allocator);
 	}
 
 	const Framebuffer& Device::RequestFramebuffer(const RenderPassInfo& info)

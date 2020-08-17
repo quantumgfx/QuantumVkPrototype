@@ -19,22 +19,6 @@ namespace Vulkan
 
 	ProgramLayout::~ProgramLayout()
 	{
-		if(vklayout != VK_NULL_HANDLE)
-			device->DestroyLayout(vklayout);
-
-		auto& table = device->GetDeviceTable();
-
-		for (unsigned i = 0; i < desc_set_count; i++)
-		{
-			if (HasDescriptorSet(i))
-			{
-				device->DestroyDescriptorSetAllocator(GetDecriptorSet(i)->set_allocator);
-				if(GetDecriptorSet(i)->update_template != VK_NULL_HANDLE)
-					table.vkDestroyDescriptorUpdateTemplateKHR(device->GetDevice(), GetDecriptorSet(i)->update_template, nullptr);
-			}
-		}
-
-		free(desc_set_mem);
 	}
 
 	void ProgramLayout::CreateLayout(Program& program)
@@ -283,7 +267,7 @@ namespace Vulkan
 		{
 			if (descriptor_set_mask & (1u << i))
 			{
-				GetDecriptorSet(i)->set_allocator = device->CreateSetAllocator(GetDecriptorSet(i)->set_layout, GetDecriptorSet(i)->stages_for_bindings);
+				GetDecriptorSet(i)->set_allocator = device->descriptor_set_allocators.allocate(device, GetDecriptorSet(i)->set_layout, GetDecriptorSet(i)->stages_for_bindings);
 				layouts[i] = GetDecriptorSet(i)->set_allocator->GetLayout();
 				num_sets = i + 1;
 			}
@@ -317,6 +301,25 @@ namespace Vulkan
 		if (device->GetDeviceFeatures().supports_update_template)
 			CreateUpdateTemplates();
 
+	}
+
+	void ProgramLayout::DestroyLayout()
+	{
+		auto& table = device->GetDeviceTable();
+		if (vklayout != VK_NULL_HANDLE)
+			table.vkDestroyPipelineLayout(device->GetDevice(), vklayout, nullptr);
+
+		for (unsigned i = 0; i < desc_set_count; i++)
+		{
+			if (HasDescriptorSet(i))
+			{
+				device->descriptor_set_allocators.free(GetDecriptorSet(i)->set_allocator);
+				if (GetDecriptorSet(i)->update_template != VK_NULL_HANDLE)
+					table.vkDestroyDescriptorUpdateTemplateKHR(device->GetDevice(), GetDecriptorSet(i)->update_template, nullptr);
+			}
+		}
+
+		free(desc_set_mem);
 	}
 
 	void ProgramLayout::CreateUpdateTemplates()
@@ -1031,15 +1034,13 @@ namespace Vulkan
 
 	Shader::~Shader()
 	{
-		if (internal_sync)
-			device->DestroyShaderNolock(module);
-		else
-			device->DestroyShader(module);
+		auto& table = device->GetDeviceTable();
+		table.vkDestroyShaderModule(device->GetDevice(), module, nullptr);
 	}
 
 	void ShaderDeleter::operator()(Shader* shader)
 	{
-		shader->device->handle_pool.shaders.free(shader);
+		shader->device->DestroyShader(shader);
 	}
 
 	////////////////////////
@@ -1103,14 +1104,16 @@ namespace Vulkan
 
 	Program::~Program()
 	{
+		auto& table = device->GetDeviceTable();
 		for (auto& pipe : pipelines)
-			device->DestroyPipeline(pipe.get());
+			table.vkDestroyPipeline(device->GetDevice(), pipe.get(), nullptr);
+
+		program_layout.DestroyLayout();
 	}
 
 	void ProgramDeleter::operator()(Program* program)
 	{
-		program->device->handle_pool.programs.free(program);
+		program->device->DestroyProgram(program);
 	}
-
 	
 }

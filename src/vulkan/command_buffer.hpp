@@ -140,23 +140,16 @@ namespace Vulkan
 		VkDeviceSize offsets[VULKAN_NUM_VERTEX_BUFFERS];
 	};
 
-	/*enum CommandBufferSavedStateBits
+	enum CommandBufferSavedStateBits
 	{
-		COMMAND_BUFFER_SAVED_BINDINGS_0_BIT = 1u << 0,
-		COMMAND_BUFFER_SAVED_BINDINGS_1_BIT = 1u << 1,
-		COMMAND_BUFFER_SAVED_BINDINGS_2_BIT = 1u << 2,
-		COMMAND_BUFFER_SAVED_BINDINGS_3_BIT = 1u << 3,
-		COMMAND_BUFFER_SAVED_BINDINGS_4_BIT = 1u << 4,
-		COMMAND_BUFFER_SAVED_BINDINGS_5_BIT = 1u << 5,
-		COMMAND_BUFFER_SAVED_BINDINGS_6_BIT = 1u << 6,
-		COMMAND_BUFFER_SAVED_BINDINGS_7_BIT = 1u << 7,
-		COMMAND_BUFFER_SAVED_VIEWPORT_BIT = 1u << 8,
-		COMMAND_BUFFER_SAVED_SCISSOR_BIT = 1u << 9,
-		COMMAND_BUFFER_SAVED_RENDER_STATE_BIT = 1u << 10,
-		COMMAND_BUFFER_SAVED_PUSH_CONSTANT_BIT = 1u << 11
-	};*/
+		COMMAND_BUFFER_SAVED_VIEWPORT_BIT = 1u << 0,
+		COMMAND_BUFFER_SAVED_SCISSOR_BIT = 1u << 1,
+		COMMAND_BUFFER_SAVED_RENDER_STATE_BIT = 1u << 2,
+		COMMAND_BUFFER_SAVED_PUSH_CONSTANT_BIT = 1u << 3
+	};
+
 	static_assert(VULKAN_NUM_DESCRIPTOR_SETS == 8, "Number of descriptor sets != 8.");
-	/*using CommandBufferSaveStateFlags = uint32_t;
+	using CommandBufferSaveStateFlags = uint32_t;
 
 	struct CommandBufferSavedState
 	{
@@ -167,11 +160,13 @@ namespace Vulkan
 		PipelineState static_state;
 		PotentialState potential_static_state;
 		DynamicState dynamic_state;
-	};*/
+
+		uint8_t push_constant_data[VULKAN_PUSH_CONSTANT_SIZE];
+	};
 
 	struct DeferredPipelineCompile
 	{
-		Program* program;
+		ProgramHandle program;
 		const RenderPass* compatible_render_pass;
 		PipelineState static_state;
 		PotentialState potential_static_state;
@@ -201,9 +196,14 @@ namespace Vulkan
 		//Type of Command buffer
 		enum class Type
 		{
+			// Generic queue, sure to support graphics, compute, and transfer commands
 			Generic,
+			// AsyncGraphics queue, sure to support graphics, compute, and transfer commands (but prefers to run async from Generic queue).
+			// If the async compute queue supports graphics operations, run on that, else run on the Generic queue.
 			AsyncGraphics,
+			// AsyncCompute queue, sure to support compute and transfer commands.
 			AsyncCompute,
+			// AsyncTransfer queue, dma queue, only guarenteed to support transfer commands.
 			AsyncTransfer,
 			Count
 		};
@@ -385,7 +385,7 @@ namespace Vulkan
 		// Program must remain valid until submission of cmd. A program MUST NOT be set by multiple command buffers at once.
 		// No uniforms are retained between submissions (though common descriptor sets are hashed, so don't worry about calling
 		// Set*uniform* too much). Meaning all uniforms must be set when Draw() methods are called.
-		void SetProgram(Program* program);
+		void SetProgram(ProgramHandle& program);
 		//-------------------Setting Uniforms----------------------------
 
 		void SetBufferView(unsigned set, unsigned binding, const BufferView& view, unsigned array_index = 0);
@@ -466,8 +466,8 @@ namespace Vulkan
 		//No culling, src alpha blending, enables depth testing, triangle strip topology.
 		void SetTransparentSpriteState();
 
-		/*void SaveState(CommandBufferSaveStateFlags flags, CommandBufferSavedState& state);
-		void RestoreState(const CommandBufferSavedState& state);*/
+		void SaveState(CommandBufferSaveStateFlags flags, CommandBufferSavedState& state);
+		void RestoreState(const CommandBufferSavedState& state);
 
 #define SET_STATIC_STATE(value)                               \
 	do                                                        \

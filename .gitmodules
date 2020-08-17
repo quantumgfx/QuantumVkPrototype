@@ -1,9 +1,6 @@
 [submodule "extern/SPIRV-Cross"]
 	path = extern/SPIRV-Cross
 	url = https://github.com/timith/SPIRV-Cross.git
-[submodule "extern/shaderc"]
-	path = extern/shaderc
-	url = https://github.com/timith/shaderc.git
 [submodule "extern/SPIRV-Headers"]
 	path = extern/SPIRV-Headers
 	url = https://github.com/KhronosGroup/SPIRV-Headers.git

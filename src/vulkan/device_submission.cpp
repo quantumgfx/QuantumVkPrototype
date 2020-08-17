@@ -153,13 +153,14 @@ namespace Vulkan
 
 	void Device::Submit(CommandBufferHandle& cmd, Fence* fence, unsigned semaphore_count, Semaphore* semaphores)
 	{
-		//Lock mutex
+		// Lock mutex
 		LOCK();
 		SubmitNolock(std::move(cmd), fence, semaphore_count, semaphores);
 	}
 
 	CommandBuffer::Type Device::GetPhysicalQueueType(CommandBuffer::Type queue_type) const
 	{
+		// This correction only applies to async graphics
 		if (queue_type != CommandBuffer::Type::AsyncGraphics)
 		{
 			return queue_type;
@@ -167,7 +168,7 @@ namespace Vulkan
 		else
 		{
 			if (graphics_queue_family_index == compute_queue_family_index && graphics_queue != compute_queue)
-				return CommandBuffer::Type::AsyncCompute;
+				return CommandBuffer::Type::AsyncCompute; // If the graphics and compute queue families match, but the queues don't, run this command cocurrently on the compute queue.
 			else
 				return CommandBuffer::Type::Generic;
 		}

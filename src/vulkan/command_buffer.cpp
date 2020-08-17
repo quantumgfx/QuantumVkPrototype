@@ -22,9 +22,9 @@ namespace Vulkan
 
 	CommandBuffer::~CommandBuffer()
 	{
-		VK_ASSERT(vbo_block.mapped == nullptr);
-		VK_ASSERT(ibo_block.mapped == nullptr);
-		VK_ASSERT(ubo_block.mapped == nullptr);
+		VK_ASSERT(vbo_block.mapped     == nullptr);
+		VK_ASSERT(ibo_block.mapped     == nullptr);
+		VK_ASSERT(ubo_block.mapped     == nullptr);
 		VK_ASSERT(staging_block.mapped == nullptr);
 	}
 
@@ -473,7 +473,7 @@ namespace Vulkan
 		current_pipeline = VK_NULL_HANDLE;
 		current_pipeline_layout = VK_NULL_HANDLE;
 		current_layout = nullptr;
-		pipeline_state.program = nullptr;
+		pipeline_state.program.Reset();
 		memset(&index_state, 0, sizeof(index_state));
 		memset(vbo.buffers, 0, sizeof(vbo.buffers));
 	}
@@ -1294,7 +1294,7 @@ namespace Vulkan
 		set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
 	}
 
-	void CommandBuffer::SetProgram(Program* program)
+	void CommandBuffer::SetProgram(ProgramHandle& program)
 	{
 		//If this is already set as the program, ignore this call
 		if (pipeline_state.program == program)
@@ -1896,18 +1896,8 @@ namespace Vulkan
 		set_dirty(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT);
 	}
 
-	/*void CommandBuffer::SaveState(CommandBufferSaveStateFlags flags, CommandBufferSavedState& state)
+	void CommandBuffer::SaveState(CommandBufferSaveStateFlags flags, CommandBufferSavedState& state)
 	{
-		for (unsigned i = 0; i < VULKAN_NUM_DESCRIPTOR_SETS; i++)
-		{
-			if (flags & (COMMAND_BUFFER_SAVED_BINDINGS_0_BIT << i))
-			{
-				memcpy(state.bindings.bindings[i], bindings.bindings[i], sizeof(bindings.bindings[i]));
-				memcpy(state.bindings.cookies[i], bindings.cookies[i], sizeof(bindings.cookies[i]));
-				memcpy(state.bindings.secondary_cookies[i], bindings.secondary_cookies[i], sizeof(bindings.secondary_cookies[i]));
-			}
-		}
-
 		if (flags & COMMAND_BUFFER_SAVED_VIEWPORT_BIT)
 			state.viewport = viewport;
 		if (flags & COMMAND_BUFFER_SAVED_SCISSOR_BIT)
@@ -1920,7 +1910,7 @@ namespace Vulkan
 		}
 
 		if (flags & COMMAND_BUFFER_SAVED_PUSH_CONSTANT_BIT)
-			memcpy(state.bindings.push_constant_data, bindings.push_constant_data, sizeof(bindings.push_constant_data));
+			memcpy(state.push_constant_data, push_constant_data, VULKAN_PUSH_CONSTANT_SIZE);
 
 		state.flags = flags;
 	}
@@ -1930,25 +1920,11 @@ namespace Vulkan
 		auto& static_state = pipeline_state.static_state;
 		auto& potential_static_state = pipeline_state.potential_static_state;
 
-		for (unsigned i = 0; i < VULKAN_NUM_DESCRIPTOR_SETS; i++)
-		{
-			if (state.flags & (COMMAND_BUFFER_SAVED_BINDINGS_0_BIT << i))
-			{
-				if (memcmp(state.bindings.bindings[i], bindings.bindings[i], sizeof(bindings.bindings[i])))
-				{
-					memcpy(bindings.bindings[i], state.bindings.bindings[i], sizeof(bindings.bindings[i]));
-					memcpy(bindings.cookies[i], state.bindings.cookies[i], sizeof(bindings.cookies[i]));
-					memcpy(bindings.secondary_cookies[i], state.bindings.secondary_cookies[i], sizeof(bindings.secondary_cookies[i]));
-					dirty_sets |= 1u << i;
-				}
-			}
-		}
-
 		if (state.flags & COMMAND_BUFFER_SAVED_PUSH_CONSTANT_BIT)
 		{
-			if (memcmp(state.bindings.push_constant_data, bindings.push_constant_data, sizeof(bindings.push_constant_data)) != 0)
+			if (memcmp(state.push_constant_data, push_constant_data, VULKAN_PUSH_CONSTANT_SIZE) != 0)
 			{
-				memcpy(bindings.push_constant_data, state.bindings.push_constant_data, sizeof(bindings.push_constant_data));
+				memcpy(push_constant_data, state.push_constant_data, VULKAN_PUSH_CONSTANT_SIZE);
 				set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
 			}
 		}
@@ -1985,7 +1961,7 @@ namespace Vulkan
 				set_dirty(COMMAND_BUFFER_DIRTY_STENCIL_REFERENCE_BIT | COMMAND_BUFFER_DIRTY_DEPTH_BIAS_BIT);
 			}
 		}
-	}*/
+	}
 
 	void CommandBuffer::End()
 	{
@@ -2000,6 +1976,8 @@ namespace Vulkan
 			device->RequestUniformBlockNolock(ubo_block, 0);
 		if (staging_block.mapped)
 			device->RequestStagingBlockNolock(staging_block, 0);
+
+		pipeline_state.program.Reset();
 	}
 
 	//////////////////////////////////

@@ -127,8 +127,13 @@ namespace Vulkan
 	struct DeviceLock
 	{
 #ifdef QM_VULKAN_MT
+		// Global lock, syncing most of Device's funtionalities
 		std::mutex lock;
 		std::condition_variable cond;
+
+		// Program lock, managing program and shader deletion
+		std::mutex program_lock;
+		std::mutex shader_lock;
 #endif
 		unsigned counter = 0;
 	};
@@ -175,12 +180,9 @@ namespace Vulkan
 		std::vector<VkBufferView> destroyed_buffer_views;
 		std::vector<std::pair<VkImage, DeviceAllocation>> destroyed_images;
 		std::vector<std::pair<VkBuffer, DeviceAllocation>> destroyed_buffers;
-		std::vector<VkDescriptorPool> destroyed_descriptor_pools;
-		std::vector<DescriptorSetAllocator*> destroyed_set_allocators;
 
-		std::vector<VkPipelineLayout> destroyed_layouts;
-		std::vector<VkPipeline> destroyed_pipelines;
-		std::vector<VkShaderModule> destroyed_shaders;
+		std::vector<Program*> destroyed_programs;
+		std::vector<Shader*> destroyed_shaders;
 
 		std::vector<ImageHandle> keep_alive_images;
 
@@ -454,9 +456,6 @@ namespace Vulkan
 		const Framebuffer& RequestFramebuffer(const RenderPassInfo& info);
 		const RenderPass& RequestRenderPass(const RenderPassInfo& info, bool compatible);
 
-		DescriptorSetAllocator* CreateSetAllocator(const DescriptorSetLayout& layout, const uint32_t* stages_for_bindings);
-		void FreeSetAllocator(DescriptorSetAllocator* allocator);
-
 		VkPhysicalDeviceMemoryProperties mem_props;
 		VkPhysicalDeviceProperties gpu_props;
 
@@ -473,10 +472,10 @@ namespace Vulkan
 
 		DeviceManagers managers;
 
-#ifdef QM_VULKAN_MT
-		Quantum::ThreadGroup thread_group;
-		std::mutex thread_group_mutex;
-#endif
+//#ifdef QM_VULKAN_MT
+//		Quantum::ThreadGroup thread_group;
+//		std::mutex thread_group_mutex;
+//#endif
 
 		DeviceLock lock;
 
@@ -564,34 +563,27 @@ namespace Vulkan
 		void DestroyImage(VkImage image, const DeviceAllocation& allocation);
 		void DestroyImageView(VkImageView view);
 		void DestroyBufferView(VkBufferView view);
-		void DestroyPipeline(VkPipeline pipeline);
-		void DestroyLayout(VkPipelineLayout layout);
 		void DestroySampler(VkSampler sampler);
-		void DestroyShader(VkShaderModule shader);
 		void DestroyFramebuffer(VkFramebuffer framebuffer);
 		void DestroySemaphore(VkSemaphore semaphore);
 		void RecycleSemaphore(VkSemaphore semaphore);
 		void DestroyEvent(VkEvent event);
 		void ResetFence(VkFence fence, bool observed_wait);
 		void KeepHandleAlive(ImageHandle handle);
-		void DestroyDescriptorPool(VkDescriptorPool desc_pool);
-		void DestroyDescriptorSetAllocator(DescriptorSetAllocator* allocator);
+
+		void DestroyProgram(Program* program);
+		void DestroyShader(Shader* shader);
 
 		void DestroyBufferNolock(VkBuffer buffer, const DeviceAllocation& allocation);
 		void DestroyImageNolock(VkImage image, const DeviceAllocation& allocation);
 		void DestroyImageViewNolock(VkImageView view);
 		void DestroyBufferViewNolock(VkBufferView view);
-		void DestroyPipelineNolock(VkPipeline pipeline);
-		void DestroyLayoutNolock(VkPipelineLayout layout);
 		void DestroySamplerNolock(VkSampler sampler);
-		void DestroyShaderNolock(VkShaderModule shader);
 		void DestroyFramebufferNolock(VkFramebuffer framebuffer);
 		void DestroySemaphoreNolock(VkSemaphore semaphore);
 		void RecycleSemaphoreNolock(VkSemaphore semaphore);
 		void DestroyEventNolock(VkEvent event);
-		void DestroyDescriptorPoolNolock(VkDescriptorPool desc_pool);
 		void ResetFenceNolock(VkFence fence, bool observed_wait);
-		void DestroyDescriptorSetAllocatorNolock(DescriptorSetAllocator* allocator);
 
 		void FlushFrameNolock();
 		CommandBufferHandle RequestCommandBufferNolock(unsigned thread_index, CommandBuffer::Type type);
