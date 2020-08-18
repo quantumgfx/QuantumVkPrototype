@@ -26,10 +26,11 @@ new renderpass/pipeline or retrieves a previously used resource via hashmaps.
 
 # Current Work
 The basic library is now functional. I am currently working on removing previous limitations and adding more features.
-My current TODO list includes:
+My current TODO list includes...
 
-- Add true support for VK_EXT_descriptor_indexing
-- Add task and mesh shaders
 - Multiplatform support (probably Mac OSX via MoltenVk first)
-- Add GPU profiling
-- Add true support for VK_KHR_ray_tracing (raytracing is still in beta, so maybe in some kind of optional implementation?)
+- Adding GPU profiling
+- Adding complete QuantumVk API support for the following extensions:
+	- VK_EXT_descriptor_indexing (so that bindless is supported)
+	- VK_KHR_ray_tracing (raytracing is still in beta, so maybe in some kind of optional implementation?)
+	- VK_NV_mesh_shader

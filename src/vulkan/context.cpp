@@ -1005,6 +1005,17 @@ namespace Vulkan
 			if (features.features.shaderInt64)
 				enabled_features.shaderInt64 = VK_TRUE;
 
+			if (features.features.tessellationShader)
+			{
+				enabled_features.tessellationShader = VK_TRUE;
+				ext->supports_tesselation_shaders = true;
+			}
+			if (features.features.geometryShader)
+			{
+				enabled_features.geometryShader = VK_TRUE;
+				ext->supports_geometry_shaders = true;
+			}
+
 			if (features.features.shaderSampledImageArrayDynamicIndexing)
 				enabled_features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
 			if (features.features.shaderUniformBufferArrayDynamicIndexing)

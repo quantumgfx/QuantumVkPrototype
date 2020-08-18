@@ -107,7 +107,7 @@ namespace Vulkan
 		}
 
 #ifdef VULKAN_DEBUG
-		QM_LOG_INFO("Allocating %u bytes of memory for program unforms.\n", mem_size);
+		QM_LOG_INFO("Allocating %zu bytes of memory for program unforms.\n", mem_size);
 #endif
 
 		// Alloc that memory
@@ -1068,6 +1068,12 @@ namespace Vulkan
 			hasher.u64(graphics_shaders.fragment->GetHash());
 		hash = hasher.get();
 		// --------------------
+
+		// Check that certain shaders are supported
+		if ((graphics_shaders.tess_eval || graphics_shaders.tess_control) && !device_->GetDeviceFeatures().supports_tesselation_shaders)
+			QM_LOG_ERROR("Tesselation shaders used but gpu doesn't support tesselation");
+		if (graphics_shaders.geometry && !device_->GetDeviceFeatures().supports_geometry_shaders)
+			QM_LOG_ERROR("Geometry shaders used but gpu doesn't support geometry shaders");
 
 		shaders = graphics_shaders;
 		program_layout.CreateLayout(*this);
