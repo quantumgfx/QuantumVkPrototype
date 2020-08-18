@@ -176,5 +176,3 @@ endif()
 target_compile_options(QuantumVk PRIVATE ${QM_CXX_FLAGS})
 # --------------------------------
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/tests/example)
-
