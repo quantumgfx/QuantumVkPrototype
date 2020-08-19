@@ -45,7 +45,7 @@ set(DEFAULT_VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
 
 # Options
 option(QM_VULKAN_MT "Make QuantumVk thread-safe." ON)
-option(QM_INSTALL "Skip QunatumVk installation." ON)
+option(QM_INSTALL "Run QunatumVk installation." ON)
 
 set(VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
 # ------------------------------
@@ -86,7 +86,6 @@ target_link_libraries(QuantumVk PUBLIC volk)
 target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
 target_link_libraries(QuantumVk PRIVATE glslang)
 target_link_libraries(QuantumVk PRIVATE SPIRV)
-target_link_libraries(QuantumVk PRIVATE ${VULKAN_SDK_DIR}/Bin/glslang.lib)
 
 # Src Directories
 set(QM_UTILS_DIR src/utils)
@@ -228,7 +227,7 @@ if(QM_INSTALL)
 	set(QM_INSTALL_LIBDIR QuantumVk/Lib)
 	set(QM_INSTALL_INCLUDEDIR QuantumVk/Include)
 	
-	install(TARGETS QunatumVk DESTINATION ${QM_INSTALL_LIBDIR})
+	install(TARGETS QuantumVk DESTINATION ${QM_INSTALL_LIBDIR})
 	
 	install(FILES ${QM_UTIL_HPP_FILES}        DESTINATION ${QM_INSTALL_INCLUDEDIR}/utils)
 	install(FILES ${QM_THREADING_HPP_FILES}   DESTINATION ${QM_INSTALL_INCLUDEDIR}/threading)
@@ -240,8 +239,10 @@ if(QM_INSTALL)
 	install(FILES ${QM_VK_MISC_HPP_FILES}     DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/misc)
 	install(FILES ${QM_VK_WSI_HPP_FILES}      DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/wsi)
 	
-	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/quantumvk.hpp DESTINATION ${QM_INSTALL_INCLUDEDIR)
+	# External files that are included in headers
+	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/extern/volk/volk.h DESTINATION ${QM_INSTALL_INCLUDEDIR}/extern/volk)
+	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/extern/VulkanMemoryAllocator/vk_mem_alloc.h DESTINATION ${QM_INSTALL_INCLUDEDIR}/extern/VulkanMemoryAllocator)
+	
+	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/quantumvk.hpp DESTINATION ${QM_INSTALL_INCLUDEDIR})
 	
 endif()
-# --------------------------------
-
