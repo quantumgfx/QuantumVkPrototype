@@ -45,6 +45,7 @@ set(DEFAULT_VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
 
 # Options
 option(QM_VULKAN_MT "Make QuantumVk thread-safe." ON)
+option(QM_INSTALL "Skip QunatumVk installation." ON)
 
 set(VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
 # ------------------------------
@@ -85,80 +86,127 @@ target_link_libraries(QuantumVk PUBLIC volk)
 target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
 target_link_libraries(QuantumVk PRIVATE glslang)
 target_link_libraries(QuantumVk PRIVATE SPIRV)
+target_link_libraries(QuantumVk PRIVATE ${VULKAN_SDK_DIR}/Bin/glslang.lib)
 
 # Src Directories
 set(QM_UTILS_DIR src/utils)
 set(QM_VK_DIR src/vulkan)
 set(QM_THREADING_DIR src/threading)
 
-target_sources(QuantumVk PRIVATE 
-	
-	${QM_UTILS_DIR}/aligned_alloc.cpp
-	${QM_UTILS_DIR}/aligned_alloc.hpp
-	${QM_UTILS_DIR}/bitops.hpp
-	${QM_UTILS_DIR}/compile_time_hash.hpp
-	${QM_UTILS_DIR}/enum_cast.hpp
-	${QM_UTILS_DIR}/hash.hpp
-	${QM_UTILS_DIR}/hashmap.hpp
-	${QM_UTILS_DIR}/retained_alloc.hpp
-	${QM_UTILS_DIR}/intrusive.hpp
-	${QM_UTILS_DIR}/intrusive_list.hpp
-	${QM_UTILS_DIR}/intrusive_hash_map.hpp
-	${QM_UTILS_DIR}/intrusive_object_pool.hpp
-	${QM_UTILS_DIR}/logging.hpp
-	${QM_UTILS_DIR}/object_pool.hpp
-	${QM_UTILS_DIR}/read_write_lock.hpp
-	${QM_UTILS_DIR}/retained_heap_data.hpp
-	${QM_UTILS_DIR}/small_vector.hpp
-	${QM_UTILS_DIR}/stack_allocator.hpp
-	${QM_UTILS_DIR}/string_helpers.cpp
-	${QM_UTILS_DIR}/string_helpers.hpp
-	${QM_UTILS_DIR}/temporary_hashmap.hpp
-	${QM_UTILS_DIR}/timer.cpp
-	${QM_UTILS_DIR}/timer.hpp
-	${QM_UTILS_DIR}/variant.hpp
-	
-	${QM_THREADING_DIR}/thread_group.hpp ${QM_THREADING_DIR}/thread_group.cpp
-	${QM_THREADING_DIR}/thread_id.hpp ${QM_THREADING_DIR}/thread_id.cpp
-	
-	${QM_VK_DIR}/graphics/descriptor_set.hpp ${QM_VK_DIR}/graphics/descriptor_set.cpp
-	${QM_VK_DIR}/graphics/render_pass.hpp ${QM_VK_DIR}/graphics/render_pass.cpp
-	${QM_VK_DIR}/graphics/shader.hpp ${QM_VK_DIR}/graphics/shader.cpp
-	
-	${QM_VK_DIR}/images/format.hpp
-	${QM_VK_DIR}/images/image.hpp ${QM_VK_DIR}/images/image.cpp
-	${QM_VK_DIR}/images/sampler.hpp ${QM_VK_DIR}/images/sampler.cpp
-	${QM_VK_DIR}/images/texture_format.hpp ${QM_VK_DIR}/images/texture_format.cpp
-	
-	${QM_VK_DIR}/memory/buffer.hpp ${QM_VK_DIR}/memory/buffer.cpp
-	${QM_VK_DIR}/memory/buffer_pool.hpp ${QM_VK_DIR}/memory/buffer_pool.cpp
-	${QM_VK_DIR}/memory/memory_allocator.hpp ${QM_VK_DIR}/memory/memory_allocator.cpp
-	${QM_VK_DIR}/memory/vma_build.cpp
-	
-	${QM_VK_DIR}/misc/cookie.hpp ${QM_VK_DIR}/misc/cookie.cpp
-	${QM_VK_DIR}/misc/limits.hpp
-	${QM_VK_DIR}/misc/quirks.hpp
-	${QM_VK_DIR}/misc/type_to_string.hpp
-	
-	${QM_VK_DIR}/sync/event_manager.hpp ${QM_VK_DIR}/sync/event_manager.cpp
-	${QM_VK_DIR}/sync/fence.hpp ${QM_VK_DIR}/sync/fence.cpp
-	${QM_VK_DIR}/sync/fence_manager.hpp ${QM_VK_DIR}/sync/fence_manager.cpp
-	${QM_VK_DIR}/sync/pipeline_event.hpp ${QM_VK_DIR}/sync/pipeline_event.cpp
-	${QM_VK_DIR}/sync/semaphore.hpp ${QM_VK_DIR}/sync/semaphore.cpp
-	${QM_VK_DIR}/sync/semaphore_manager.hpp ${QM_VK_DIR}/sync/semaphore_manager.cpp
-	
-	${QM_VK_DIR}/wsi/wsi.hpp ${QM_VK_DIR}/wsi/wsi.cpp
-	${QM_VK_DIR}/wsi/wsi_timing.hpp ${QM_VK_DIR}/wsi/wsi_timing.cpp
-	
-	${QM_VK_DIR}/context.hpp ${QM_VK_DIR}/context.cpp
-	${QM_VK_DIR}/command_buffer.hpp ${QM_VK_DIR}/command_buffer.cpp
-	${QM_VK_DIR}/command_pool.hpp ${QM_VK_DIR}/command_pool.cpp
-	${QM_VK_DIR}/device.hpp ${QM_VK_DIR}/device.cpp
-	${QM_VK_DIR}/device_shaders.cpp ${QM_VK_DIR}/device_submission.cpp
-	${QM_VK_DIR}/vulkan_common.hpp
-	${QM_VK_DIR}/vulkan_headers.hpp
-	
-	src/quantumvk.hpp)
+set(QM_UTIL_HPP_FILES
+		${QM_UTILS_DIR}/aligned_alloc.hpp
+		${QM_UTILS_DIR}/bitops.hpp
+		${QM_UTILS_DIR}/compile_time_hash.hpp
+		${QM_UTILS_DIR}/enum_cast.hpp
+		${QM_UTILS_DIR}/hash.hpp
+		${QM_UTILS_DIR}/hashmap.hpp
+		${QM_UTILS_DIR}/retained_alloc.hpp
+		${QM_UTILS_DIR}/intrusive.hpp
+		${QM_UTILS_DIR}/intrusive_list.hpp
+		${QM_UTILS_DIR}/intrusive_hash_map.hpp
+		${QM_UTILS_DIR}/intrusive_object_pool.hpp
+		${QM_UTILS_DIR}/logging.hpp
+		${QM_UTILS_DIR}/object_pool.hpp
+		${QM_UTILS_DIR}/read_write_lock.hpp
+		${QM_UTILS_DIR}/retained_heap_data.hpp
+		${QM_UTILS_DIR}/small_vector.hpp
+		${QM_UTILS_DIR}/stack_allocator.hpp
+		${QM_UTILS_DIR}/string_helpers.hpp
+		${QM_UTILS_DIR}/temporary_hashmap.hpp
+		${QM_UTILS_DIR}/timer.hpp
+		${QM_UTILS_DIR}/variant.hpp)
+		
+set(QM_THREADING_HPP_FILES
+		${QM_THREADING_DIR}/thread_group.hpp
+		${QM_THREADING_DIR}/thread_id.hpp)
+		
+set(QM_VK_GRAPHICS_HPP_FILES
+		${QM_VK_DIR}/graphics/descriptor_set.hpp
+		${QM_VK_DIR}/graphics/render_pass.hpp 
+		${QM_VK_DIR}/graphics/shader.hpp)
+		
+set(QM_VK_IMAGES_HPP_FILES
+		${QM_VK_DIR}/images/format.hpp
+		${QM_VK_DIR}/images/image.hpp 
+		${QM_VK_DIR}/images/sampler.hpp 
+		${QM_VK_DIR}/images/texture_format.hpp)
+
+set(QM_VK_MEMORY_HPP_FILES
+		${QM_VK_DIR}/memory/buffer.hpp 
+		${QM_VK_DIR}/memory/buffer_pool.hpp 
+		${QM_VK_DIR}/memory/memory_allocator.hpp)
+
+set(QM_VK_MISC_HPP_FILES
+		${QM_VK_DIR}/misc/cookie.hpp 
+		${QM_VK_DIR}/misc/limits.hpp
+		${QM_VK_DIR}/misc/quirks.hpp
+		${QM_VK_DIR}/misc/type_to_string.hpp)
+		
+set(QM_VK_SYNC_HPP_FILES
+		${QM_VK_DIR}/sync/event_manager.hpp 
+		${QM_VK_DIR}/sync/fence.hpp 
+		${QM_VK_DIR}/sync/fence_manager.hpp 
+		${QM_VK_DIR}/sync/pipeline_event.hpp 
+		${QM_VK_DIR}/sync/semaphore.hpp 
+		${QM_VK_DIR}/sync/semaphore_manager.hpp)
+		
+set(QM_VK_WSI_HPP_FILES
+		${QM_VK_DIR}/wsi/wsi.hpp 
+		${QM_VK_DIR}/wsi/wsi_timing.hpp)
+
+set(QM_VK_GLOBAL_FILES
+		${QM_VK_DIR}/context.hpp 
+		${QM_VK_DIR}/command_buffer.hpp 
+		${QM_VK_DIR}/command_pool.hpp
+		${QM_VK_DIR}/device.hpp 
+		${QM_VK_DIR}/vulkan_common.hpp
+		${QM_VK_DIR}/vulkan_headers.hpp)
+		
+		
+set(QM_CPP_FILES 
+		${QM_UTILS_DIR}/aligned_alloc.cpp
+		${QM_UTILS_DIR}/string_helpers.cpp
+		${QM_UTILS_DIR}/timer.cpp
+		
+		${QM_THREADING_DIR}/thread_group.cpp
+		${QM_THREADING_DIR}/thread_id.cpp
+		
+		${QM_VK_DIR}/graphics/descriptor_set.cpp
+		${QM_VK_DIR}/graphics/render_pass.cpp
+		${QM_VK_DIR}/graphics/shader.cpp
+		
+		
+		${QM_VK_DIR}/images/image.cpp
+		${QM_VK_DIR}/images/sampler.cpp
+		${QM_VK_DIR}/images/texture_format.cpp
+		
+		${QM_VK_DIR}/memory/buffer.cpp
+		${QM_VK_DIR}/memory/buffer_pool.cpp
+		${QM_VK_DIR}/memory/memory_allocator.cpp
+		${QM_VK_DIR}/memory/vma_build.cpp
+		
+		${QM_VK_DIR}/misc/cookie.cpp
+		
+		${QM_VK_DIR}/sync/event_manager.cpp
+		${QM_VK_DIR}/sync/fence.cpp
+		${QM_VK_DIR}/sync/fence_manager.cpp
+		${QM_VK_DIR}/sync/pipeline_event.cpp
+		${QM_VK_DIR}/sync/semaphore.cpp
+		${QM_VK_DIR}/sync/semaphore_manager.cpp
+		
+		${QM_VK_DIR}/wsi/wsi.cpp
+		${QM_VK_DIR}/wsi/wsi_timing.cpp
+		
+		${QM_VK_DIR}/context.cpp
+		${QM_VK_DIR}/command_buffer.cpp
+		${QM_VK_DIR}/command_pool.cpp
+		${QM_VK_DIR}/device.cpp
+		${QM_VK_DIR}/device_shaders.cpp 
+		${QM_VK_DIR}/device_submission.cpp)
+
+target_sources(QuantumVk PRIVATE ${QM_UTIL_HPP_FILES} ${QM_THREADING_HPP_FILES} ${QM_VK_GRAPHICS_HPP_FILES} ${QM_VK_SYNC_HPP_FILES}
+								${QM_VK_IMAGES_HPP_FILES} ${QM_VK_MEMORY_HPP_FILES} ${QM_VK_MISC_HPP_FILES} ${QM_VK_WSI_HPP_FILES} ${QM_VK_GLOBAL_FILES}
+								${QM_CPP_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/src/quantumvk.hpp)
 	
 if (QM_VULKAN_MT)
     target_compile_definitions(QuantumVk PUBLIC QM_VULKAN_MT)
@@ -174,5 +222,26 @@ if (WIN32)
 endif()
 	
 target_compile_options(QuantumVk PRIVATE ${QM_CXX_FLAGS})
+
+# ---- Installing -----
+if(QM_INSTALL)
+	set(QM_INSTALL_LIBDIR QuantumVk/Lib)
+	set(QM_INSTALL_INCLUDEDIR QuantumVk/Include)
+	
+	install(TARGETS QunatumVk DESTINATION ${QM_INSTALL_LIBDIR})
+	
+	install(FILES ${QM_UTIL_HPP_FILES}        DESTINATION ${QM_INSTALL_INCLUDEDIR}/utils)
+	install(FILES ${QM_THREADING_HPP_FILES}   DESTINATION ${QM_INSTALL_INCLUDEDIR}/threading)
+	install(FILES ${QM_VK_GLOBAL_FILES}       DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan)
+	install(FILES ${QM_VK_GRAPHICS_HPP_FILES} DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/graphics)
+	install(FILES ${QM_VK_SYNC_HPP_FILES}     DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/sync)
+	install(FILES ${QM_VK_IMAGES_HPP_FILES}   DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/images)
+	install(FILES ${QM_VK_MEMORY_HPP_FILES}   DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/memory)
+	install(FILES ${QM_VK_MISC_HPP_FILES}     DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/misc)
+	install(FILES ${QM_VK_WSI_HPP_FILES}      DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/wsi)
+	
+	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/quantumvk.hpp DESTINATION ${QM_INSTALL_INCLUDEDIR)
+	
+endif()
 # --------------------------------
 

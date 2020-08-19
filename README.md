@@ -1,5 +1,5 @@
 # QuantumVk
-QuantumVk is a fast and flexible middle-ware library for Vulkan, written in C++17. It seeks to improve
+QuantumVk is a fast and flexible middleware library for Vulkan, written in C++17. It seeks to improve
 development, remove boiler-plate and provide a higher-level API for Vulkan, without sacrificing Vulkan's unique advantage: its speed.
 QuantumVk takes inspiration from [Granite Engine](https://github.com/Themaister/Granite), created by the Themaister
 (specifically Granite's Vulkan backend).
@@ -14,15 +14,6 @@ In order to build QuantumVk, you must have downloaded the following, regardless 
 #### Windows
 Windows is currently the only tested platform, though Linux, Andriod, Mac OSX and ios support is currently being worked on (Mac and ios via MoltenVk).
 - [Visual Studio 2019](https://visualstudio.microsoft.com/vs/): The suggested developement IDE on Windows for QuantumVk.
-
-# Design
-
-## Lazy On-Demand Creation
-Something QuantumVk does quite often is lazily create objects and resources. Particularly with the render state. It is just very hard and annoying to be
-completely explicit 100% of the time. Instead of having you (the user) fill in the entire VkGraphicsPipelineCreateInfo structure, fill out the VkPipelineLayout,
-explicity call vkCreateGraphicsPipelines, manage some pipeline object, and make sure it isn't in use when you delete it, QuantumVk abstracts this all away via 
-lazy creation and hashmaps and caches. QuantumVk instead has you set some basic state info in the command buffer, and either generates a
-new renderpass/pipeline or retrieves a previously used resource via hashmaps.
 
 # Current Work
 The basic library is now functional. I am currently working on removing previous limitations and adding more features.
