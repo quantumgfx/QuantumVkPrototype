@@ -191,7 +191,7 @@ namespace Util
 				typename T::EnabledDeleter,
 				typename T::EnabledReferenceOp>;
 
-			reset();
+			Reset();
 			data = static_cast<T*>(other.data);
 
 			// Static up-cast here to avoid potential issues with multiple intrusive inheritance.

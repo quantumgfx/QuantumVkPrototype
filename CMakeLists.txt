@@ -73,10 +73,10 @@ add_subdirectory(extern EXCLUDE_FROM_ALL)
 # QuantumVk Library
 add_library(QuantumVk STATIC)
 # Include Directories
-target_include_directories(QuantumVk PUBLIC "${VULKAN_SDK_DIR}/Include")
-target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_include_directories(QuantumVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/extern)
+target_include_directories(QuantumVk PUBLIC  ${VULKAN_SDK_DIR}/Include)
+target_include_directories(QuantumVk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(QuantumVk PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(QuantumVk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern)
 
 # target_compile_options(QuantumVk PRIVATE ${QM_CXX_FLAGS})
 
