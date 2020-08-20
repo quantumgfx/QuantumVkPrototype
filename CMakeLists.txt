@@ -1,6 +1,12 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.15)
+
+cmake_policy(SET CMP0091 NEW)
+cmake_policy(SET CMP0077 NEW)
 
 project(QuantumVk LANGUAGES CXX C)
+
+# MultithreadedDebug if in debug mode, Mutlithreaded otherwise
+set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded$<$<CONFIG:Debug>:Debug>)
 
 if (CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
     set(QM_CXX_FLAGS -Wshadow -Wall -Wextra -Wno-comment -Wno-missing-field-initializers -Wno-empty-body -ffast-math)
@@ -35,10 +41,6 @@ set(CMAKE_C_STANDARD 99)
 
 # We are overriding settings in subdirectories.
 # Avoid warnings.
-if (${CMAKE_VERSION} VERSION_GREATER "3.13.0")
-   message("Setting CMake policy CMP0077.")
-   cmake_policy(SET CMP0077 NEW)
-endif()
 
 # Get Default vulkan sdk directory
 set(DEFAULT_VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
@@ -78,8 +80,6 @@ target_include_directories(QuantumVk PUBLIC  ${VULKAN_SDK_DIR}/Include)
 target_include_directories(QuantumVk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(QuantumVk PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_include_directories(QuantumVk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern)
-
-# target_compile_options(QuantumVk PRIVATE ${QM_CXX_FLAGS})
 
 # libraries that QuantumVk links to
 target_link_libraries(QuantumVk PUBLIC volk)
@@ -224,7 +224,7 @@ target_compile_options(QuantumVk PRIVATE ${QM_CXX_FLAGS})
 # ---- Installing -----
 if(QM_INSTALL)
 
-	include(GNUIncludeDirs)
+	include(GNUInstallDirs)
 	
 	set(QM_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
 	set(QM_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
