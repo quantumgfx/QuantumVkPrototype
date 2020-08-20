@@ -1,7 +1,7 @@
 #include "aligned_alloc.hpp"
 #include <stdlib.h>
 #include <string.h>
-#ifdef QM_PLATFORM_WINDOWS
+#ifdef _WIN32
 #include <malloc.h>
 #endif
 
@@ -9,7 +9,7 @@ namespace Util
 {
     void* memalign_alloc(size_t boundary, size_t size)
     {
-#if defined(QM_PLATFORM_WINDOWS)
+#if defined(_WIN32)
         return _aligned_malloc(size, boundary);
 #elif defined(_ISOC11_SOURCE)
         return aligned_alloc(boundary, size);
@@ -45,7 +45,7 @@ namespace Util
 
     void memalign_free(void* ptr)
     {
-#if defined(QM_PLATFORM_WINDOWS)
+#if defined(_WIN32)
         _aligned_free(ptr);
 #elif !defined(_ISOC11_SOURCE) && !((_POSIX_C_SOURCE >= 200112L) || (_XOPEN_SOURCE >= 600))
         if (ptr != nullptr)

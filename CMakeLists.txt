@@ -216,7 +216,6 @@ if (${CMAKE_BUILD_TYPE} MATCHES "Debug")
 endif()
 
 if (WIN32)
-	target_compile_definitions(QuantumVk PUBLIC QM_PLATFORM_WINDOWS)
 	target_compile_definitions(QuantumVk PUBLIC VK_USE_PLATFORM_WIN32_KHR)
 endif()
 	
@@ -224,8 +223,11 @@ target_compile_options(QuantumVk PRIVATE ${QM_CXX_FLAGS})
 
 # ---- Installing -----
 if(QM_INSTALL)
-	set(QM_INSTALL_LIBDIR QuantumVk/Lib)
-	set(QM_INSTALL_INCLUDEDIR QuantumVk/Include)
+
+	include(GNUIncludeDirs)
+	
+	set(QM_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+	set(QM_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
 	
 	install(TARGETS QuantumVk DESTINATION ${QM_INSTALL_LIBDIR})
 	

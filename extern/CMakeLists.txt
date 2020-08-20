@@ -51,8 +51,6 @@ set_sln_folder(spirv-cross-core Dependencies)
 override_option(SPIRV_HEADERS_SKIP_EXAMPLES ON)
 override_option(SPIRV_HEADERS_SKIP_INSTALL ON)
 
-#SPIRV HEADERS added via shaderc
-# add_subdirectory(SPIRV-Headers EXCLUDE_FROM_ALL)
 # -------------------------------------------
 # ------------SPIRV-Tools--------------------
 
