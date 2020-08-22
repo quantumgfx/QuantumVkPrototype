@@ -48,6 +48,8 @@ set(DEFAULT_VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
 # Options
 option(QM_VULKAN_MT "Make QuantumVk thread-safe." ON)
 option(QM_INSTALL "Run QunatumVk installation." ON)
+option(ENABLE_SPIRV_TOOLS "Compile spirv-tools, allows for hlsl compilation and spirv optimization" OFF)
+# option(ENABLE_GLSL_TO_SPIRV_RUNTIME_CONVERSION "Allow shader modules to be created directly from glsl code" ON)
 
 set(VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
 # ------------------------------

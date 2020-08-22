@@ -54,6 +54,8 @@ override_option(SPIRV_HEADERS_SKIP_INSTALL ON)
 # -------------------------------------------
 # ------------SPIRV-Tools--------------------
 
+if(ENABLE_SPIRV_TOOLS)
+
 override_option(SPIRV_ALLOW_TIMERS ON)
 override_option(SKIP_SPIRV_TOOLS_INSTALL ON)
 override_option(SPIRV_BUILD_COMPRESSION OFF)
@@ -90,6 +92,8 @@ set_sln_folder(spirv-tools-vimsyntax "glslang/SPIRV-Tools/Utility")
 set_sln_folder(spirv-tools-pkg-config "glslang/SPIRV-Tools/Utility")
 set_sln_folder(spirv-tools-shared-pkg-config "glslang/SPIRV-Tools/Utility")
 
+endif(ENABLE_SPIRV_TOOLS)
+
 # -------------------------------------------
 # --------------glslang----------------------
 override_option(BUILD_SHARED_LIBS OFF)
@@ -100,7 +104,6 @@ override_option(ENABLE_GLSLANG_BINARIES OFF)
 override_option(ENABLE_GLSLANG_JS OFF)
 override_option(ENABLE_RTTI OFF)
 override_option(ENABLE_EXCEPTIONS OFF)
-override_option(ENABLE_OPT ON)
 override_option(ENABLE_PCH ON)
 override_option(ENABLE_CTEST OFF)
 override_option(USE_CCACHE OFF)
@@ -108,7 +111,14 @@ override_option(LLVM_USE_CRT_DEBUG MTd)
 override_option(LLVM_USE_CRT_RELEASE MT)
 override_option(LLVM_USE_CRT_MINSIZEREL MT)
 override_option(LLVM_USE_CRT_RELWITHDEBINFO MT)
-override_option(ENABLE_HLSL ON)
+
+if(ENABLE_SPIRV_TOOLS)
+	override_option(ENABLE_HLSL ON)
+	override_option(ENABLE_OPT ON)
+else(ENABLE_SPIRV_TOOLS)
+	override_option(ENABLE_OPT OFF)
+	override_option(ENABLE_HLSL OFF)
+endif(ENABLE_SPIRV_TOOLS)
 
 add_subdirectory(glslang EXCLUDE_FROM_ALL)
 
