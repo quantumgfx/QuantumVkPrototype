@@ -21,6 +21,7 @@ My current TODO list includes...
 
 - Multiplatform support (probably Mac OSX via MoltenVk first)
 - Adding GPU profiling
+- Support for multiple WSIs simultaneuosly
 - Adding complete QuantumVk API support for the following extensions:
 	- VK_EXT_descriptor_indexing (so that bindless is supported)
 	- VK_KHR_ray_tracing (raytracing is still in beta, so maybe in some kind of optional implementation?)
