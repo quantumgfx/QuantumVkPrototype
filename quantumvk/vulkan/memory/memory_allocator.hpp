@@ -11,9 +11,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "quantumvk/vulkan/vulkan_headers.hpp"
-
-#include <extern/VulkanMemoryAllocator/vk_mem_alloc.h>
+#include <quantumvk/extern_build/vma_include.hpp>
 
 #ifdef QM_VULKAN_MT
 #include <mutex>

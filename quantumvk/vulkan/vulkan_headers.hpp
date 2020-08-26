@@ -1,10 +1,7 @@
 #pragma once
 
 // NOTE: The Vulkan symbols are function pointers and are provided by the "volk" project.
-#ifdef _WIN32
-	#define VK_USE_PLATFORM_WIN32_KHR
-#endif
-#include <extern/volk/volk.h>
+#include "quantumvk/extern_build/volk_include.hpp"
 
 #include "quantumvk/utils/logging.hpp"
 

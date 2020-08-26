@@ -5,7 +5,7 @@
 #include "quantumvk/utils/enum_cast.hpp"
 #include "quantumvk/utils/object_pool.hpp"
 
-#include "quantumvk/descriptor_set.hpp"
+#include "descriptor_set.hpp"
 
 #include "quantumvk/vulkan/misc/cookie.hpp"
 #include "quantumvk/vulkan/misc/limits.hpp"

@@ -1,7 +1,7 @@
 #include "shader.hpp"
 #include "quantumvk/vulkan/device.hpp"
 
-#include "spirv_cross.hpp"
+#include <quantumvk/extern_build/spirv_cross_include.hpp>
 
 using namespace std;
 using namespace spirv_cross;

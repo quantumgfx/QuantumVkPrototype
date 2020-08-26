@@ -13,7 +13,7 @@
 #endif
 
 #ifdef QM_VULKAN_MT
-#include "threading/thread_id.hpp"
+#include "quantumvk/threading/thread_id.hpp"
 static unsigned get_thread_index()
 {
 	return Vulkan::get_current_thread_index();
