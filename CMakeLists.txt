@@ -54,24 +54,6 @@ option(ENABLE_SPIRV_TOOLS "Compile spirv-tools, allows for hlsl compilation and 
 set(VULKAN_SDK_DIR "$ENV{VULKAN_SDK}")
 # ------------------------------
 
-# -----------Volk---------------
-add_library(volk STATIC extern/volk/volk.c extern/volk/volk.h)
-if (NOT WIN32)
-    target_link_libraries(volk PRIVATE dl)
-endif()
-
-target_include_directories(volk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/extern/volk)
-target_include_directories(volk PUBLIC "${VULKAN_SDK_DIR}/Include")
-
-message("Vulkan Include directory: ${VULKAN_SDK_DIR}/Include")
-
-set_sln_folder(volk Dependencies)
-
-if (WIN32)
-    target_compile_definitions(volk PRIVATE VK_USE_PLATFORM_WIN32_KHR)
-endif()
-# -------------------------------
-
 add_subdirectory(extern EXCLUDE_FROM_ALL)
 # -------------------------------
 
@@ -79,20 +61,22 @@ add_subdirectory(extern EXCLUDE_FROM_ALL)
 add_library(QuantumVk STATIC)
 # Include Directories
 target_include_directories(QuantumVk PUBLIC  ${VULKAN_SDK_DIR}/Include)
-target_include_directories(QuantumVk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(QuantumVk PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_include_directories(QuantumVk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern)
+target_include_directories(QuantumVk PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR})
 
 # libraries that QuantumVk links to
-target_link_libraries(QuantumVk PUBLIC volk)
 target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
 target_link_libraries(QuantumVk PRIVATE glslang)
 target_link_libraries(QuantumVk PRIVATE SPIRV)
 
+if (NOT WIN32)
+    target_link_libraries(QuantumVk PRIVATE dl)
+endif()
+
 # Src Directories
-set(QM_UTILS_DIR src/utils)
-set(QM_VK_DIR src/vulkan)
-set(QM_THREADING_DIR src/threading)
+set(QM_UTILS_DIR quantumvk/utils)
+set(QM_VK_DIR quantumvk/vulkan)
+set(QM_THREADING_DIR quantumvk/threading)
+set(QM_EXTERN_BUILD_DIR quantumvk/extern_build)
 
 set(QM_UTIL_HPP_FILES
 		${QM_UTILS_DIR}/aligned_alloc.hpp
@@ -184,7 +168,6 @@ set(QM_CPP_FILES
 		${QM_VK_DIR}/memory/buffer.cpp
 		${QM_VK_DIR}/memory/buffer_pool.cpp
 		${QM_VK_DIR}/memory/memory_allocator.cpp
-		${QM_VK_DIR}/memory/vma_build.cpp
 		
 		${QM_VK_DIR}/misc/cookie.cpp
 		
@@ -203,11 +186,14 @@ set(QM_CPP_FILES
 		${QM_VK_DIR}/command_pool.cpp
 		${QM_VK_DIR}/device.cpp
 		${QM_VK_DIR}/device_shaders.cpp 
-		${QM_VK_DIR}/device_submission.cpp)
+		${QM_VK_DIR}/device_submission.cpp,
+		
+		${QM_EXTERN_BUILD_DIR}/vma_build.cpp,
+		${QM_EXTERN_BUILD_DIR}/volk_build.cpp)
 
 target_sources(QuantumVk PRIVATE ${QM_UTIL_HPP_FILES} ${QM_THREADING_HPP_FILES} ${QM_VK_GRAPHICS_HPP_FILES} ${QM_VK_SYNC_HPP_FILES}
 								${QM_VK_IMAGES_HPP_FILES} ${QM_VK_MEMORY_HPP_FILES} ${QM_VK_MISC_HPP_FILES} ${QM_VK_WSI_HPP_FILES} ${QM_VK_GLOBAL_FILES}
-								${QM_CPP_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/src/quantumvk.hpp)
+								${QM_CPP_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/quantumvk/quantumvk.hpp)
 	
 if (QM_VULKAN_MT)
     target_compile_definitions(QuantumVk PUBLIC QM_VULKAN_MT)
@@ -231,22 +217,24 @@ if(QM_INSTALL)
 	set(QM_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
 	set(QM_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
 	
-	install(TARGETS QuantumVk volk DESTINATION ${QM_INSTALL_LIBDIR})
+	install(TARGETS QuantumVk DESTINATION ${QM_INSTALL_LIBDIR})
 	
-	install(FILES ${QM_UTIL_HPP_FILES}        DESTINATION ${QM_INSTALL_INCLUDEDIR}/utils)
-	install(FILES ${QM_THREADING_HPP_FILES}   DESTINATION ${QM_INSTALL_INCLUDEDIR}/threading)
-	install(FILES ${QM_VK_GLOBAL_FILES}       DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan)
-	install(FILES ${QM_VK_GRAPHICS_HPP_FILES} DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/graphics)
-	install(FILES ${QM_VK_SYNC_HPP_FILES}     DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/sync)
-	install(FILES ${QM_VK_IMAGES_HPP_FILES}   DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/images)
-	install(FILES ${QM_VK_MEMORY_HPP_FILES}   DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/memory)
-	install(FILES ${QM_VK_MISC_HPP_FILES}     DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/misc)
-	install(FILES ${QM_VK_WSI_HPP_FILES}      DESTINATION ${QM_INSTALL_INCLUDEDIR}/vulkan/wsi)
+	install(FILES ${QM_UTIL_HPP_FILES}        DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/utils)
+	install(FILES ${QM_THREADING_HPP_FILES}   DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/threading)
+	install(FILES ${QM_VK_GLOBAL_FILES}       DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/vulkan)
+	install(FILES ${QM_VK_GRAPHICS_HPP_FILES} DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/vulkan/graphics)
+	install(FILES ${QM_VK_SYNC_HPP_FILES}     DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/vulkan/sync)
+	install(FILES ${QM_VK_IMAGES_HPP_FILES}   DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/vulkan/images)
+	install(FILES ${QM_VK_MEMORY_HPP_FILES}   DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/vulkan/memory)
+	install(FILES ${QM_VK_MISC_HPP_FILES}     DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/vulkan/misc)
+	install(FILES ${QM_VK_WSI_HPP_FILES}      DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/vulkan/wsi)
+	
+	set(EXTERN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/extern)
 	
 	# External files that are included in headers
-	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/extern/volk/volk.h DESTINATION ${QM_INSTALL_INCLUDEDIR}/extern/volk)
-	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/extern/VulkanMemoryAllocator/vk_mem_alloc.h DESTINATION ${QM_INSTALL_INCLUDEDIR}/extern/VulkanMemoryAllocator)
+	install(FILES ${EXTERN_DIR}/volk/volk.h DESTINATION ${QM_INSTALL_INCLUDEDIR}/extern/volk)
+	install(FILES ${EXTERN_DIR}/VulkanMemoryAllocator/vk_mem_alloc.h DESTINATION ${QM_INSTALL_INCLUDEDIR}/extern/VulkanMemoryAllocator)
 	
-	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/quantumvk.hpp DESTINATION ${QM_INSTALL_INCLUDEDIR})
+	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/quantumvk/quantumvk.hpp DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk)
 	
 endif()

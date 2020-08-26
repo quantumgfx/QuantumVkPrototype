@@ -49,7 +49,7 @@ set_sln_folder(spirv-cross-core Dependencies)
 # -------------------------------------------
 # -------------SPIRV-Headers-----------------
 override_option(SPIRV_HEADERS_SKIP_EXAMPLES ON)
-override_option(SPIRV_HEADERS_SKIP_INSTALL ON)
+override_option(SPIRV_HEADERS_SKIP_INSTALL OFF)
 
 # -------------------------------------------
 # ------------SPIRV-Tools--------------------
