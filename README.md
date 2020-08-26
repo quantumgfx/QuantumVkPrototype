@@ -8,7 +8,6 @@ QuantumVk takes inspiration from [Granite Engine](https://github.com/Themaister/
 In order to build QuantumVk, you must have downloaded the following, regardless of platform:
 - [Git](https://git-scm.com/downloads): To retrieve the repository.
 - [Cmake](https://cmake.org/): QuantumVk uses Cmake as a build system.
-- [Python 3](https://www.python.org/downloads/): Glslang (one of QuantumVk's dependencies) requires python to build.
 - [Vulkan SDK](https://vulkan.lunarg.com/): The vulkan sdk is used to access vulkan functionality. QuantumVk doesn't link directly to the vulkan library. Instead [volk](https://github.com/zeux/volk) is used to link dynamically to the vulkan .dll/.so/.dylib depending on the platform.
 
 #### Windows

@@ -6,6 +6,8 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
+// TODO currently invalid example
+
 static void fb_size_cb(GLFWwindow* window, int width, int height);
 
 struct GLFWPlatform : public Vulkan::WSIPlatform

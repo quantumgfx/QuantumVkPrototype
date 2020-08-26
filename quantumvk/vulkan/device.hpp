@@ -302,15 +302,8 @@ namespace Vulkan
 		void AddWaitSemaphore(CommandBuffer::Type type, Semaphore semaphore, VkPipelineStageFlags stages, bool flush);
 		CommandBuffer::Type GetPhysicalQueueType(CommandBuffer::Type queue_type) const;
 
-		// Creates a new shader using spirv code. Code is stored in 4 byte words. Size variable is the size of the code in bytes
+		// Creates a new shader using spirv code. Code is stored in 4 byte words. Size variable is the size of the code in bytes (thus size must be divisible by 4).
 		ShaderHandle CreateShader(const uint32_t* code, size_t size);
-		// Creates a shader from glsl code. Converts glsl to spirv using glslang library. Adds user defined include directories for #include statements.
-		ShaderHandle CreateShaderGLSL(const char* glsl_code, ShaderStage stage, uint32_t include_directory_count, std::string* include_directories);
-		// Creates a shader from glsl code. Converts glsl to spirv using glslang library.
-		ShaderHandle CreateShaderGLSL(const char* glsl_code, ShaderStage stage)
-		{
-			return CreateShaderGLSL(glsl_code, stage, 0, nullptr);
-		}
 
 		// Creates a graphics program consting of the shaders specified in shaders
 		ProgramHandle CreateGraphicsProgram(const GraphicsProgramShaders& shaders);
