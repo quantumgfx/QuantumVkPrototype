@@ -322,8 +322,6 @@ namespace Vulkan
 		InitStockSamplers();
 		InitTimelineSemaphores();
 
-		InitGlslang();
-
 #ifdef ANDROID
 		InitFrameContexts(3); // Android needs a bit more ... ;)
 #else
@@ -701,7 +699,6 @@ namespace Vulkan
 
 		//DeinitBindless();
 		DeinitTimelineSemaphores();
-		DeinitGlslang();
 
 	}
 

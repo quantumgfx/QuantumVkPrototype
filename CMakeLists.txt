@@ -225,6 +225,7 @@ if(QM_INSTALL)
 	install(FILES ${QM_VK_MEMORY_HPP_FILES}    DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/vulkan/memory)
 	install(FILES ${QM_VK_MISC_HPP_FILES}      DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/vulkan/misc)
 	install(FILES ${QM_VK_WSI_HPP_FILES}       DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk/vulkan/wsi)
+	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/quantumvk/quantumvk.hpp DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk)
 	
 	set(EXTERN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/extern)
 	
@@ -232,6 +233,17 @@ if(QM_INSTALL)
 	install(FILES ${EXTERN_DIR}/volk/volk.h DESTINATION ${QM_INSTALL_INCLUDEDIR}/extern/volk)
 	install(FILES ${EXTERN_DIR}/VulkanMemoryAllocator/vk_mem_alloc.h DESTINATION ${QM_INSTALL_INCLUDEDIR}/extern/VulkanMemoryAllocator)
 	
-	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/quantumvk/quantumvk.hpp DESTINATION ${QM_INSTALL_INCLUDEDIR}/quantumvk)
+	set(SPIRV_CROSS_DIR ${EXTERN_DIR}/SPIRV-Cross)
+	
+	install(FILES ${SPIRV_CROSS_DIR}/GLSL.std.450.h 
+				${SPIRV_CROSS_DIR}/spirv_common.hpp
+				${SPIRV_CROSS_DIR}/spirv_cross_containers.hpp
+				${SPIRV_CROSS_DIR}/spirv_cross_error_handling.hpp
+				${SPIRV_CROSS_DIR}/spirv.hpp
+				${SPIRV_CROSS_DIR}/spirv_cross.hpp
+				${SPIRV_CROSS_DIR}/spirv_parser.hpp
+				${SPIRV_CROSS_DIR}/spirv_cross_parsed_ir.hpp
+				${SPIRV_CROSS_DIR}/spirv_cfg.hpp
+				DESTINATION ${QM_INSTALL_INCLUDEDIR}/extern/SPIRV-Cross)
 	
 endif()

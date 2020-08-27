@@ -457,9 +457,7 @@ namespace Vulkan
 		//Creates every type of stock sampler (by creating 1 sampler for each enum type)
 		void InitStockSamplers();
 		void InitTimelineSemaphores();
-		void InitGlslang();
 		void DeinitTimelineSemaphores();
-		void DeinitGlslang();
 
 		// Make sure this is deleted last.
 		HandlePool handle_pool;
