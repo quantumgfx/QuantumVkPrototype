@@ -284,7 +284,7 @@ namespace Vulkan
 		// Make sure all pending submits to the current frame are processed
 		void FlushFrame();
 
-		// Command buffers are transient in Granite.
+		// Command buffers are transient in QuantumVk.
 		// Once you request a command buffer you must submit it in the current frame context before moving to the next one.
 		// More detailed examples of command buffers will follow in future samples.
 		// There are different command buffer types which correspond to general purpose queue, async compute, DMA queue, etc.
@@ -357,6 +357,8 @@ namespace Vulkan
 		VkFormat GetDefaultDepthFormat() const;
 		// Returns a transiant attachment
 		ImageView& GetTransientAttachment(unsigned width, unsigned height, VkFormat format, unsigned index = 0, unsigned samples = 1, unsigned layers = 1);
+		// Returns a physical attachment
+		ImageView& GetPhysicalAttachment(unsigned width, unsigned height, VkFormat format, unsigned index = 0, unsigned samples = 1, unsigned layers = 1);
 		// Gets the renderpassinfo from a SwapchainRenderPass enum
 		RenderPassInfo GetSwapchainRenderPass(SwapchainRenderPass style);
 
@@ -515,6 +517,7 @@ namespace Vulkan
 
 		FramebufferAllocator framebuffer_allocator;
 		TransientAttachmentAllocator transient_allocator;
+		PhysicalAttachmentAllocator physical_allocator;
 
 		VulkanDynamicArrayPool array_pool;
 

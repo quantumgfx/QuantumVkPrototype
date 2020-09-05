@@ -38,15 +38,14 @@ using namespace Util;
 
 namespace Vulkan
 {
-	Device::Device() 
+	Device::Device()
 		: framebuffer_allocator(this)
 		, transient_allocator(this)
-		
+		, physical_allocator(this)
 	{
 #ifdef QM_VULKAN_MT
 		cookie.store(0);
 #endif
-
 
 	}
 
@@ -694,6 +693,7 @@ namespace Vulkan
 
 		framebuffer_allocator.Clear();
 		transient_allocator.clear();
+		physical_allocator.clear();
 		for (auto& sampler : samplers)
 			sampler.Reset();
 
@@ -742,6 +742,7 @@ namespace Vulkan
 		// Clear out caches which might contain stale data from now on.
 		framebuffer_allocator.Clear();
 		transient_allocator.clear();
+		physical_allocator.clear();
 		per_frame.clear();
 
 		for (unsigned i = 0; i < count; i++)
@@ -1197,6 +1198,7 @@ namespace Vulkan
 
 		framebuffer_allocator.Clear();
 		transient_allocator.clear();
+		physical_allocator.clear();
 
 		descriptor_set_allocators.for_each([](DescriptorSetAllocator* allocator) {
 			allocator->Clear();
@@ -1219,6 +1221,7 @@ namespace Vulkan
 
 		framebuffer_allocator.BeginFrame();
 		transient_allocator.begin_frame();
+		physical_allocator.begin_frame();
 
 		descriptor_set_allocators.for_each([](DescriptorSetAllocator* allocator) {
 			allocator->BeginFrame();
@@ -1980,7 +1983,8 @@ namespace Vulkan
 		else if (create_info.domain == ImageDomain::Transient)
 		{
 			alloc_info.usage = VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED;
-			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			alloc_info.requiredFlags =VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			alloc_info.preferredFlags = VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
 		}
 		else if (create_info.domain == ImageDomain::LinearHost)
 		{
@@ -2397,6 +2401,12 @@ namespace Vulkan
 		unsigned index, unsigned samples, unsigned layers)
 	{
 		return transient_allocator.request_attachment(width, height, format, index, samples, layers);
+	}
+
+	ImageView& Device::GetPhysicalAttachment(unsigned width, unsigned height, VkFormat format,
+		unsigned index, unsigned samples, unsigned layers)
+	{
+		return physical_allocator.request_attachment(width, height, format, index, samples, layers);
 	}
 
 	ImageView& Device::GetSwapchainView()
