@@ -1983,19 +1983,19 @@ namespace Vulkan
 		else if (create_info.domain == ImageDomain::Transient)
 		{
 			alloc_info.usage = VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED;
-			alloc_info.requiredFlags =VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 			alloc_info.preferredFlags = VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
 		}
 		else if (create_info.domain == ImageDomain::LinearHost)
 		{
 			alloc_info.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-			alloc_info.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+			alloc_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
 			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 		}
 		else if (create_info.domain == ImageDomain::LinearHostCached)
 		{
 			alloc_info.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-			alloc_info.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+			alloc_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
 			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 			alloc_info.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 		}
