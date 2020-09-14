@@ -146,10 +146,13 @@ namespace Vulkan
 		// Forces the default image view to be an array type, even if create_info only has one layer
 		IMAGE_MISC_FORCE_ARRAY_BIT = 1 << 1,
 		IMAGE_MISC_MUTABLE_SRGB_BIT = 1 << 2,
+		// These are the concurrent settings. If no concurrent bit is set the image is owned exclusively by the generic/graphics queue.
+		// Otherwise the sharing_mode is set to concurrent, with family indices set by to the appropriate queue families.
 		IMAGE_MISC_CONCURRENT_QUEUE_GRAPHICS_BIT = 1 << 3,
 		IMAGE_MISC_CONCURRENT_QUEUE_ASYNC_COMPUTE_BIT = 1 << 4,
 		IMAGE_MISC_CONCURRENT_QUEUE_ASYNC_GRAPHICS_BIT = 1 << 5,
 		IMAGE_MISC_CONCURRENT_QUEUE_ASYNC_TRANSFER_BIT = 1 << 6,
+		// This flags make the CreateImage call check that linear filtering is supported. If not, a null image is returned.
 		IMAGE_MISC_VERIFY_FORMAT_FEATURE_SAMPLED_LINEAR_FILTER_BIT = 1 << 7,
 		IMAGE_MISC_LINEAR_IMAGE_IGNORE_DEVICE_LOCAL_BIT = 1 << 8
 	};

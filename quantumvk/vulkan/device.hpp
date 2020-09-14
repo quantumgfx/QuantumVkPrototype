@@ -318,6 +318,9 @@ namespace Vulkan
 		// Map Linear Host image
 		void* MapLinearHostImage(const LinearHostImage& image, MemoryAccessFlags access);
 		void UnmapLinearHostImageAndSync(const LinearHostImage& image, MemoryAccessFlags access);
+		
+		void* MapLinearHostImage(const Image& image, MemoryAccessFlags access);
+		void UnmapLinearHostImage(const Image& image, MemoryAccessFlags access);
 
 		//Return whether allocation has certain memory flags
 		bool AllocationHasMemoryPropertyFlags(DeviceAllocation& alloc, VkMemoryPropertyFlags flags)

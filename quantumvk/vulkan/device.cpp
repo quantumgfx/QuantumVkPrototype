@@ -178,6 +178,19 @@ namespace Vulkan
 			AddWaitSemaphore(CommandBuffer::Type::Generic, sem, image.GetUsedPipelineStages(), true);
 		}
 	}
+	
+	void* Device::MapLinearHostImage(const Image& image, MemoryAccessFlags access)
+	{
+		VK_ASSERT(image.GetCreateInfo().domain == ImageDomain::LinearHost || image.GetCreateInfo().domain == ImageDomain::LinearHostCached);
+		void* host = managers.memory.MapMemory(image.GetAllocation(), access);
+		return host;
+	}
+	
+	void Device::UnmapLinearHostImage(const Image& image, MemoryAccessFlags access)
+	{
+		VK_ASSERT(image.GetCreateInfo().domain == ImageDomain::LinearHost || image.GetCreateInfo().domain == ImageDomain::LinearHostCached);
+		managers.memory.UnmapMemory(image.GetAllocation(), access);
+	}
 
 	void* Device::MapHostBuffer(const Buffer& buffer, MemoryAccessFlags access)
 	{
@@ -2005,7 +2018,7 @@ namespace Vulkan
 			alloc_info.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 			alloc_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
 			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-			alloc_info.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+			alloc_info.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 		}
 
 		if (!managers.memory.AllocateImage(info, alloc_info, &holder.image, &holder.allocation))
