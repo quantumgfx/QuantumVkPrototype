@@ -56,17 +56,24 @@ namespace Vulkan
 		struct MipInfo
 		{
 			size_t offset = 0;
+			// Width of mip
 			uint32_t width = 1;
+			// Height of mip
 			uint32_t height = 1;
+			// Depth of mip
 			uint32_t depth = 1;
 
+			// Height of mip in image blocks
 			uint32_t block_image_height = 0;
+			// Width of mip in image blocks
 			uint32_t block_row_length = 0;
+			// Hieght of mip
 			uint32_t image_height = 0;
+			// Width of mip
 			uint32_t row_length = 0;
 		};
 
-		const MipInfo& get_mip_info(uint32_t mip) const;
+		const TextureFormatLayout::MipInfo& get_mip_info(uint32_t mip) const;
 
 		inline void* data(uint32_t layer = 0, uint32_t mip = 0) const
 		{

@@ -131,15 +131,19 @@ namespace Vulkan
 	//Data used to initialize image
 	struct ImageInitialData
 	{
-		const void* data;
-		unsigned row_length;
-		unsigned image_height;
+		ImageInitialData* next_mip = nullptr;
+		const void* data = nullptr;
 	};
 
-	//Misc Image Create Info Flags
+	// Misc Image Create Info Flags
+	// Normally image sharing mode is Exclusive and owned by the graphics queue family
+	// Pipeline barriers can be used to transfer this ownership. Alternatively the concurrent
+	// flags can be set to indicate what queues can own the image.
 	enum ImageMiscFlagBits
 	{
+		// Causes lower mip levels to be automatically filled using linear blitting
 		IMAGE_MISC_GENERATE_MIPS_BIT = 1 << 0,
+		// Forces the default image view to be an array type, even if create_info only has one layer
 		IMAGE_MISC_FORCE_ARRAY_BIT = 1 << 1,
 		IMAGE_MISC_MUTABLE_SRGB_BIT = 1 << 2,
 		IMAGE_MISC_CONCURRENT_QUEUE_GRAPHICS_BIT = 1 << 3,

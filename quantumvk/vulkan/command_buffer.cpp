@@ -1232,7 +1232,7 @@ namespace Vulkan
 		attr.offset = offset;
 	}
 
-	void CommandBuffer::SetIndexBuffer(const Buffer& buffer, VkDeviceSize offset, VkIndexType index_type)
+	void CommandBuffer::BindIndexBuffer(const Buffer& buffer, VkDeviceSize offset, VkIndexType index_type)
 	{
 		//If index buffer is already set to this, return
 		if (index_state.buffer == buffer.GetBuffer() && index_state.offset == offset && index_state.index_type == index_type)
@@ -1245,7 +1245,19 @@ namespace Vulkan
 		table.vkCmdBindIndexBuffer(cmd, buffer.GetBuffer(), offset, index_type);
 	}
 
-	void CommandBuffer::SetVertexBinding(uint32_t binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize stride, VkVertexInputRate step_rate)
+	void CommandBuffer::SetVertexBinding(uint32_t binding, VkDeviceSize stride, VkVertexInputRate step_rate)
+	{
+		VK_ASSERT(binding < VULKAN_NUM_VERTEX_BUFFERS);
+		VK_ASSERT(framebuffer);
+
+		if (pipeline_state.strides[binding] != stride || pipeline_state.input_rates[binding] != step_rate)
+			set_dirty(COMMAND_BUFFER_DIRTY_STATIC_VERTEX_BIT); //If stride or step_rate changes, indicate that the whole vertex_state is dirty.
+
+		pipeline_state.strides[binding] = stride;
+		pipeline_state.input_rates[binding] = step_rate;
+	}
+
+	void CommandBuffer::BindVertexBuffer(uint32_t binding, const Buffer& buffer, VkDeviceSize offset)
 	{
 		VK_ASSERT(binding < VULKAN_NUM_VERTEX_BUFFERS);
 		VK_ASSERT(framebuffer);
@@ -1254,13 +1266,9 @@ namespace Vulkan
 		VkBuffer vkbuffer = buffer.GetBuffer();
 		if (vbo.buffers[binding] != vkbuffer || vbo.offsets[binding] != offset)
 			dirty_vbos |= 1u << binding; //Indicate wich bindings in the vbo are now dirty
-		if (pipeline_state.strides[binding] != stride || pipeline_state.input_rates[binding] != step_rate)
-			set_dirty(COMMAND_BUFFER_DIRTY_STATIC_VERTEX_BIT); //If stride or step_rate changes, indicate that the whole vertex_state is dirty.
 
 		vbo.buffers[binding] = vkbuffer;
 		vbo.offsets[binding] = offset;
-		pipeline_state.strides[binding] = stride;
-		pipeline_state.input_rates[binding] = step_rate;
 	}
 
 	void CommandBuffer::SetViewport(const VkViewport& viewport_)
@@ -1341,11 +1349,11 @@ namespace Vulkan
 			device->RequestIndexBlock(ibo_block, size);
 			data = ibo_block.Allocate(size);
 		}
-		SetIndexBuffer(*ibo_block.gpu, data.offset, index_type);
+		BindIndexBuffer(*ibo_block.gpu, data.offset, index_type);
 		return data.host;
 	}
 
-	void* CommandBuffer::AllocateVertexData(unsigned binding, VkDeviceSize size, VkDeviceSize stride, VkVertexInputRate step_rate)
+	void* CommandBuffer::AllocateVertexData(unsigned binding, VkDeviceSize size)
 	{
 		auto data = vbo_block.Allocate(size);
 		if (!data.host)
@@ -1354,7 +1362,7 @@ namespace Vulkan
 			data = vbo_block.Allocate(size);
 		}
 
-		SetVertexBinding(binding, *vbo_block.gpu, data.offset, stride, step_rate);
+		BindVertexBuffer(binding, *vbo_block.gpu, data.offset);
 		return data.host;
 	}
 

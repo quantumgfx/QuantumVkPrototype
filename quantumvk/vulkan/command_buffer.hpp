@@ -417,7 +417,7 @@ namespace Vulkan
 			return static_cast<T*>(AllocateConstantData(set, binding, count * sizeof(T), array_index));
 		}
 		//Allocates a vertex buffer from the command buffers internal pool. Binds it to the binding than returns it's mapped data.
-		void* AllocateVertexData(unsigned binding, VkDeviceSize size, VkDeviceSize stride, VkVertexInputRate step_rate = VK_VERTEX_INPUT_RATE_VERTEX);
+		void* AllocateVertexData(unsigned binding, VkDeviceSize size);
 		//Allocates an index buffer from the command buffers internal pool. Binds then returns it's mapped data.
 		void* AllocateIndexData(VkDeviceSize size, VkIndexType index_type);
 		//Allocates a staging buffer from the command buffers internal pool. Returns a pointer to this staging buffer
@@ -442,10 +442,12 @@ namespace Vulkan
 		void SetScissor(const VkRect2D& rect);
 		//Sets a vertex attrbute to a specify format and size
 		void SetVertexAttrib(uint32_t attrib, uint32_t binding, VkFormat format, VkDeviceSize offset);
-		//Binds a buffer to a vertex binding
-		void SetVertexBinding(uint32_t binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize stride, VkVertexInputRate step_rate = VK_VERTEX_INPUT_RATE_VERTEX);
+		//Sets the details of a specific vertex binding
+		void SetVertexBinding(uint32_t binding, VkDeviceSize stride, VkVertexInputRate step_rate = VK_VERTEX_INPUT_RATE_VERTEX);
+		//Binds a vertex buffer for Draw calls
+		void BindVertexBuffer(uint32_t binding, const Buffer& buffer, VkDeviceSize offset);
 		//Bind an index buffer for DrawIndexed calls
-		void SetIndexBuffer(const Buffer& buffer, VkDeviceSize offset, VkIndexType index_type);
+		void BindIndexBuffer(const Buffer& buffer, VkDeviceSize offset, VkIndexType index_type);
 		//Submit a draw call
 		void Draw(uint32_t vertex_count, uint32_t instance_count = 1, uint32_t first_vertex = 0, uint32_t first_instance = 0);
 		void DrawIndexed(uint32_t index_count, uint32_t instance_count = 1, uint32_t first_index = 0, int32_t vertex_offset = 0, uint32_t first_instance = 0);

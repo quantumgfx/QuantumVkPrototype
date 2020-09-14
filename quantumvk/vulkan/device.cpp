@@ -1798,28 +1798,36 @@ namespace Vulkan
 
 		layout.set_buffer(mapped, layout.get_required_size());
 
-		for (unsigned level = 0; level < copy_levels; level++)
+		for (unsigned layer = 0; layer < info.layers; layer++)
 		{
-			const auto& mip_info = layout.get_mip_info(level);
-			uint32_t dst_height_stride = layout.get_layer_size(level);
-			size_t row_size = layout.get_row_size(level);
-
-			for (unsigned layer = 0; layer < info.layers; layer++, index++)
+			ImageInitialData layer_data = initial[layer];
+			
+			for (unsigned level = 0; level < copy_levels; level++)
 			{
-				uint32_t src_row_length =
-					initial[index].row_length ? initial[index].row_length : mip_info.row_length;
-				uint32_t src_array_height =
-					initial[index].image_height ? initial[index].image_height : mip_info.image_height;
+				const auto& mip_info = layout.get_mip_info(level);
+				uint32_t dst_height_stride = layout.get_layer_size(level);
+				size_t row_size = layout.get_row_size(level);
+
+				uint32_t src_row_length = mip_info.row_length;
+				uint32_t src_array_height = mip_info.image_height;
 
 				uint32_t src_row_stride = layout.row_byte_stride(src_row_length);
 				uint32_t src_height_stride = layout.layer_byte_stride(src_array_height, src_row_stride);
 
 				uint8_t* dst = static_cast<uint8_t*>(layout.data(layer, level));
-				const uint8_t* src = static_cast<const uint8_t*>(initial[index].data);
+				const uint8_t* src = static_cast<const uint8_t*>(layer_data.data);
+
+				if (src == nullptr)
+					break;
 
 				for (uint32_t z = 0; z < mip_info.depth; z++)
 					for (uint32_t y = 0; y < mip_info.block_image_height; y++)
 						memcpy(dst + z * dst_height_stride + y * row_size, src + z * src_height_stride + y * src_row_stride, row_size);
+
+				if (layer_data.next_mip)
+					layer_data = *layer_data.next_mip;
+				else
+					break;
 			}
 		}
 

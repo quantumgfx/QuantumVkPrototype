@@ -328,6 +328,8 @@ namespace Vulkan
 		// Creates and allocates a buffer and images.
 		BufferHandle CreateBuffer(const BufferCreateInfo& info, const void* initial = nullptr);
 		// Creates and allocates an image
+		// Initial is a pointer to an array of ImageInitialData structs, one for each layer in info.layers, specifying the data to be loaded
+		// into that layer, along with any data to be loaded into lower mips of that layer.
 		ImageHandle CreateImage(const ImageCreateInfo& info, const ImageInitialData* initial = nullptr);
 		// Creates an image using a staging buffer
 		ImageHandle CreateImageFromStagingBuffer(const ImageCreateInfo& info, const InitialImageBuffer* buffer);
