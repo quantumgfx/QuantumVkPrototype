@@ -80,7 +80,7 @@ namespace Vulkan
 		return true;
 	}
 
-	bool Context::InitInstanceAndDevice(const char** instance_ext, uint32_t instance_ext_count, const char** device_ext, uint32_t device_ext_count, ContextCreationFlags flags)
+	bool Context::InitInstanceAndDevice(const char** instance_ext, uint32_t instance_ext_count, const char** device_ext, uint32_t device_ext_count)
 	{
 		Destroy();
 
@@ -94,7 +94,7 @@ namespace Vulkan
 		}
 
 		VkPhysicalDeviceFeatures features = {};
-		if (!CreateDevice(VK_NULL_HANDLE, VK_NULL_HANDLE, device_ext, device_ext_count, nullptr, 0, &features, flags))
+		if (!CreateDevice(VK_NULL_HANDLE, VK_NULL_HANDLE, device_ext, device_ext_count, nullptr, 0, &features))
 		{
 			Destroy();
 			QM_LOG_ERROR("Failed to create Vulkan device.\n");
@@ -127,7 +127,7 @@ namespace Vulkan
 		return true;
 	}
 
-	bool Context::InitDeviceFromInstance(VkInstance instance_, VkPhysicalDevice gpu_, VkSurfaceKHR surface, const char** required_device_extensions, unsigned num_required_device_extensions, const char** required_device_layers, unsigned num_required_device_layers, const VkPhysicalDeviceFeatures* required_features, ContextCreationFlags flags)
+	bool Context::InitDeviceFromInstance(VkInstance instance_, VkPhysicalDevice gpu_, VkSurfaceKHR surface, const char** required_device_extensions, unsigned num_required_device_extensions, const char** required_device_layers, unsigned num_required_device_layers, const VkPhysicalDeviceFeatures* required_features)
 	{
 		Destroy();
 
@@ -139,7 +139,7 @@ namespace Vulkan
 			return false;
 
 		if (!CreateDevice(gpu_, surface, required_device_extensions, num_required_device_extensions, required_device_layers,
-			num_required_device_layers, required_features, flags))
+			num_required_device_layers, required_features))
 		{
 			Destroy();
 			QM_LOG_ERROR("Failed to create Vulkan device.\n");
@@ -469,8 +469,7 @@ namespace Vulkan
 
 	bool Context::CreateDevice(VkPhysicalDevice gpu_, VkSurfaceKHR surface, const char** required_device_extensions,
 		unsigned num_required_device_extensions, const char** required_device_layers,
-		unsigned num_required_device_layers, const VkPhysicalDeviceFeatures* required_features,
-		ContextCreationFlags flags)
+		unsigned num_required_device_layers, const VkPhysicalDeviceFeatures* required_features)
 	{
 		gpu = gpu_;
 		if (gpu == VK_NULL_HANDLE)
@@ -931,9 +930,7 @@ namespace Vulkan
 				ppNext = &ext->timeline_semaphore_features.pNext;
 			}
 
-			if ((flags & CONTEXT_CREATION_DISABLE_BINDLESS_BIT) == 0 &&
-				ext->supports_maintenance_3 &&
-				has_extension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME))
+			if (ext->supports_maintenance_3 && has_extension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME))
 			{
 				enabled_extensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
 				*ppNext = &ext->descriptor_indexing_features;

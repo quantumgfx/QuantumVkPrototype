@@ -273,7 +273,7 @@ namespace Vulkan
 		return table->vkCreatePipelineCache(device, &info, nullptr, &pipeline_cache) == VK_SUCCESS;
 	}
 
-	Util::RetainedHeapData Vulkan::Device::GetPipelineCacheData(size_t override_max_size)
+	std::vector<uint8_t> Vulkan::Device::GetPipelineCacheData(size_t override_max_size)
 	{
 		size_t max_size;
 		if (table->vkGetPipelineCacheData(device, pipeline_cache, &max_size, nullptr) != VK_SUCCESS)
@@ -290,18 +290,16 @@ namespace Vulkan
 			}
 		}
 
+		std::vector<uint8_t> data;
+		data.resize(max_size);
 		uint8_t* data = new uint8_t[max_size];
 
-		if (table->vkGetPipelineCacheData(device, pipeline_cache, &max_size, data) != VK_SUCCESS)
+		if (table->vkGetPipelineCacheData(device, pipeline_cache, &max_size, data.data()) != VK_SUCCESS)
 		{
 			QM_LOG_ERROR("Failed to get pipeline cache data.\n");
 		}
 
-		RetainedHeapData heap_data = IntrusivePtr{ new HeapData(data, max_size) };
-
-		delete[] data;
-
-		return heap_data;
+		return data;
 	}
 
 	void Device::SetContext(Context* context_, uint8_t* initial_cache_data, size_t initial_cache_size)
@@ -689,6 +687,34 @@ namespace Vulkan
 	bool Device::SwapchainTouched() const
 	{
 		return wsi.touched;
+	}
+
+	uint32_t Device::GetQueueFamilyIndex(CommandBuffer::Type type) const
+	{
+		CommandBuffer::Type physical_type = GetPhysicalQueueType(type);
+		switch (physical_type)
+		{
+		case Vulkan::CommandBuffer::Type::Generic:       return graphics_queue_family_index;
+		case Vulkan::CommandBuffer::Type::AsyncCompute:  return compute_queue_family_index;
+		case Vulkan::CommandBuffer::Type::AsyncTransfer: return transfer_queue_family_index;
+		}
+
+		QM_LOG_ERROR("Unrecognized command buffer type");
+		return graphics_queue_family_index;
+	}
+
+	VkQueue Device::GetQueue(CommandBuffer::Type type) const
+	{
+		CommandBuffer::Type physical_type = GetPhysicalQueueType(type);
+		switch (physical_type)
+		{
+		case Vulkan::CommandBuffer::Type::Generic:       return graphics_queue;
+		case Vulkan::CommandBuffer::Type::AsyncCompute:  return compute_queue;
+		case Vulkan::CommandBuffer::Type::AsyncTransfer: return transfer_queue;
+		}
+
+		QM_LOG_ERROR("Unrecognized command buffer type");
+		return graphics_queue;
 	}
 
 	Device::~Device()
@@ -2016,7 +2042,7 @@ namespace Vulkan
 		else if (create_info.domain == ImageDomain::LinearHostCached)
 		{
 			alloc_info.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-			alloc_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+			alloc_info.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
 			alloc_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 			alloc_info.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 		}

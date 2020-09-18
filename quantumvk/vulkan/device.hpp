@@ -42,7 +42,6 @@
 #include "misc/quirks.hpp"
 
 #include "quantumvk/utils/small_vector.hpp"
-#include "quantumvk/utils/retained_heap_data.hpp"
 
 namespace Vulkan
 {
@@ -253,7 +252,10 @@ namespace Vulkan
 
 		void InitSwapchain(const std::vector<VkImage>& swapchain_images, unsigned width, unsigned height, VkFormat format);
 		void InitExternalSwapchain(const std::vector<ImageHandle>& swapchain_images);
-		// Creates the frame contexts. This is automatically called by SetContext(). This implementation defaults to 2 frames, but this command can be called to change that
+		// This is done automatically for us in Device::set_context().
+		// The default for desktop is 2 frame contexts, and 3 frame contexts on Android
+		// (since TBDR renderers typically require a bit more buffering for optimal performance).
+		// A frame context generally maps to an on-screen frame, but it does not have to.
 		void InitFrameContexts(unsigned count);
 
 		// Returns the current image view
@@ -270,7 +272,7 @@ namespace Vulkan
 		unsigned GetCurrentFrameContext() const;
 
 		// Retrieves the pipeline cache data. This should be stored in a file (before device is destroyed) by the client and loaded up in SetContext.
-		Util::RetainedHeapData GetPipelineCacheData(size_t override_max_size = 0);
+		std::vector<uint8_t> GetPipelineCacheData(size_t override_max_size = 0);
 
 		// Frame-pushing interface.
 
@@ -422,6 +424,11 @@ namespace Vulkan
 		}
 		// Return whether the swapchain has been used in this frame
 		bool SwapchainTouched() const;
+
+		// Returns the queue family index associated with a particular command buffer type
+		uint32_t GetQueueFamilyIndex(CommandBuffer::Type type) const;
+		// Returns the queue associated with a particular command buffer type
+		VkQueue GetQueue(CommandBuffer::Type type) const;
 
 	private:
 
