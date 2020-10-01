@@ -243,7 +243,7 @@ namespace Vulkan
 			// subpass which uses this attachment to avoid any dummy transition at the end.
 			att.finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-			if (format_to_aspect_mask(depth_stencil) & VK_IMAGE_ASPECT_STENCIL_BIT)
+			if (FormatToAspectMask(depth_stencil) & VK_IMAGE_ASPECT_STENCIL_BIT)
 			{
 				att.stencilLoadOp = ds_load_op;
 				att.stencilStoreOp = ds_store_op;
@@ -770,7 +770,7 @@ namespace Vulkan
 
 		VkRenderPassMultiviewCreateInfoKHR multiview_info = { VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO_KHR };
 		vector<uint32_t> multiview_view_mask;
-		if (multiview && device->GetDeviceFeatures().multiview_features.multiview)
+		if (multiview && device->GetDeviceExtensions().multiview_features.multiview)
 		{
 			multiview_view_mask.resize(num_subpasses);
 			multiview_info.subpassCount = num_subpasses;
@@ -829,7 +829,7 @@ namespace Vulkan
 			for (uint32_t i = 0; i < create_info.attachmentCount; i++)
 			{
 				VkFormat format = attachments[i].format;
-				auto aspect = format_to_aspect_mask(format);
+				auto aspect = FormatToAspectMask(format);
 				if ((aspect & (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT)) != 0)
 					attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 				if ((aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0)
@@ -942,7 +942,7 @@ namespace Vulkan
 		VkImageView views[VULKAN_NUM_ATTACHMENTS + 1];
 		unsigned num_views = 0;
 
-		auto& features = device->GetDeviceFeatures();
+		auto& features = device->GetDeviceExtensions();
 		bool imageless = features.imageless_features.imagelessFramebuffer == VK_TRUE;
 
 		if (!imageless)
@@ -1022,7 +1022,7 @@ namespace Vulkan
 		Hasher h;
 		h.u64(rp.get_hash());
 
-		auto& features = device->GetDeviceFeatures();
+		auto& features = device->GetDeviceExtensions();
 		bool imageless = features.imageless_features.imagelessFramebuffer == VK_TRUE;
 
 		if (imageless)
@@ -1070,12 +1070,12 @@ namespace Vulkan
 		return *framebuffers.emplace(hash, device, rp, info);
 	}
 
-	void AttachmentAllocator::clear()
+	void AttachmentAllocator::Clear()
 	{
 		attachments.clear();
 	}
 
-	void AttachmentAllocator::begin_frame()
+	void AttachmentAllocator::BeginFrame()
 	{
 		attachments.begin_frame();
 	}

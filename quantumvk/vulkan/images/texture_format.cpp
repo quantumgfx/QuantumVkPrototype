@@ -500,7 +500,7 @@ namespace Vulkan
 			blit.bufferOffset = mip_info.offset;
 			blit.bufferRowLength = mip_info.row_length;
 			blit.bufferImageHeight = mip_info.image_height;
-			blit.imageSubresource.aspectMask = format_to_aspect_mask(format);
+			blit.imageSubresource.aspectMask = FormatToAspectMask(format);
 			blit.imageSubresource.mipLevel = level;
 			blit.imageSubresource.baseArrayLayer = 0;
 			blit.imageSubresource.layerCount = array_layers;

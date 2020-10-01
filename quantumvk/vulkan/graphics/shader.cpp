@@ -95,52 +95,38 @@ namespace Vulkan
 
 		// Determine memory size
 		{
-			mem_size = desc_set_count * sizeof(PerDescriptorSet);
+			descriptor_count = 0;
 
 			for (unsigned i = 0; i < desc_set_count; i++)
 				if (descriptor_set_mask & (1u << i))
 					for (uint8_t binding = 0; binding < VULKAN_NUM_BINDINGS; binding++)
-						mem_size += desc_set_array_sizes[i][binding] * sizeof(UniformBinding);
+						descriptor_count += desc_set_array_sizes[i][binding];
 
 			// Layout of mem :
 			// All PerDescriptorSets
 			// In order of set then binding then array position, all uniform bindings
 		}
 
-#ifdef VULKAN_DEBUG
-		QM_LOG_INFO("Allocating %zu bytes of memory for program unforms.\n", mem_size);
-#endif
-
-		// Alloc that memory
-		desc_set_mem = (uint8_t*)malloc(mem_size);
-		memset(desc_set_mem, 0, mem_size);
-
-		per_set_array = reinterpret_cast<PerDescriptorSet*>(desc_set_mem);
-		descriptor_array = reinterpret_cast<UniformBinding*>(desc_set_mem + desc_set_count * sizeof(PerDescriptorSet));
-		
-		// Create per descriptor objects
-		{
-			for (unsigned i = 0; i < desc_set_count; i++)
-			{
-				new (per_set_array + i) PerDescriptorSet;
-			}
-		}
-
-		descriptor_count = 0;
+		per_set_array = new PerDescriptorSet[desc_set_count];
+		descriptor_array = new UniformBinding[descriptor_count];
 
 		{
+			uint32_t set_offset = 0;
+
 			for (unsigned set = 0; set < desc_set_count; set++) // For every set in descriptor sets
 				if (descriptor_set_mask & (1u << set)) // If the set is active
 				{
-					GetDecriptorSet(set)->descriptor_count = 0;
-					GetDecriptorSet(set)->descriptor_array = descriptor_array + descriptor_count;
+					PerDescriptorSet& desc_set = *GetDescriptorSet(set);
+					
+					desc_set.descriptor_count = 0;
+					desc_set.descriptor_array = descriptor_array + set_offset;
 
 					for (unsigned binding = 0; binding < VULKAN_NUM_BINDINGS; binding++)
 					{
 						// For every potential binding
-						GetDecriptorSet(set)->offset[binding] = GetDecriptorSet(set)->descriptor_count;
-						GetDecriptorSet(set)->descriptor_count += desc_set_array_sizes[set][binding];
-						descriptor_count += desc_set_array_sizes[set][binding];
+						desc_set.offset[binding] = desc_set.descriptor_count;
+						desc_set.descriptor_count += desc_set_array_sizes[set][binding];
+						set_offset += desc_set_array_sizes[set][binding];
 					}
 				}
 		}
@@ -159,7 +145,7 @@ namespace Vulkan
 			const auto& shader_layout = shader->GetLayout();
 			for (unsigned set = 0; set < desc_set_count; set++)
 			{
-				PerDescriptorSet* current_set = GetDecriptorSet(set);
+				PerDescriptorSet* current_set = GetDescriptorSet(set);
 				auto& set_layout = current_set->set_layout;
 
 				set_layout.sampled_image_mask |= shader_layout.sets[set].sampled_image_mask;
@@ -268,8 +254,9 @@ namespace Vulkan
 		{
 			if (descriptor_set_mask & (1u << i))
 			{
-				GetDecriptorSet(i)->set_allocator = device->descriptor_set_allocators.allocate(device, GetDecriptorSet(i)->set_layout, GetDecriptorSet(i)->stages_for_bindings);
-				layouts[i] = GetDecriptorSet(i)->set_allocator->GetLayout();
+				auto& desc_set = *GetDescriptorSet(i);
+				desc_set.set_allocator = device->descriptor_set_allocators.allocate(device, desc_set.set_layout, desc_set.stages_for_bindings);
+				layouts[i] = desc_set.set_allocator->GetLayout();
 				num_sets = i + 1;
 			}
 		}
@@ -299,7 +286,7 @@ namespace Vulkan
 		if (table.vkCreatePipelineLayout(device->GetDevice(), &info, nullptr, &vklayout) != VK_SUCCESS)
 			QM_LOG_ERROR("Failed to create pipeline layout.\n");
 
-		if (device->GetDeviceFeatures().supports_update_template)
+		if (device->GetDeviceExtensions().supports_update_template)
 			CreateUpdateTemplates();
 
 	}
@@ -314,13 +301,15 @@ namespace Vulkan
 		{
 			if (HasDescriptorSet(i))
 			{
-				device->descriptor_set_allocators.free(GetDecriptorSet(i)->set_allocator);
-				if (GetDecriptorSet(i)->update_template != VK_NULL_HANDLE)
-					table.vkDestroyDescriptorUpdateTemplateKHR(device->GetDevice(), GetDecriptorSet(i)->update_template, nullptr);
+				auto& desc_set = *GetDescriptorSet(i);
+				device->descriptor_set_allocators.free(desc_set.set_allocator);
+				if (desc_set.update_template != VK_NULL_HANDLE)
+					table.vkDestroyDescriptorUpdateTemplateKHR(device->GetDevice(), desc_set.update_template, nullptr);
 			}
 		}
 
-		free(desc_set_mem);
+		delete[] per_set_array;
+		delete[] descriptor_array;
 	}
 
 	void ProgramLayout::CreateUpdateTemplates()
@@ -337,8 +326,8 @@ namespace Vulkan
 			VkDescriptorUpdateTemplateEntryKHR update_entries[VULKAN_NUM_BINDINGS] = {};
 			uint32_t update_count = 0;
 
-			auto& set_layout = GetDecriptorSet(desc_set)->set_layout;
-			const uint32_t* offsets = GetDecriptorSet(desc_set)->offset;
+			auto& set_layout = GetDescriptorSet(desc_set)->set_layout;
+			const uint32_t* offsets = GetDescriptorSet(desc_set)->offset;
 
 			for_each_bit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
 				VK_ASSERT(update_count < VULKAN_NUM_BINDINGS);
@@ -451,14 +440,14 @@ namespace Vulkan
 
 			VkDescriptorUpdateTemplateCreateInfoKHR info = { VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO_KHR };
 			info.pipelineLayout = vklayout;
-			info.descriptorSetLayout = GetDecriptorSet(desc_set)->set_allocator->GetLayout();
+			info.descriptorSetLayout = GetDescriptorSet(desc_set)->set_allocator->GetLayout();
 			info.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET_KHR;
 			info.set = desc_set;
 			info.descriptorUpdateEntryCount = update_count;
 			info.pDescriptorUpdateEntries = update_entries;
-			info.pipelineBindPoint = (GetDecriptorSet(desc_set)->stages & VK_SHADER_STAGE_COMPUTE_BIT) ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
+			info.pipelineBindPoint = (GetDescriptorSet(desc_set)->stages & VK_SHADER_STAGE_COMPUTE_BIT) ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
 
-			if (table.vkCreateDescriptorUpdateTemplateKHR(device->GetDevice(), &info, nullptr, &GetDecriptorSet(desc_set)->update_template) != VK_SUCCESS)
+			if (table.vkCreateDescriptorUpdateTemplateKHR(device->GetDevice(), &info, nullptr, &GetDescriptorSet(desc_set)->update_template) != VK_SUCCESS)
 			{
 				QM_LOG_ERROR("Failed to create descriptor update template.\n");
 			}
@@ -626,7 +615,7 @@ namespace Vulkan
 		if (!HasDescriptorSet(set))
 			return VK_NULL_HANDLE;
 
-		auto& set_layout = GetDecriptorSet(set)->set_layout;
+		auto& set_layout = GetDescriptorSet(set)->set_layout;
 
 		uint32_t num_dynamic_offsets = 0;
 
@@ -736,17 +725,17 @@ namespace Vulkan
 			});
 
 		Util::Hash hash = h.get();
-		auto allocated = GetDecriptorSet(set)->set_allocator->Find(thread_index, hash);
+		auto allocated = GetDescriptorSet(set)->set_allocator->Find(thread_index, hash);
 
 		// If hash differs, update the resource
 		if (!allocated.second)
 		{
-			auto update_template = GetDecriptorSet(set)->update_template;
+			auto update_template = GetDescriptorSet(set)->update_template;
 
 			if (update_template != VK_NULL_HANDLE) // If Update templates exist, use them as they are both faster and easier to use.
-				device->GetDeviceTable().vkUpdateDescriptorSetWithTemplateKHR(device->GetDevice(), allocated.first, update_template, GetDecriptorSet(set)->descriptor_array);
+				device->GetDeviceTable().vkUpdateDescriptorSetWithTemplateKHR(device->GetDevice(), allocated.first, update_template, GetDescriptorSet(set)->descriptor_array);
 			else // Update with standard descriptor writes.
-				UpdateDescriptorSetLegacy(allocated.first, GetDecriptorSet(set)->set_layout, set);
+				UpdateDescriptorSetLegacy(allocated.first, GetDescriptorSet(set)->set_layout, set);
 		}
 
 		return allocated.first;
@@ -822,7 +811,7 @@ namespace Vulkan
 				//if (type.array.front() == 0)
 				//{
 				//	// Runtime array.
-				//	if (!device->GetDeviceFeatures().supports_descriptor_indexing)
+				//	if (!device->GetDeviceExtensions().supports_descriptor_indexing)
 				//		QM_LOG_ERROR("Sufficient features for descriptor indexing is not supported on this device.\n");
 
 				//	if (binding != 0)
@@ -1071,9 +1060,9 @@ namespace Vulkan
 		// --------------------
 
 		// Check that certain shaders are supported
-		if ((graphics_shaders.tess_eval || graphics_shaders.tess_control) && !device_->GetDeviceFeatures().supports_tesselation_shaders)
+		if ((graphics_shaders.tess_eval || graphics_shaders.tess_control) && !device_->GetDeviceFeatures().tessellationShader)
 			QM_LOG_ERROR("Tesselation shaders used but gpu doesn't support tesselation");
-		if (graphics_shaders.geometry && !device_->GetDeviceFeatures().supports_geometry_shaders)
+		if (graphics_shaders.geometry && !device_->GetDeviceFeatures().geometryShader)
 			QM_LOG_ERROR("Geometry shaders used but gpu doesn't support geometry shaders");
 
 		shaders = graphics_shaders;
@@ -1120,7 +1109,7 @@ namespace Vulkan
 
 	void ProgramDeleter::operator()(Program* program)
 	{
-		program->device->DestroyProgram(program);
+		program->device->DestroyProgramNoLock(program);
 	}
 	
 }

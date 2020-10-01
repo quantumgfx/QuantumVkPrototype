@@ -12,12 +12,59 @@ namespace Vulkan
 
 	ProgramHandle Device::CreateGraphicsProgram(const GraphicsProgramShaders& shaders)
 	{
-		return ProgramHandle(handle_pool.programs.allocate(this, shaders));
+		ProgramHandle program = ProgramHandle(handle_pool.programs.allocate(this, shaders));
+
+#ifdef QM_VULKAN_MT
+		std::lock_guard holder_{ lock.shader_lock };
+#endif
+		if (!invalid_programs.empty())
+		{
+			active_programs[invalid_programs.back()] = program;
+			invalid_programs.pop_back();
+		}
+		else
+		{
+			active_programs.push_back(program);
+		}
+			
+		return program;
 	}
 
 	ProgramHandle Device::CreateComputeProgram(const ComputeProgramShaders& shaders)
 	{
-		return ProgramHandle(handle_pool.programs.allocate(this, shaders));
+		ProgramHandle program = ProgramHandle(handle_pool.programs.allocate(this, shaders));
+
+#ifdef QM_VULKAN_MT
+		std::lock_guard holder_{ lock.shader_lock };
+#endif
+		if (!invalid_programs.empty())
+		{
+			active_programs[invalid_programs.back()] = program;
+			invalid_programs.pop_back();
+		}
+		else
+		{
+			active_programs.push_back(program);
+		}
+
+		return program;
+	}
+
+	void Device::UpdateInvalidProgramsNoLock()
+	{
+		// Always called inside device
+
+		for (uint32_t i = 0; i < active_programs.size(); i++)
+		{
+			ProgramHandle& program = active_programs[i];
+			if(program)
+				// If this is the only reference left
+				if (program->GetRefCount() == 1)
+				{
+					program.Reset();
+					invalid_programs.push_back(i);
+				}
+		}
 	}
 
 }

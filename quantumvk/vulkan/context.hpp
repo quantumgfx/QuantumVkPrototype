@@ -10,7 +10,7 @@
 
 namespace Vulkan 
 {
-	struct DeviceFeatures
+	struct DeviceExtensions
 	{
 		bool supports_physical_device_properties2 = false;
 		bool supports_external = false;
@@ -40,13 +40,10 @@ namespace Vulkan
 		bool supports_draw_parameters = false;
 		bool supports_driver_properties = false;
 		bool supports_calibrated_timestamps = false;
-		bool supports_tesselation_shaders = false;
-		bool supports_geometry_shaders = false;
 		VkPhysicalDeviceSubgroupProperties subgroup_properties = {};
 		VkPhysicalDevice8BitStorageFeaturesKHR storage_8bit_features = {};
 		VkPhysicalDevice16BitStorageFeaturesKHR storage_16bit_features = {};
 		VkPhysicalDeviceFloat16Int8FeaturesKHR float16_int8_features = {};
-		VkPhysicalDeviceFeatures enabled_features = {};
 		VkPhysicalDeviceExternalMemoryHostPropertiesEXT host_memory_properties = {};
 		VkPhysicalDeviceMultiviewFeaturesKHR multiview_features = {};
 		VkPhysicalDeviceImagelessFramebufferFeaturesKHR imageless_features = {};
@@ -148,7 +145,8 @@ namespace Vulkan
 		void ReleaseInstance() { owned_instance = false; }
 		void ReleaseDevice() { owned_device = false; }
 
-		const DeviceFeatures& GetEnabledDeviceFeatures() const { return *ext; }
+		const DeviceExtensions& GetEnabledDeviceExtensions() const { return *ext; }
+		const VkPhysicalDeviceFeatures& GetSupportedDeviceFeatures() const { return feat; }
 
 		static const VkApplicationInfo& GetApplicationInfo(bool supports_vulkan_11_instance, bool supports_vulkan_12_instance);
 
@@ -187,7 +185,8 @@ namespace Vulkan
 
 		//These classes are simply too big to contain within context
 		VolkDeviceTable* device_table;
-		DeviceFeatures* ext;
+		DeviceExtensions* ext;
+		VkPhysicalDeviceFeatures feat;
 
 		bool CreateInstance(const char** instance_ext, uint32_t instance_ext_count);
 		bool CreateDevice(VkPhysicalDevice gpu_, VkSurfaceKHR surface, const char** required_device_extensions,

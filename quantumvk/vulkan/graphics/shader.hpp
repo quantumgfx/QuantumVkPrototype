@@ -137,6 +137,8 @@ namespace Vulkan
 		VkDescriptorUpdateTemplateKHR update_template;
 
 		// Descriptors
+
+		// Offset into the descriptor array for each binding
 		uint32_t offset[VULKAN_NUM_BINDINGS] = {};
 		uint32_t descriptor_count = 0;
 		UniformBinding* descriptor_array = nullptr;
@@ -177,17 +179,20 @@ namespace Vulkan
 		void CreateLayout(Program& program);
 		void DestroyLayout();
 
+		// Returns a particular descriptor set
+		PerDescriptorSet* GetDescriptorSet(uint32_t set) const { return per_set_array + set; }
+
 		// Returns whether a descriptor set is active
 		bool HasDescriptorSet(uint32_t set) const { return (descriptor_set_mask & (1u << set)); }
-		// Returns a particular descriptor set
-		PerDescriptorSet* GetDecriptorSet(uint32_t set) const { return per_set_array + set; }
+		// Returns whether a descriptor binding is active
+		bool HasDescriptorBinding(uint32_t set, uint32_t binding) const { return GetDescriptorSet(set)->stages_for_bindings[binding] != 0; }
 
 		// Returns the number of descriptors a set has
-		uint32_t GetDescriptorCount(uint32_t set) const { return GetDecriptorSet(set)->descriptor_count; };
+		uint32_t GetDescriptorCount(uint32_t set) const { return GetDescriptorSet(set)->descriptor_count; };
 		// Returns the array size of a particular binding
-		uint32_t GetArraySize(uint32_t set, uint32_t binding) const { return GetDecriptorSet(set)->set_layout.array_size[binding]; }
+		uint32_t GetArraySize(uint32_t set, uint32_t binding) const { return GetDescriptorSet(set)->set_layout.array_size[binding]; }
 		// Returns the descriptor stored at a particular (set, binding, array_index)
-		UniformBinding& GetDescriptor(uint32_t set, uint32_t binding, uint32_t array_index) const { return GetDecriptorSet(set)->GetDescriptor(binding, array_index); }
+		UniformBinding& GetDescriptor(uint32_t set, uint32_t binding, uint32_t array_index) const { return GetDescriptorSet(set)->GetDescriptor(binding, array_index); }
 
 		// Descriptor Sets
 		VkDescriptorSet FlushDescriptorSet(uint32_t thread_index, uint32_t set);
@@ -209,9 +214,6 @@ namespace Vulkan
 
 		uint32_t descriptor_set_mask = 0;
 		//uint32_t bindless_descriptor_set_mask = 0;
-
-		size_t mem_size = 0;
-		uint8_t* desc_set_mem = nullptr;
 
 		uint32_t desc_set_count = 0;
 		PerDescriptorSet* per_set_array = nullptr;

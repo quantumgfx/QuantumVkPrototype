@@ -331,13 +331,13 @@ namespace Vulkan
 		}
 
 		// Creates and allocates a buffer and images.
-		BufferHandle CreateBuffer(const BufferCreateInfo& info, const void* initial = nullptr);
+		BufferHandle CreateBuffer(const BufferCreateInfo& info, ResourceQueueOwnershipFlags ownership = RESOURCE_CONCURRENT_GENERIC | RESOURCE_CONCURRENT_ASYNC_TRANSFER | RESOURCE_CONCURRENT_ASYNC_GRAPHICS | RESOURCE_CONCURRENT_ASYNC_COMPUTE, const void* initial = nullptr);
 		// Creates and allocates an image
 		// Initial is a pointer to an array of ImageInitialData structs, one for each layer in info.layers, specifying the data to be loaded
 		// into that layer, along with any data to be loaded into lower mips of that layer.
-		ImageHandle CreateImage(const ImageCreateInfo& info, const ImageInitialData* initial = nullptr);
+		ImageHandle CreateImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, const ImageInitialData* initial = nullptr);
 		// Creates an image using a staging buffer
-		ImageHandle CreateImageFromStagingBuffer(const ImageCreateInfo& info, const InitialImageBuffer* buffer);
+		ImageHandle CreateImageFromStagingBuffer(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, const InitialImageBuffer* buffer);
 		// Essentially an image that can be sampled on the GPU as a vk image, but it also has a vkbuffer conterpart on the cpu
 		LinearHostImageHandle CreateLinearHostImage(const LinearHostImageCreateInfo& info);
 
@@ -417,10 +417,15 @@ namespace Vulkan
 		{
 			return workarounds;
 		}
-		// Get enabled device fetures
-		const DeviceFeatures& GetDeviceFeatures() const
+		// Get enabled device extensions
+		const DeviceExtensions& GetDeviceExtensions() const
 		{
 			return *ext;
+		}
+		// Get enabled device features
+		const VkPhysicalDeviceFeatures& GetDeviceFeatures() const
+		{
+			return feat;
 		}
 		// Return whether the swapchain has been used in this frame
 		bool SwapchainTouched() const;
@@ -467,7 +472,8 @@ namespace Vulkan
 		VkPhysicalDeviceMemoryProperties mem_props;
 		VkPhysicalDeviceProperties gpu_props;
 
-		const DeviceFeatures* ext;
+		const DeviceExtensions* ext;
+		VkPhysicalDeviceFeatures feat;
 		//Creates every type of stock sampler (by creating 1 sampler for each enum type)
 		void InitStockSamplers();
 		void InitTimelineSemaphores();
@@ -525,7 +531,11 @@ namespace Vulkan
 		VkPipelineCache pipeline_cache = VK_NULL_HANDLE;
 		VulkanCache<RenderPass> render_passes;
 
+		std::vector<ProgramHandle> active_programs;
+		std::vector<uint32_t> invalid_programs;
+
 		bool InitPipelineCache(const uint8_t* initial_cache_data, size_t initial_cache_size);
+		void UpdateInvalidProgramsNoLock();
 
 		FramebufferAllocator framebuffer_allocator;
 		TransientAttachmentAllocator transient_allocator;
@@ -578,7 +588,7 @@ namespace Vulkan
 		void ResetFence(VkFence fence, bool observed_wait);
 		void KeepHandleAlive(ImageHandle handle);
 
-		void DestroyProgram(Program* program);
+		void DestroyProgramNoLock(Program* program);
 		void DestroyShader(Shader* shader);
 
 		void DestroyBufferNolock(VkBuffer buffer, const DeviceAllocation& allocation);

@@ -22,6 +22,19 @@ namespace Vulkan
 {
 	class DebugChannelInterface;
 
+	enum ResourceQueueOwnership
+	{
+		RESOURCE_EXCLUSIVE_GENERIC =       1 << 0,
+		RESOURCE_EXCLUSIVE_ASYNC_GRAPHICS = 1 << 1,
+		RESOURCE_EXCLUSIVE_ASYNC_COMPUTE = 1 << 2,
+		RESOURCE_EXCLUSIVE_ASYNC_TRANSFER = 1 << 3,
+		RESOURCE_CONCURRENT_GENERIC = 1 << 4,
+		RESOURCE_CONCURRENT_ASYNC_GRAPHICS = 1 << 5,
+		RESOURCE_CONCURRENT_ASYNC_COMPUTE = 1 << 6,
+		RESOURCE_CONCURRENT_ASYNC_TRANSFER = 1 << 7,
+	};
+	using ResourceQueueOwnershipFlags = uint32_t;
+
 	//Contains a list of what has been changed, or what parts of the pipeline state are "dirty"
 	enum CommandBufferDirtyBits
 	{

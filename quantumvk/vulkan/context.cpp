@@ -172,7 +172,7 @@ namespace Vulkan
 	Context::Context()
 	{
 		device_table = new VolkDeviceTable();
-		ext = new DeviceFeatures();
+		ext = new DeviceExtensions();
 	}
 
 	Context::~Context()
@@ -1003,15 +1003,9 @@ namespace Vulkan
 				enabled_features.shaderInt64 = VK_TRUE;
 
 			if (features.features.tessellationShader)
-			{
 				enabled_features.tessellationShader = VK_TRUE;
-				ext->supports_tesselation_shaders = true;
-			}
 			if (features.features.geometryShader)
-			{
 				enabled_features.geometryShader = VK_TRUE;
-				ext->supports_geometry_shaders = true;
-			}
 
 			if (features.features.shaderSampledImageArrayDynamicIndexing)
 				enabled_features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
@@ -1023,7 +1017,7 @@ namespace Vulkan
 				enabled_features.shaderStorageImageArrayDynamicIndexing = VK_TRUE;
 
 			features.features = enabled_features;
-			ext->enabled_features = enabled_features;
+			feat = enabled_features;
 		}
 
 		if (ext->supports_physical_device_properties2)

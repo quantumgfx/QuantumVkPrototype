@@ -84,7 +84,7 @@ namespace Vulkan
 		return FormatHasDepthAspect(format) || FormatHasStencilAspect(format);
 	}
 
-	static inline VkImageAspectFlags format_to_aspect_mask(VkFormat format)
+	static inline VkImageAspectFlags FormatToAspectMask(VkFormat format)
 	{
 		switch (format)
 		{

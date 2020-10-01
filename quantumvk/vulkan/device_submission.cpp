@@ -807,9 +807,9 @@ namespace Vulkan
 			QM_LOG_INFO("Submission to %s queue:\n", queue_name);
 			for (uint32_t i = 0; i < submit.waitSemaphoreCount; i++)
 			{
-				//QM_LOG_INFO("  Waiting for semaphore: %llx in stages %s\n",
-					//reinterpret_cast<unsigned long long>(submit.pWaitSemaphores[i]),
-					//StageFlagsToString(submit.pWaitDstStageMask[i]).c_str());
+				QM_LOG_INFO("  Waiting for semaphore: %llx in stages %s\n",
+					reinterpret_cast<unsigned long long>(submit.pWaitSemaphores[i]),
+					StageFlagsToString(submit.pWaitDstStageMask[i]).c_str());
 			}
 
 			for (uint32_t i = 0; i < submit.commandBufferCount; i++)

@@ -586,7 +586,7 @@ namespace Vulkan
 		VkSurfaceCapabilitiesKHR surface_properties;
 		VkPhysicalDeviceSurfaceInfo2KHR surface_info = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR };
 		surface_info.surface = surface;
-		bool use_surface_info = device->GetDeviceFeatures().supports_surface_capabilities2;
+		bool use_surface_info = device->GetDeviceExtensions().supports_surface_capabilities2;
 		bool use_application_controlled_exclusive_fullscreen = false;
 
 #ifdef _WIN32
@@ -594,7 +594,7 @@ namespace Vulkan
 		VkSurfaceFullScreenExclusiveWin32InfoEXT exclusive_info_win32 = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_WIN32_INFO_EXT };
 
 		HMONITOR monitor = reinterpret_cast<HMONITOR>(platform->GetFullscreenMonitor());
-		if (!device->GetDeviceFeatures().supports_full_screen_exclusive)
+		if (!device->GetDeviceExtensions().supports_full_screen_exclusive)
 			monitor = nullptr;
 
 		surface_info.pNext = &exclusive_info;
@@ -626,7 +626,7 @@ namespace Vulkan
 
 #ifdef _WIN32
 			VkSurfaceCapabilitiesFullScreenExclusiveEXT capability_full_screen_exclusive = { VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_FULL_SCREEN_EXCLUSIVE_EXT };
-			if (device->GetDeviceFeatures().supports_full_screen_exclusive && exclusive_info_win32.hmonitor)
+			if (device->GetDeviceExtensions().supports_full_screen_exclusive && exclusive_info_win32.hmonitor)
 			{
 				surface_capabilities2.pNext = &capability_full_screen_exclusive;
 				capability_full_screen_exclusive.pNext = &exclusive_info_win32;
@@ -806,7 +806,7 @@ namespace Vulkan
 		std::vector<VkPresentModeKHR> present_modes;
 
 #ifdef _WIN32
-		if (use_surface_info && device->GetDeviceFeatures().supports_full_screen_exclusive)
+		if (use_surface_info && device->GetDeviceExtensions().supports_full_screen_exclusive)
 		{
 			if (vkGetPhysicalDeviceSurfacePresentModes2EXT(gpu, &surface_info, &num_present_modes, nullptr) != VK_SUCCESS)
 				return SwapchainError::Error;
@@ -892,7 +892,7 @@ namespace Vulkan
 		info.oldSwapchain = old_swapchain;
 
 #ifdef _WIN32
-		if (device->GetDeviceFeatures().supports_full_screen_exclusive)
+		if (device->GetDeviceExtensions().supports_full_screen_exclusive)
 			info.pNext = &exclusive_info;
 #endif
 

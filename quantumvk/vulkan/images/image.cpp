@@ -150,7 +150,7 @@ namespace Vulkan
 		if (gpu_image->GetCreateInfo().domain == ImageDomain::LinearHostCached || gpu_image->GetCreateInfo().domain == ImageDomain::LinearHost)
 		{
 			VkImageSubresource sub = {};
-			sub.aspectMask = format_to_aspect_mask(gpu_image->GetFormat());
+			sub.aspectMask = FormatToAspectMask(gpu_image->GetFormat());
 			VkSubresourceLayout layout;
 
 			auto& table = device_->GetDeviceTable();
@@ -160,7 +160,7 @@ namespace Vulkan
 		}
 		else
 		{
-			row_pitch = gpu_image->GetWidth() * TextureFormatLayout::format_block_size(gpu_image->GetFormat(), format_to_aspect_mask(gpu_image->GetFormat()));
+			row_pitch = gpu_image->GetWidth() * TextureFormatLayout::format_block_size(gpu_image->GetFormat(), FormatToAspectMask(gpu_image->GetFormat()));
 			row_offset = 0;
 		}
 	}

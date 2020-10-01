@@ -38,13 +38,18 @@ namespace Util
 			count++;
 		}
 
+		inline size_t GetRefCount()
+		{
+			return count;
+		}
+
 		inline bool Release()
 		{
 			return --count == 0;
 		}
 
 	private:
-		size_t count = 1;
+		size_t count = 0;
 	};
 
 	class MultiThreadCounter
@@ -52,12 +57,17 @@ namespace Util
 	public:
 		MultiThreadCounter()
 		{
-			count.store(1, std::memory_order_relaxed);
+			count.store(0, std::memory_order_relaxed);
 		}
 
 		inline void AddRef()
 		{
 			count.fetch_add(1, std::memory_order_relaxed);
+		}
+
+		inline size_t GetRefCount()
+		{
+			return count.load(std::memory_order_relaxed);
 		}
 
 		inline bool Release()
@@ -87,6 +97,11 @@ namespace Util
 		{
 			if (reference_count.Release())
 				Deleter()(static_cast<T*>(this));
+		}
+
+		size_t GetRefCount()
+		{
+			return reference_count.GetRefCount();
 		}
 
 		void AddRef()
@@ -120,6 +135,8 @@ namespace Util
 		explicit IntrusivePtr(T* handle)
 			: data(handle)
 		{
+			if(data)
+				data->AddRef();
 		}
 
 		T& operator*()

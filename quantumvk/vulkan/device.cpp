@@ -119,22 +119,21 @@ namespace Vulkan
 			create_info.misc |= IMAGE_MISC_LINEAR_IMAGE_IGNORE_DEVICE_LOCAL_BIT;
 
 		BufferHandle cpu_image;
-		auto gpu_image = CreateImage(create_info);
+		auto gpu_image = CreateImage(create_info, RESOURCE_EXCLUSIVE_GENERIC);
 		if (!gpu_image)
 		{
 			// Fall-back to staging buffer.
 			create_info.domain = ImageDomain::Physical;
 			create_info.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-			create_info.misc = IMAGE_MISC_CONCURRENT_QUEUE_GRAPHICS_BIT | IMAGE_MISC_CONCURRENT_QUEUE_ASYNC_TRANSFER_BIT;
 			create_info.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-			gpu_image = CreateImage(create_info);
+			gpu_image = CreateImage(create_info, RESOURCE_CONCURRENT_GENERIC | RESOURCE_CONCURRENT_ASYNC_TRANSFER);
 			if (!gpu_image)
 				return LinearHostImageHandle(nullptr);
 
 			BufferCreateInfo buffer;
 			buffer.domain = (info.flags & LINEAR_HOST_IMAGE_HOST_CACHED_BIT) != 0 ? BufferDomain::CachedHost : BufferDomain::Host;
 			buffer.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-			buffer.size = info.width * info.height * TextureFormatLayout::format_block_size(info.format, format_to_aspect_mask(info.format));
+			buffer.size = info.width * info.height * TextureFormatLayout::format_block_size(info.format, FormatToAspectMask(info.format));
 			cpu_image = CreateBuffer(buffer);
 			if (!cpu_image)
 				return LinearHostImageHandle(nullptr);
@@ -292,7 +291,6 @@ namespace Vulkan
 
 		std::vector<uint8_t> data;
 		data.resize(max_size);
-		uint8_t* data = new uint8_t[max_size];
 
 		if (table->vkGetPipelineCacheData(device, pipeline_cache, &max_size, data.data()) != VK_SUCCESS)
 		{
@@ -306,7 +304,8 @@ namespace Vulkan
 	{
 		context = context_;
 		table = &context_->GetDeviceTable();
-		ext = &context_->GetEnabledDeviceFeatures();
+		ext = &context_->GetEnabledDeviceExtensions();
+		feat = context_->GetSupportedDeviceFeatures();
 
 #ifdef QM_VULKAN_MT
 		register_thread_index(0);
@@ -731,8 +730,8 @@ namespace Vulkan
 		}
 
 		framebuffer_allocator.Clear();
-		transient_allocator.clear();
-		physical_allocator.clear();
+		transient_allocator.Clear();
+		physical_allocator.Clear();
 		for (auto& sampler : samplers)
 			sampler.Reset();
 
@@ -780,8 +779,8 @@ namespace Vulkan
 
 		// Clear out caches which might contain stale data from now on.
 		framebuffer_allocator.Clear();
-		transient_allocator.clear();
-		physical_allocator.clear();
+		transient_allocator.Clear();
+		physical_allocator.Clear();
 		per_frame.clear();
 
 		for (unsigned i = 0; i < count; i++)
@@ -831,7 +830,7 @@ namespace Vulkan
 			view_info.components.g = VK_COMPONENT_SWIZZLE_G;
 			view_info.components.b = VK_COMPONENT_SWIZZLE_B;
 			view_info.components.a = VK_COMPONENT_SWIZZLE_A;
-			view_info.subresourceRange.aspectMask = format_to_aspect_mask(format);
+			view_info.subresourceRange.aspectMask = FormatToAspectMask(format);
 			view_info.subresourceRange.baseMipLevel = 0;
 			view_info.subresourceRange.baseArrayLayer = 0;
 			view_info.subresourceRange.levelCount = 1;
@@ -905,11 +904,8 @@ namespace Vulkan
 		DestroyBufferNolock(buffer, allocation);
 	}
 
-	void Device::DestroyProgram(Program* program)
+	void Device::DestroyProgramNoLock(Program* program)
 	{
-#ifdef QM_VULKAN_MT
-		std::lock_guard holder_{ lock.program_lock };
-#endif
 		Frame().destroyed_programs.push_back(program);
 	}
 
@@ -1038,14 +1034,14 @@ namespace Vulkan
 	{
 		VkDevice vkdevice = device.GetDevice();
 
-		if (device.GetDeviceFeatures().timeline_semaphore_features.timelineSemaphore && graphics_timeline_semaphore && compute_timeline_semaphore && transfer_timeline_semaphore)
+		if (device.GetDeviceExtensions().timeline_semaphore_features.timelineSemaphore && graphics_timeline_semaphore && compute_timeline_semaphore && transfer_timeline_semaphore)
 		{
 			VkSemaphoreWaitInfoKHR info = { VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO_KHR };
 			const VkSemaphore semaphores[3] = { graphics_timeline_semaphore, compute_timeline_semaphore, transfer_timeline_semaphore };
 			const uint64_t values[3] = { timeline_fence_graphics, timeline_fence_compute, timeline_fence_transfer };
 
 #if defined(VULKAN_DEBUG) && defined(SUBMIT_DEBUG)
-			if (device.GetDeviceFeatures().timeline_semaphore_features.timelineSemaphore)
+			if (device.GetDeviceExtensions().timeline_semaphore_features.timelineSemaphore)
 			{
 				QM_LOG_INFO("Waiting for graphics (%p) %u\n",
 					reinterpret_cast<void*>(graphics_timeline_semaphore),
@@ -1236,8 +1232,8 @@ namespace Vulkan
 		}
 
 		framebuffer_allocator.Clear();
-		transient_allocator.clear();
-		physical_allocator.clear();
+		transient_allocator.Clear();
+		physical_allocator.Clear();
 
 		descriptor_set_allocators.for_each([](DescriptorSetAllocator* allocator) {
 			allocator->Clear();
@@ -1255,12 +1251,14 @@ namespace Vulkan
 	{
 		DRAIN_FRAME_LOCK();
 
+		UpdateInvalidProgramsNoLock();
+
 		// Flush the frame here as we might have pending staging command buffers from init stage.
 		EndFrameNolock();
 
 		framebuffer_allocator.BeginFrame();
-		transient_allocator.begin_frame();
-		physical_allocator.begin_frame();
+		transient_allocator.BeginFrame();
+		physical_allocator.BeginFrame();
 
 		descriptor_set_allocators.for_each([](DescriptorSetAllocator* allocator) {
 			allocator->BeginFrame();
@@ -1333,8 +1331,47 @@ namespace Vulkan
 		return BufferViewHandle(handle_pool.buffer_views.allocate(this, view, view_info));
 	}
 
-	BufferHandle Device::CreateBuffer(const BufferCreateInfo& create_info, const void* initial)
+	BufferHandle Device::CreateBuffer(const BufferCreateInfo& create_info, ResourceQueueOwnershipFlags ownership, const void* initial)
 	{
+
+		bool is_async_graphics_on_compute_queue = GetPhysicalQueueType(CommandBuffer::Type::AsyncGraphics) == CommandBuffer::Type::AsyncCompute;
+		bool is_concurrent_graphics = (ownership & RESOURCE_CONCURRENT_GENERIC) || (!is_async_graphics_on_compute_queue && (ownership & RESOURCE_CONCURRENT_ASYNC_GRAPHICS));
+		bool is_concurrent_compute = (ownership & RESOURCE_CONCURRENT_ASYNC_COMPUTE) || (is_async_graphics_on_compute_queue && (ownership & RESOURCE_CONCURRENT_ASYNC_GRAPHICS));
+		bool is_concurrent_transfer = ownership & RESOURCE_CONCURRENT_ASYNC_TRANSFER;
+
+		bool is_exclusive = false;
+		uint32_t exclusive_queue_family_index;
+		CommandBuffer::Type exclusive_owner;
+
+		if (ownership & RESOURCE_EXCLUSIVE_GENERIC)
+		{
+			VK_ASSERT(!is_exclusive);
+			is_exclusive = true;
+			exclusive_queue_family_index = graphics_queue_family_index;
+			exclusive_owner = CommandBuffer::Type::Generic;
+		}
+		else if (ownership & RESOURCE_EXCLUSIVE_ASYNC_GRAPHICS)
+		{
+			VK_ASSERT(!is_exclusive);
+			is_exclusive = true;
+			exclusive_queue_family_index = is_async_graphics_on_compute_queue ? compute_queue_family_index : graphics_queue_family_index;
+			exclusive_owner = CommandBuffer::Type::AsyncGraphics;
+		}
+		else if (ownership & RESOURCE_EXCLUSIVE_ASYNC_TRANSFER)
+		{
+			VK_ASSERT(!is_exclusive);
+			is_exclusive = true;
+			exclusive_queue_family_index = transfer_queue_family_index;
+			exclusive_owner = CommandBuffer::Type::AsyncTransfer;
+		}
+		else if (ownership & RESOURCE_EXCLUSIVE_ASYNC_COMPUTE)
+		{
+			VK_ASSERT(!is_exclusive);
+			is_exclusive = true;
+			exclusive_queue_family_index = compute_queue_family_index;
+			exclusive_owner = CommandBuffer::Type::AsyncCompute;
+		}
+
 		VkBuffer buffer;
 		DeviceAllocation allocation;
 
@@ -1350,8 +1387,53 @@ namespace Vulkan
 		info.usage = create_info.usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+		VkPipelineStageFlags possible_buffer_stages = BufferUsageToPossibleStages(info.usage);
+		VkAccessFlags possible_buffer_access = BufferUsageToPossibleAccess(info.usage);
+
 		uint32_t sharing_indices[3];
-		FillBufferSharingIndices(info, sharing_indices);
+
+		// Deduce sharing mode
+
+		if (is_exclusive)
+		{
+			info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			info.pQueueFamilyIndices = nullptr;
+			info.queueFamilyIndexCount = 0;
+		}
+		else
+		{
+			uint32_t queueFamilyCount = 0;
+			const auto add_unique_family = [&](uint32_t family) {
+				for (uint32_t i = 0; i < queueFamilyCount; i++)
+				{
+					if (sharing_indices[i] == family)
+						return;
+				}
+				sharing_indices[queueFamilyCount++] = family;
+			};
+
+			if (ownership & RESOURCE_CONCURRENT_GENERIC)
+				add_unique_family(graphics_queue_family_index);
+			if (ownership & RESOURCE_CONCURRENT_ASYNC_GRAPHICS)
+				add_unique_family(is_async_graphics_on_compute_queue ? compute_queue_family_index : graphics_queue_family_index);
+			if (ownership & RESOURCE_CONCURRENT_ASYNC_COMPUTE)
+				add_unique_family(compute_queue_family_index);
+			if (((initial || zero_initialize) && create_info.domain == BufferDomain::Device) || (ownership & RESOURCE_CONCURRENT_ASYNC_TRANSFER) != 0)
+				add_unique_family(transfer_queue_family_index);
+
+			if (queueFamilyCount > 1)
+			{
+				info.sharingMode = VK_SHARING_MODE_CONCURRENT;
+				info.pQueueFamilyIndices = sharing_indices;
+				info.queueFamilyIndexCount = queueFamilyCount;
+			}
+			else
+			{
+				info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+				info.pQueueFamilyIndices = nullptr;
+				info.queueFamilyIndexCount = 0;
+			}
+		}
 
 		VmaAllocationCreateInfo alloc_info{};
 		if (create_info.domain == BufferDomain::Host) 
@@ -1392,24 +1474,141 @@ namespace Vulkan
 
 		if (create_info.domain == BufferDomain::Device && (initial || zero_initialize) && !AllocationHasMemoryPropertyFlags(allocation, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
 		{
-			CommandBufferHandle cmd;
+			//CommandBufferHandle cmd;
 			if (initial)
 			{
 				auto staging_info = create_info;
 				staging_info.domain = BufferDomain::Host;
-				auto staging_buffer = CreateBuffer(staging_info, initial);
+				auto staging_buffer = CreateBuffer(staging_info, RESOURCE_EXCLUSIVE_ASYNC_TRANSFER, initial);
 
-				cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncTransfer);
+				CommandBufferHandle cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncTransfer);
 				cmd->CopyBuffer(*handle, *staging_buffer);
+
+				if (is_exclusive)
+				{
+					VkBufferMemoryBarrier release{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+					release.buffer = handle->GetBuffer();
+					release.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+					release.dstAccessMask = 0;
+					release.srcQueueFamilyIndex = transfer_queue_family_index;
+					release.dstQueueFamilyIndex = exclusive_queue_family_index;
+					release.offset = 0;
+					release.size = VK_WHOLE_SIZE;
+
+					cmd->Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 1, &release, 0, nullptr);
+
+					Semaphore sem;
+					Submit(cmd, nullptr, 1, &sem);
+					AddWaitSemaphore(exclusive_owner, sem, possible_buffer_stages, true);
+
+					CommandBufferHandle target_cmd = RequestCommandBuffer(exclusive_owner);
+
+					VkBufferMemoryBarrier acquire = release;
+					acquire.srcAccessMask = 0;
+					acquire.dstAccessMask = possible_buffer_access;
+
+					target_cmd->Barrier(possible_buffer_stages, possible_buffer_stages, 0, nullptr, 1, &acquire, 0, nullptr);
+
+					Submit(target_cmd);
+				}
+				else
+				{
+					cmd->BufferBarrier(*handle, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
+
+					bool compute_sem_needed = compute_queue != transfer_queue && is_concurrent_compute;
+					bool graphics_sem_needed = graphics_queue != transfer_queue && is_concurrent_graphics;
+
+					if (compute_sem_needed && !graphics_sem_needed)
+					{
+
+						Semaphore sem[1];
+						Submit(cmd, nullptr, 1, sem);
+						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+					}
+					else if (!compute_sem_needed && graphics_sem_needed)
+					{
+						Semaphore sem[1];
+						Submit(cmd, nullptr, 1, sem);
+						AddWaitSemaphore(CommandBuffer::Type::Generic, sem[0], possible_buffer_stages, true);
+					}
+					else if (compute_sem_needed && graphics_sem_needed)
+					{
+						Semaphore sem[2];
+						Submit(cmd, nullptr, 2, sem);
+						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
+						AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[1], possible_buffer_stages, true);
+					}
+					else
+					{
+						Submit(cmd);
+					}
+				}
 			}
 			else
 			{
-				cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncCompute);
+				CommandBufferHandle cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncTransfer);
 				cmd->FillBuffer(*handle, 0);
-			}
 
-			LOCK();
-			SubmitStaging(cmd, info.usage, true);
+				if (is_exclusive)
+				{
+					VkBufferMemoryBarrier release{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+					release.buffer = handle->GetBuffer();
+					release.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+					release.dstAccessMask = 0;
+					release.srcQueueFamilyIndex = transfer_queue_family_index;
+					release.dstQueueFamilyIndex = exclusive_queue_family_index;
+					release.offset = 0;
+					release.size = VK_WHOLE_SIZE;
+
+					cmd->Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 1, &release, 0, nullptr);
+
+					Semaphore sem;
+					Submit(cmd, nullptr, 1, &sem);
+					AddWaitSemaphore(exclusive_owner, sem, possible_buffer_stages, true);
+
+					CommandBufferHandle target_cmd = RequestCommandBuffer(exclusive_owner);
+
+					VkBufferMemoryBarrier acquire = release;
+					acquire.srcAccessMask = 0;
+					acquire.dstAccessMask = possible_buffer_access;
+
+					target_cmd->Barrier(possible_buffer_stages, possible_buffer_stages, 0, nullptr, 1, &acquire, 0, nullptr);
+
+					Submit(target_cmd);
+				}
+				else
+				{
+					cmd->BufferBarrier(*handle, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
+
+					bool compute_sem_needed = compute_queue != transfer_queue && is_concurrent_compute;
+					bool graphics_sem_needed = graphics_queue != transfer_queue && is_concurrent_graphics;
+
+					if (compute_sem_needed && !graphics_sem_needed)
+					{
+
+						Semaphore sem[1];
+						Submit(cmd, nullptr, 1, sem);
+						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+					}
+					else if (!compute_sem_needed && graphics_sem_needed)
+					{
+						Semaphore sem[1];
+						Submit(cmd, nullptr, 1, sem);
+						AddWaitSemaphore(CommandBuffer::Type::Generic, sem[0], possible_buffer_stages, true);
+					}
+					else if (compute_sem_needed && graphics_sem_needed)
+					{
+						Semaphore sem[2];
+						Submit(cmd, nullptr, 2, sem);
+						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
+						AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[1], possible_buffer_stages, true);
+					}
+					else
+					{
+						Submit(cmd);
+					}
+				}
+			}
 		}
 		else if (initial || zero_initialize)
 		{
@@ -1576,7 +1775,7 @@ namespace Vulkan
 				default_view_info.image = image;
 				default_view_info.format = create_info.format;
 				default_view_info.components = create_info.swizzle;
-				default_view_info.subresourceRange.aspectMask = format_to_aspect_mask(default_view_info.format);
+				default_view_info.subresourceRange.aspectMask = FormatToAspectMask(default_view_info.format);
 				default_view_info.viewType = GetImageViewType(create_info, nullptr);
 				default_view_info.subresourceRange.baseMipLevel = 0;
 				default_view_info.subresourceRange.baseArrayLayer = 0;
@@ -1734,7 +1933,7 @@ namespace Vulkan
 		view_info.image = create_info.image->GetImage();
 		view_info.format = format;
 		view_info.components = create_info.swizzle;
-		view_info.subresourceRange.aspectMask = format_to_aspect_mask(format);
+		view_info.subresourceRange.aspectMask = FormatToAspectMask(format);
 		view_info.subresourceRange.baseMipLevel = create_info.base_level;
 		view_info.subresourceRange.baseArrayLayer = create_info.base_layer;
 		view_info.subresourceRange.levelCount = create_info.levels;
@@ -1785,7 +1984,7 @@ namespace Vulkan
 		buffer_info.domain = BufferDomain::Host;
 		buffer_info.size = layout.get_required_size();
 		buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		result.buffer = CreateBuffer(buffer_info, nullptr);
+		result.buffer = CreateBuffer(buffer_info);
 
 		auto* mapped = static_cast<uint8_t*>(MapHostBuffer(*result.buffer, MEMORY_ACCESS_WRITE_BIT));
 		memcpy(mapped, layout.data(), layout.get_required_size());
@@ -1829,7 +2028,7 @@ namespace Vulkan
 		buffer_info.domain = BufferDomain::Host;
 		buffer_info.size = layout.get_required_size();
 		buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		result.buffer = CreateBuffer(buffer_info, nullptr);
+		result.buffer = CreateBuffer(buffer_info);
 
 		// And now, do the actual copy.
 		auto* mapped = static_cast<uint8_t*>(MapHostBuffer(*result.buffer, MEMORY_ACCESS_WRITE_BIT));
@@ -1875,19 +2074,55 @@ namespace Vulkan
 		return result;
 	}
 
-	ImageHandle Device::CreateImage(const ImageCreateInfo& create_info, const ImageInitialData* initial)
+	ImageHandle Device::CreateImage(const ImageCreateInfo& create_info, ResourceQueueOwnershipFlags ownership, const ImageInitialData* initial)
 	{
 		if (initial)
 		{
 			auto staging_buffer = CreateImageStagingBuffer(create_info, initial);
-			return CreateImageFromStagingBuffer(create_info, &staging_buffer);
+			return CreateImageFromStagingBuffer(create_info, ownership, &staging_buffer);
 		}
 		else
-			return CreateImageFromStagingBuffer(create_info, nullptr);
+			return CreateImageFromStagingBuffer(create_info, ownership, nullptr);
 	}
 
-	ImageHandle Device::CreateImageFromStagingBuffer(const ImageCreateInfo& create_info, const InitialImageBuffer* staging_buffer)
+	ImageHandle Device::CreateImageFromStagingBuffer(const ImageCreateInfo& create_info, ResourceQueueOwnershipFlags ownership, const InitialImageBuffer* staging_buffer)
 	{
+		VK_ASSERT(ownership);
+
+		bool is_exclusive = ownership & (RESOURCE_EXCLUSIVE_GENERIC | RESOURCE_EXCLUSIVE_ASYNC_COMPUTE | RESOURCE_EXCLUSIVE_ASYNC_GRAPHICS | RESOURCE_EXCLUSIVE_ASYNC_TRANSFER);
+		bool is_concurrent = ownership & (RESOURCE_CONCURRENT_GENERIC | RESOURCE_CONCURRENT_ASYNC_COMPUTE | RESOURCE_CONCURRENT_ASYNC_GRAPHICS | RESOURCE_CONCURRENT_ASYNC_TRANSFER);
+
+		uint32_t exclusive_target_queue_index = 0;
+		CommandBuffer::Type exclusive_owner;
+		if (ownership & RESOURCE_EXCLUSIVE_GENERIC)
+		{
+			exclusive_target_queue_index = graphics_queue_family_index;
+			exclusive_owner = CommandBuffer::Type::Generic;
+		}
+		else if (ownership & RESOURCE_EXCLUSIVE_ASYNC_GRAPHICS)
+		{
+			exclusive_target_queue_index = graphics_queue_family_index;
+			exclusive_owner = CommandBuffer::Type::AsyncGraphics;
+		}
+		else if (ownership & RESOURCE_EXCLUSIVE_ASYNC_COMPUTE)
+		{
+			exclusive_target_queue_index = compute_queue_family_index;
+			exclusive_owner = CommandBuffer::Type::AsyncCompute;
+		}
+		else if (ownership & RESOURCE_EXCLUSIVE_ASYNC_TRANSFER)
+		{
+			exclusive_target_queue_index = transfer_queue_family_index;
+			exclusive_owner = CommandBuffer::Type::AsyncTransfer;
+		}
+
+		VK_ASSERT(!(is_exclusive && is_concurrent));
+
+		bool is_async_graphics_on_compute_queue = GetPhysicalQueueType(CommandBuffer::Type::AsyncGraphics) == CommandBuffer::Type::AsyncCompute;
+
+		bool is_concurrent_graphics = (ownership & RESOURCE_CONCURRENT_GENERIC) || (!is_async_graphics_on_compute_queue && (ownership & RESOURCE_CONCURRENT_ASYNC_GRAPHICS));
+		bool is_concurrent_compute = (ownership & RESOURCE_CONCURRENT_ASYNC_COMPUTE) || (is_async_graphics_on_compute_queue && (ownership & RESOURCE_CONCURRENT_ASYNC_GRAPHICS));
+		bool is_concurrent_transfer = ownership & RESOURCE_CONCURRENT_ASYNC_TRANSFER;
+
 		ImageResourceHolder holder(this);
 
 		VkImageCreateInfo info = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
@@ -1949,35 +2184,44 @@ namespace Vulkan
 		// On AMD, using CONCURRENT with async compute disables compression.
 		uint32_t sharing_indices[3] = {};
 
-		uint32_t queue_flags = create_info.misc & (IMAGE_MISC_CONCURRENT_QUEUE_GRAPHICS_BIT | IMAGE_MISC_CONCURRENT_QUEUE_ASYNC_COMPUTE_BIT | IMAGE_MISC_CONCURRENT_QUEUE_ASYNC_GRAPHICS_BIT | IMAGE_MISC_CONCURRENT_QUEUE_ASYNC_TRANSFER_BIT);
-		bool concurrent_queue = queue_flags != 0;
-		if (concurrent_queue)
+		if (is_exclusive)
 		{
-			info.sharingMode = VK_SHARING_MODE_CONCURRENT;
-
+			info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			info.pQueueFamilyIndices = nullptr;
+			info.queueFamilyIndexCount = 0;
+		}
+		else
+		{
+			uint32_t queueFamilyCount = 0;
 			const auto add_unique_family = [&](uint32_t family) {
-				for (uint32_t i = 0; i < info.queueFamilyIndexCount; i++)
+				for (uint32_t i = 0; i < queueFamilyCount; i++)
 				{
 					if (sharing_indices[i] == family)
 						return;
 				}
-				sharing_indices[info.queueFamilyIndexCount++] = family;
+				sharing_indices[queueFamilyCount++] = family;
 			};
 
-			if (queue_flags & (IMAGE_MISC_CONCURRENT_QUEUE_GRAPHICS_BIT | IMAGE_MISC_CONCURRENT_QUEUE_ASYNC_GRAPHICS_BIT))
+			if (ownership & RESOURCE_CONCURRENT_GENERIC)
 				add_unique_family(graphics_queue_family_index);
-			if (queue_flags & IMAGE_MISC_CONCURRENT_QUEUE_ASYNC_COMPUTE_BIT)
+			if (ownership & RESOURCE_CONCURRENT_ASYNC_GRAPHICS)
+				add_unique_family(is_async_graphics_on_compute_queue ? compute_queue_family_index : graphics_queue_family_index);
+			if (ownership & RESOURCE_CONCURRENT_ASYNC_COMPUTE)
 				add_unique_family(compute_queue_family_index);
-			if (staging_buffer || (queue_flags & IMAGE_MISC_CONCURRENT_QUEUE_ASYNC_TRANSFER_BIT) != 0)
+			if (staging_buffer || (ownership & RESOURCE_CONCURRENT_ASYNC_TRANSFER) != 0)
 				add_unique_family(transfer_queue_family_index);
 
-			if (info.queueFamilyIndexCount > 1)
+			if (queueFamilyCount > 1)
+			{
+				info.sharingMode = VK_SHARING_MODE_CONCURRENT;
 				info.pQueueFamilyIndices = sharing_indices;
+				info.queueFamilyIndexCount = queueFamilyCount;
+			}
 			else
 			{
+				info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 				info.pQueueFamilyIndices = nullptr;
 				info.queueFamilyIndexCount = 0;
-				info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			}
 		}
 
@@ -2107,15 +2351,13 @@ namespace Vulkan
 			bool generate_mips = (create_info.misc & IMAGE_MISC_GENERATE_MIPS_BIT) != 0;
 
 			// If graphics_queue != transfer_queue, we will use a semaphore, so no srcAccess mask is necessary.
-			VkAccessFlags final_transition_src_access = 0;
-			if (generate_mips)
-				final_transition_src_access = VK_ACCESS_TRANSFER_READ_BIT; // Validation complains otherwise.
-			else if (graphics_queue == transfer_queue)
-				final_transition_src_access = VK_ACCESS_TRANSFER_WRITE_BIT;
+			//VkAccessFlags final_transition_src_access = 0;
+			//if (generate_mips)
+			//	final_transition_src_access = VK_ACCESS_TRANSFER_READ_BIT; // Validation complains otherwise.
+			//else if (graphics_queue == transfer_queue)
+			//	final_transition_src_access = VK_ACCESS_TRANSFER_WRITE_BIT;
 
-			VkAccessFlags prepare_src_access = graphics_queue == transfer_queue ? VK_ACCESS_TRANSFER_WRITE_BIT : 0;
-			bool need_mipmap_barrier = true;
-			bool need_initial_barrier = true;
+			//VkAccessFlags prepare_src_access = graphics_queue == transfer_queue ? VK_ACCESS_TRANSFER_WRITE_BIT : 0;
 
 			// Now we've used the TRANSFER queue to copy data over to the GPU.
 			// For mipmapping, we're now moving over to graphics,
@@ -2124,130 +2366,427 @@ namespace Vulkan
 			// For concurrent queue mode, we just need to inject a semaphore.
 			// For non-concurrent queue mode, we will have to inject ownership transfer barrier if the queue families do not match.
 
-			auto graphics_cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
-			CommandBufferHandle transfer_cmd;
+			VkPipelineStageFlags possible_image_stages = handle->GetStageFlags(); 
+			VkAccessFlags possible_image_access = handle->GetAccessFlags() & ImageLayoutToPossibleAccess(create_info.initial_layout);
 
-			// Don't split the upload into multiple command buffers unless we have to.
-			if (transfer_queue != graphics_queue)
-				transfer_cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncTransfer);
-			else
-				transfer_cmd = graphics_cmd;
-
-			transfer_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_ACCESS_TRANSFER_WRITE_BIT);
-
-			transfer_cmd->CopyBufferToImage(*handle, *staging_buffer->buffer, staging_buffer->blits.size(), staging_buffer->blits.data());
-
-			if (transfer_queue != graphics_queue)
+			if (is_concurrent)
 			{
-				VkPipelineStageFlags dst_stages =
-					generate_mips ? VkPipelineStageFlags(VK_PIPELINE_STAGE_TRANSFER_BIT) : handle->GetStageFlags();
+				auto transfer_cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncTransfer);
 
-				// We can't just use semaphores, we will also need a release + acquire barrier to marshal ownership from
-				// transfer queue over to graphics ...
-				if (!concurrent_queue && transfer_queue_family_index != graphics_queue_family_index)
+				transfer_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+					VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
+					VK_ACCESS_TRANSFER_WRITE_BIT);
+
+				transfer_cmd->CopyBufferToImage(*handle, *staging_buffer->buffer, staging_buffer->blits.size(), staging_buffer->blits.data());
+
+				if (generate_mips)
 				{
-					need_mipmap_barrier = false;
-
-					VkImageMemoryBarrier release = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-					release.image = handle->GetImage();
-					release.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-					release.dstAccessMask = 0;
-					release.srcQueueFamilyIndex = transfer_queue_family_index;
-					release.dstQueueFamilyIndex = graphics_queue_family_index;
-					release.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-
-					if (generate_mips)
+					if (transfer_queue == graphics_queue)
 					{
-						release.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-						release.subresourceRange.levelCount = 1;
+						transfer_cmd->BarrierPrepareGenerateMipmap(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, true);
+						transfer_cmd->GenerateMipmap(*handle);
+						transfer_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, create_info.initial_layout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, possible_image_stages, possible_image_access);
+
+						bool compute_sem_needed = compute_queue != transfer_queue && is_concurrent_compute;
+						bool graphics_sem_needed = graphics_queue != transfer_queue && is_concurrent_graphics;
+
+						if (compute_sem_needed && !graphics_sem_needed)
+						{
+							Semaphore sem[1];
+							Submit(transfer_cmd, nullptr, 1, sem);
+							AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+						}
+						else if (!compute_sem_needed && graphics_sem_needed)
+						{
+							Semaphore sem[1];
+							Submit(transfer_cmd, nullptr, 1, sem);
+							AddWaitSemaphore(CommandBuffer::Type::Generic, sem[0], possible_image_stages, true);
+						}
+						else if (compute_sem_needed && graphics_sem_needed)
+						{
+							Semaphore sem[2];
+							Submit(transfer_cmd, nullptr, 2, sem);
+							AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
+							AddWaitSemaphore(CommandBuffer::Type::Generic, sem[1], possible_image_stages, true);
+						}
+						else
+						{
+							Submit(transfer_cmd);
+						}
 					}
 					else
 					{
+						Semaphore sem;
+						Submit(transfer_cmd, nullptr, 1, &sem);
+						AddWaitSemaphore(CommandBuffer::Type::Generic, sem, VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+
+						auto graphics_cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
+
+						graphics_cmd->BarrierPrepareGenerateMipmap(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, true);
+						graphics_cmd->GenerateMipmap(*handle);
+						graphics_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, create_info.initial_layout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, possible_image_stages, possible_image_access);
+
+						bool compute_sem_needed = compute_queue != graphics_queue && is_concurrent_compute;
+						bool transfer_sem_needed = transfer_queue != graphics_queue && is_concurrent_transfer;
+
+						if (compute_sem_needed && !transfer_sem_needed)
+						{
+
+							Semaphore sem[1];
+							Submit(graphics_cmd, nullptr, 1, sem);
+							AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+						}
+						else if (!compute_sem_needed && transfer_sem_needed)
+						{
+							Semaphore sem[1];
+							Submit(graphics_cmd, nullptr, 1, sem);
+							AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[0], VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+						}
+						else if (compute_sem_needed && transfer_sem_needed)
+						{
+							Semaphore sem[2];
+							Submit(graphics_cmd, nullptr, 2, sem);
+							AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
+							AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[1], VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+						}
+						else
+						{
+							Submit(graphics_cmd);
+						}
+					}
+				}
+				else
+				{
+					transfer_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, create_info.initial_layout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, possible_image_stages, possible_image_access);
+
+					bool compute_sem_needed = compute_queue != transfer_queue && is_concurrent_compute;
+					bool graphics_sem_needed = graphics_queue != transfer_queue && is_concurrent_graphics;
+
+					if (compute_sem_needed && !graphics_sem_needed)
+					{
+						Semaphore sem[1];
+						Submit(transfer_cmd, nullptr, 1, sem);
+						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+					}
+					else if (!compute_sem_needed && graphics_sem_needed)
+					{
+						Semaphore sem[1];
+						Submit(transfer_cmd, nullptr, 1, sem);
+						AddWaitSemaphore(CommandBuffer::Type::Generic, sem[0], possible_image_stages, true);
+					}
+					else if (compute_sem_needed && graphics_sem_needed)
+					{
+						Semaphore sem[2];
+						Submit(transfer_cmd, nullptr, 2, sem);
+						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
+						AddWaitSemaphore(CommandBuffer::Type::Generic, sem[1], possible_image_stages, true);
+					}
+					else
+					{
+						Submit(transfer_cmd);
+					}
+				}
+			}
+			else
+			{
+				
+				if (exclusive_target_queue_index == graphics_queue_family_index)
+				{ // No barrier needed between graphics and target
+
+					if (graphics_queue == transfer_queue)
+					{ // No barrier needed, everything can be done on one queue
+
+						auto cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
+
+						cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+							VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
+							VK_ACCESS_TRANSFER_WRITE_BIT);
+
+						cmd->CopyBufferToImage(*handle, *staging_buffer->buffer, staging_buffer->blits.size(), staging_buffer->blits.data());
+
+						if (generate_mips)
+						{
+							cmd->BarrierPrepareGenerateMipmap(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, true);
+							cmd->GenerateMipmap(*handle);
+							cmd->ImageBarrier(*handle,
+								VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, create_info.initial_layout,
+								VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+								possible_image_stages, possible_image_access);
+						}
+						else
+						{
+							cmd->ImageBarrier(*handle,
+								VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, create_info.initial_layout,
+								VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+								possible_image_stages, possible_image_access);
+						}
+
+						Submit(cmd);
+					}
+					else
+					{ // One barrier needed between transfer and graphics
+
+						VkPipelineStageFlags dst_stages = generate_mips ? VK_PIPELINE_STAGE_TRANSFER_BIT : possible_image_stages;
+
+						CommandBufferHandle graphics_cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
+						CommandBufferHandle transfer_cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncTransfer);
+
+						transfer_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+							VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
+							VK_ACCESS_TRANSFER_WRITE_BIT);
+
+						transfer_cmd->CopyBufferToImage(*handle, *staging_buffer->buffer, staging_buffer->blits.size(), staging_buffer->blits.data());
+
+						VkImageMemoryBarrier release = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+						release.image = handle->GetImage();
+						release.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+						release.dstAccessMask = 0;
+						release.srcQueueFamilyIndex = transfer_queue_family_index;
+						release.dstQueueFamilyIndex = graphics_queue_family_index;
+						release.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+						if (generate_mips)
+						{
+							release.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+							release.subresourceRange.levelCount = 1;
+						}
+						else
+						{
+							release.newLayout = create_info.initial_layout;
+							release.subresourceRange.levelCount = info.mipLevels;
+						}
+
+						release.subresourceRange.aspectMask = FormatToAspectMask(info.format);
+						release.subresourceRange.layerCount = info.arrayLayers;
+
+						transfer_cmd->Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
+							VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+							0, nullptr, 0, nullptr, 1, &release);
+
+						Semaphore sem;
+						Submit(transfer_cmd, nullptr, 1, &sem);
+						AddWaitSemaphore(CommandBuffer::Type::Generic, sem, dst_stages, true);
+
+						VkImageMemoryBarrier acquire = release;
+						acquire.srcAccessMask = 0;
+						acquire.dstAccessMask = generate_mips ? VK_ACCESS_TRANSFER_READ_BIT : possible_image_access;
+
+						graphics_cmd->Barrier(dst_stages, dst_stages, 0, nullptr, 0, nullptr, 1, &acquire);
+
+						if (generate_mips)
+						{
+							graphics_cmd->BarrierPrepareGenerateMipmap(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, false);
+							graphics_cmd->GenerateMipmap(*handle);
+							graphics_cmd->ImageBarrier(*handle,
+								VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, create_info.initial_layout,
+								VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+								possible_image_stages, possible_image_access);
+						}
+
+						Submit(graphics_cmd);
+					}
+
+					
+				}
+				else if(exclusive_target_queue_index != graphics_queue_family_index)
+				{ // Barrier needed between graphics and target
+
+					if (graphics_queue == transfer_queue)
+					{ // No barrier between graphics queue and transfer queue 
+						auto graphics_cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
+						auto target_cmd = RequestCommandBuffer(exclusive_owner);
+
+						graphics_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+							VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
+							VK_ACCESS_TRANSFER_WRITE_BIT);
+
+						graphics_cmd->CopyBufferToImage(*handle, *staging_buffer->buffer, staging_buffer->blits.size(), staging_buffer->blits.data());
+
+						if (generate_mips)
+						{
+							graphics_cmd->BarrierPrepareGenerateMipmap(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, true);
+							graphics_cmd->GenerateMipmap(*handle);
+						}
+						
+
+						VkImageMemoryBarrier release{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+						release.image = handle->GetImage();
+						release.srcAccessMask = generate_mips ? VK_ACCESS_TRANSFER_READ_BIT : VK_ACCESS_TRANSFER_WRITE_BIT;
+						release.dstAccessMask = 0;
+						release.srcQueueFamilyIndex = graphics_queue_family_index;
+						release.dstQueueFamilyIndex = exclusive_target_queue_index;
+						release.oldLayout = generate_mips ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 						release.newLayout = create_info.initial_layout;
 						release.subresourceRange.levelCount = info.mipLevels;
-						need_initial_barrier = false;
+						release.subresourceRange.aspectMask = FormatToAspectMask(info.format);
+						release.subresourceRange.layerCount = info.arrayLayers;
+
+						graphics_cmd->Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 1, &release);
+
+						Semaphore sem;
+						Submit(graphics_cmd, nullptr, 1, &sem);
+						AddWaitSemaphore(exclusive_owner, sem, possible_image_stages, true);
+
+						auto target_cmd = RequestCommandBuffer(exclusive_owner);
+
+						VkImageMemoryBarrier acquire = release;
+						acquire.srcAccessMask = 0;
+						acquire.dstAccessMask = possible_image_access;
+
+						target_cmd->Barrier(possible_image_stages, possible_image_stages, 0, nullptr, 0, nullptr, 1, &acquire);
+
+						Submit(target_cmd);
+
 					}
-
-					release.subresourceRange.aspectMask = format_to_aspect_mask(info.format);
-					release.subresourceRange.layerCount = info.arrayLayers;
-
-					VkImageMemoryBarrier acquire = release;
-					acquire.srcAccessMask = 0;
-
-					if (generate_mips)
-						acquire.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 					else
-						acquire.dstAccessMask = handle->GetAccessFlags() & ImageLayoutToPossibleAccess(create_info.initial_layout);
+					{ // Two barriers needed, transfer->graphics->target
+						auto transfer_cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncTransfer);
 
-					transfer_cmd->Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
-						VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-						0, nullptr, 0, nullptr, 1, &release);
+						transfer_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+							VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
+							VK_ACCESS_TRANSFER_WRITE_BIT);
 
-					graphics_cmd->Barrier(dst_stages,
-						dst_stages,
-						0, nullptr, 0, nullptr, 1, &acquire);
+						transfer_cmd->CopyBufferToImage(*handle, *staging_buffer->buffer, staging_buffer->blits.size(), staging_buffer->blits.data());
+
+						if (generate_mips)
+						{
+							VkImageMemoryBarrier transfer_release = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+							transfer_release.image = handle->GetImage();
+							transfer_release.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+							transfer_release.dstAccessMask = 0;
+							transfer_release.srcQueueFamilyIndex = transfer_queue_family_index;
+							transfer_release.dstQueueFamilyIndex = graphics_queue_family_index;
+							transfer_release.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+							transfer_release.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+							transfer_release.subresourceRange.levelCount = 1;
+							transfer_release.subresourceRange.aspectMask = FormatToAspectMask(info.format);
+							transfer_release.subresourceRange.layerCount = info.arrayLayers;
+
+							transfer_cmd->Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 1, &transfer_release);
+
+							Semaphore sem;
+							Submit(transfer_cmd, nullptr, 1, &sem);
+							AddWaitSemaphore(CommandBuffer::Type::Generic, sem, VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+
+							auto graphics_cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
+
+							VkImageMemoryBarrier graphics_acquire = transfer_release;
+							graphics_acquire.srcAccessMask = 0;
+							graphics_acquire.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+							graphics_cmd->Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, nullptr, 0, nullptr, 1, &graphics_acquire);
+							graphics_cmd->BarrierPrepareGenerateMipmap(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, false);
+							graphics_cmd->GenerateMipmap(*handle);
+
+							VkImageMemoryBarrier graphics_release = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+							graphics_release.image = handle->GetImage();
+							graphics_release.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+							graphics_release.dstAccessMask = 0;
+							graphics_release.srcQueueFamilyIndex = graphics_queue_family_index;
+							graphics_release.dstQueueFamilyIndex = exclusive_target_queue_index;
+							graphics_release.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+							graphics_release.newLayout = create_info.initial_layout;
+							graphics_release.subresourceRange.levelCount = info.mipLevels;
+							graphics_release.subresourceRange.aspectMask = FormatToAspectMask(info.format);
+							graphics_release.subresourceRange.layerCount = info.arrayLayers;
+
+							graphics_cmd->Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 1, &transfer_release);
+
+							Semaphore sem;
+							Submit(graphics_cmd, nullptr, 1, &sem);
+							AddWaitSemaphore(exclusive_owner, sem, possible_image_stages, true);
+
+							auto target_cmd = RequestCommandBuffer(exclusive_owner);
+
+							VkImageMemoryBarrier target_acquire = graphics_release;
+							target_acquire.srcAccessMask = 0;
+							target_acquire.dstAccessMask = possible_image_access;
+
+							target_cmd->Barrier(possible_image_stages, possible_image_stages, 0, nullptr, 0, nullptr, 1, &target_acquire);
+
+							Submit(target_cmd);
+						}
+						else
+						{
+							if (exclusive_owner == CommandBuffer::Type::AsyncTransfer)
+							{
+								transfer_cmd->ImageBarrier(*handle,
+									VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, create_info.initial_layout,
+									VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+									possible_image_stages, possible_image_access);
+
+								Submit(transfer_cmd);
+							}
+							else
+							{
+								VkImageMemoryBarrier transfer_release = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+								transfer_release.image = handle->GetImage();
+								transfer_release.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+								transfer_release.dstAccessMask = 0;
+								transfer_release.srcQueueFamilyIndex = transfer_queue_family_index;
+								transfer_release.dstQueueFamilyIndex = exclusive_target_queue_index;
+								transfer_release.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+								transfer_release.newLayout = create_info.initial_layout;
+								transfer_release.subresourceRange.levelCount = info.mipLevels;
+								transfer_release.subresourceRange.aspectMask = FormatToAspectMask(info.format);
+								transfer_release.subresourceRange.layerCount = info.arrayLayers;
+
+								transfer_cmd->Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 1, &transfer_release);
+
+								Semaphore sem;
+								Submit(transfer_cmd, nullptr, 1, &sem);
+								AddWaitSemaphore(exclusive_owner, sem, possible_image_stages, true);
+
+								auto target_cmd = RequestCommandBuffer(exclusive_owner);
+
+								VkImageMemoryBarrier target_acquire = transfer_release;
+								target_acquire.srcAccessMask = 0;
+								target_acquire.dstAccessMask = possible_image_access;
+
+								target_cmd->Barrier(possible_image_stages, possible_image_stages, 0, nullptr, 0, nullptr, 1, &target_acquire);
+
+								Submit(target_cmd);
+
+							}
+						}
+					}
+					
 				}
 
-				Semaphore sem;
-				Submit(transfer_cmd, nullptr, 1, &sem);
-				AddWaitSemaphore(CommandBuffer::Type::Generic, sem, dst_stages, true);
 			}
-
-			if (generate_mips)
-			{
-				graphics_cmd->BarrierPrepareGenerateMipmap(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, prepare_src_access, need_mipmap_barrier);
-				graphics_cmd->GenerateMipmap(*handle);
-			}
-
-			if (need_initial_barrier)
-			{
-				graphics_cmd->ImageBarrier(
-					*handle, generate_mips ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-					create_info.initial_layout,
-					VK_PIPELINE_STAGE_TRANSFER_BIT, final_transition_src_access,
-					handle->GetStageFlags(),
-					handle->GetAccessFlags() & ImageLayoutToPossibleAccess(create_info.initial_layout));
-			}
-
-			bool share_compute = concurrent_queue && graphics_queue != compute_queue;
-			bool share_async_graphics = GetPhysicalQueueType(CommandBuffer::Type::AsyncGraphics) == CommandBuffer::Type::AsyncCompute;
-
-			// For concurrent queue, make sure that compute can see the final image as well.
-			// Also add semaphore if the compute queue can be used for async graphics as well.
-			if (share_compute || share_async_graphics)
-			{
-				Semaphore sem;
-				Submit(graphics_cmd, nullptr, 1, &sem);
-
-				VkPipelineStageFlags dst_stages = handle->GetStageFlags();
-				if (graphics_queue_family_index != compute_queue_family_index)
-					dst_stages &= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
-				AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem, dst_stages, true);
-			}
-			else
-				Submit(graphics_cmd);
 		}
 		else if (create_info.initial_layout != VK_IMAGE_LAYOUT_UNDEFINED)
 		{
 			VK_ASSERT(create_info.domain != ImageDomain::Transient);
 			auto cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
-			cmd->ImageBarrier(*handle, info.initialLayout, create_info.initial_layout,
-				VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, handle->GetStageFlags(),
-				handle->GetAccessFlags() &
-				ImageLayoutToPossibleAccess(create_info.initial_layout));
+			cmd->ImageBarrier(*handle, info.initialLayout, create_info.initial_layout, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, handle->GetStageFlags(), handle->GetAccessFlags() & ImageLayoutToPossibleAccess(create_info.initial_layout));
 
-			// For concurrent queue, make sure that compute can see the final image as well.
-			if (concurrent_queue && graphics_queue != compute_queue)
+			bool compute_sem_needed = compute_queue != graphics_queue && is_concurrent_compute;
+			bool transfer_sem_needed = transfer_queue != graphics_queue && is_concurrent_transfer;
+
+			if (compute_sem_needed && !transfer_sem_needed)
 			{
-				Semaphore sem;
-				Submit(cmd, nullptr, 1, &sem);
-				AddWaitSemaphore(CommandBuffer::Type::AsyncCompute,
-					sem, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+				Semaphore sem[1];
+				Submit(cmd, nullptr, 1, sem);
+				AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+			}
+			else if (!compute_sem_needed && transfer_sem_needed)
+			{
+				Semaphore sem[1];
+				Submit(cmd, nullptr, 1, sem);
+				AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[0], VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+			}
+			else if (compute_sem_needed && transfer_sem_needed)
+			{
+				Semaphore sem[2];
+				Submit(cmd, nullptr, 2, sem);
+				AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
+				AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[1], VK_PIPELINE_STAGE_TRANSFER_BIT, true);
 			}
 			else
+			{
 				Submit(cmd);
+			}
 		}
 
 		return handle;

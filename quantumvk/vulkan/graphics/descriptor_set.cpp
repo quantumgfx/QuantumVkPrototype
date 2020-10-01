@@ -31,7 +31,7 @@ namespace Vulkan
 			binding_flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT |
 				VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT;
 
-			if (device->GetDeviceFeatures().descriptor_indexing_features.descriptorBindingVariableDescriptorCount)
+			if (device->GetDeviceExtensions().descriptor_indexing_features.descriptorBindingVariableDescriptorCount)
 				binding_flags |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT;
 		}*/
 
@@ -45,7 +45,7 @@ namespace Vulkan
 			unsigned pool_array_size = array_size * VULKAN_NUM_SETS_PER_POOL;
 			/*if (array_size == DescriptorSetLayout::UNSIZED_ARRAY)
 			{
-				if (device->GetDeviceFeatures().descriptor_indexing_features.descriptorBindingVariableDescriptorCount)
+				if (device->GetDeviceExtensions().descriptor_indexing_features.descriptorBindingVariableDescriptorCount)
 					array_size = VULKAN_NUM_BINDINGS_BINDLESS_VARYING;
 				else
 					array_size = VULKAN_NUM_BINDINGS_BINDLESS;
@@ -156,7 +156,7 @@ namespace Vulkan
 	//	{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT };
 
 	//	uint32_t num_desc = num_descriptors;
-	//	if (device->GetDeviceFeatures().descriptor_indexing_features.descriptorBindingVariableDescriptorCount)
+	//	if (device->GetDeviceExtensions().descriptor_indexing_features.descriptorBindingVariableDescriptorCount)
 	//	{
 	//		count_info.descriptorSetCount = 1;
 	//		count_info.pDescriptorCounts = &num_desc;
@@ -189,7 +189,7 @@ namespace Vulkan
 	//	}
 
 	//	// If implementation does not support variable descriptor count, allocate maximum.
-	//	if (device->GetDeviceFeatures().descriptor_indexing_features.descriptorBindingVariableDescriptorCount)
+	//	if (device->GetDeviceExtensions().descriptor_indexing_features.descriptorBindingVariableDescriptorCount)
 	//		size.descriptorCount = num_descriptors;
 	//	else
 	//		info.maxSets = 1;

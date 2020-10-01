@@ -233,8 +233,8 @@ namespace Vulkan
 
 		ImageView& request_attachment(unsigned width, unsigned height, VkFormat format, unsigned index = 0, unsigned samples = 1, unsigned layers = 1);
 
-		void begin_frame();
-		void clear();
+		void BeginFrame();
+		void Clear();
 
 	private:
 		struct TransientNode : Util::TemporaryHashmapEnabled<TransientNode>, Util::IntrusiveListEnabled<TransientNode>

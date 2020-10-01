@@ -94,9 +94,9 @@ namespace Vulkan
 			region.extent.width = src.GetCreateInfo().width;
 			region.extent.height = src.GetCreateInfo().height;
 			region.extent.depth = src.GetCreateInfo().depth;
-			region.srcSubresource.aspectMask = format_to_aspect_mask(src.GetFormat());
+			region.srcSubresource.aspectMask = FormatToAspectMask(src.GetFormat());
 			region.srcSubresource.layerCount = src.GetCreateInfo().layers;
-			region.dstSubresource.aspectMask = format_to_aspect_mask(dst.GetFormat());
+			region.dstSubresource.aspectMask = FormatToAspectMask(dst.GetFormat());
 			region.dstSubresource.layerCount = dst.GetCreateInfo().layers;
 			region.srcSubresource.mipLevel = i;
 			region.dstSubresource.mipLevel = i;
@@ -150,7 +150,7 @@ namespace Vulkan
 
 	void CommandBuffer::ClearImage(const Image& image, const VkClearValue& value)
 	{
-		auto aspect = format_to_aspect_mask(image.GetFormat());
+		auto aspect = FormatToAspectMask(image.GetFormat());
 		ClearImage(image, value, aspect);
 	}
 
@@ -285,7 +285,7 @@ namespace Vulkan
 		barrier.oldLayout = old_layout;
 		barrier.newLayout = new_layout;
 		barrier.image = image.GetImage();
-		barrier.subresourceRange.aspectMask = format_to_aspect_mask(image.GetCreateInfo().format);
+		barrier.subresourceRange.aspectMask = FormatToAspectMask(image.GetCreateInfo().format);
 		barrier.subresourceRange.levelCount = image.GetCreateInfo().levels;
 		barrier.subresourceRange.layerCount = image.GetCreateInfo().layers;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -342,14 +342,14 @@ namespace Vulkan
 #if 0
 		VkImageBlit blit{};
 
-		blit.srcSubresource.aspectMask = format_to_aspect_mask(src.GetCreateInfo().format);
+		blit.srcSubresource.aspectMask = FormatToAspectMask(src.GetCreateInfo().format);
 		blit.srcSubresource.mipLevel = src_level;
 		blit.srcSubresource.baseArrayLayer = src_base_layer;
 		blit.srcSubresource.layerCount = num_layers;
 		blit.srcOffsets[0] = src_offset;
 		blit.srcOffsets[1] = add_offset(src_offset, src_extent);
 
-		blit.dstSubresource.aspectMask = format_to_aspect_mask(dst.GetCreateInfo().format);
+		blit.dstSubresource.aspectMask = FormatToAspectMask(dst.GetCreateInfo().format);
 		blit.dstSubresource.mipLevel = dst_level;
 		blit.dstSubresource.baseArrayLayer = dst_base_layer;
 		blit.dstSubresource.layerCount = num_layers;
@@ -366,14 +366,14 @@ namespace Vulkan
 		{
 			VkImageBlit blit{};
 
-			blit.srcSubresource.aspectMask = format_to_aspect_mask(src.GetCreateInfo().format);
+			blit.srcSubresource.aspectMask = FormatToAspectMask(src.GetCreateInfo().format);
 			blit.srcSubresource.mipLevel = src_level;
 			blit.srcSubresource.baseArrayLayer = src_base_layer + i;
 			blit.srcSubresource.layerCount = 1;
 			blit.srcOffsets[0] = src_offset;
 			blit.srcOffsets[1] = add_offset(src_offset, src_extent);
 
-			blit.dstSubresource.aspectMask = format_to_aspect_mask(dst.GetCreateInfo().format);
+			blit.dstSubresource.aspectMask = FormatToAspectMask(dst.GetCreateInfo().format);
 			blit.dstSubresource.mipLevel = dst_level;
 			blit.dstSubresource.baseArrayLayer = dst_base_layer + i;
 			blit.dstSubresource.layerCount = 1;
@@ -400,7 +400,7 @@ namespace Vulkan
 		{
 			barriers[i].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 			barriers[i].image = image.GetImage();
-			barriers[i].subresourceRange.aspectMask = format_to_aspect_mask(image.GetFormat());
+			barriers[i].subresourceRange.aspectMask = FormatToAspectMask(image.GetFormat());
 			barriers[i].subresourceRange.layerCount = image.GetCreateInfo().layers;
 			barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -442,7 +442,7 @@ namespace Vulkan
 		b.image = image.GetImage();
 		b.subresourceRange.levelCount = 1;
 		b.subresourceRange.layerCount = image.GetCreateInfo().layers;
-		b.subresourceRange.aspectMask = format_to_aspect_mask(image.GetFormat());
+		b.subresourceRange.aspectMask = FormatToAspectMask(image.GetFormat());
 		b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 		b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 		b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -617,7 +617,7 @@ namespace Vulkan
 		begin_info.clearValueCount = num_clear_values;
 		begin_info.pClearValues = clear_values;
 
-		auto& features = device->GetDeviceFeatures();
+		auto& features = device->GetDeviceExtensions();
 		bool imageless = features.imageless_features.imagelessFramebuffer == VK_TRUE;
 		VkImageView immediate_views[VULKAN_NUM_ATTACHMENTS + 1];
 		if (imageless)
@@ -689,7 +689,7 @@ namespace Vulkan
 
 		if (compile.static_state.state.subgroup_control_size)
 		{
-			auto& features = device->GetDeviceFeatures();
+			auto& features = device->GetDeviceExtensions();
 
 			if (!features.subgroup_size_control_features.subgroupSizeControl)
 			{
@@ -900,7 +900,7 @@ namespace Vulkan
 		};
 		if (compile.static_state.state.conservative_raster)
 		{
-			if (device->GetDeviceFeatures().supports_conservative_rasterization)
+			if (device->GetDeviceExtensions().supports_conservative_rasterization)
 			{
 				raster.pNext = &conservative_raster;
 				conservative_raster.conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT;
@@ -920,7 +920,7 @@ namespace Vulkan
 		VkPipelineTessellationDomainOriginStateCreateInfo domain_origin = { VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO };
 		if (static_cast<VkTessellationDomainOrigin>(compile.static_state.state.domain_origin) != VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT)
 		{
-			if (device->GetDeviceFeatures().supports_maintenance_2)
+			if (device->GetDeviceExtensions().supports_maintenance_2)
 			{
 				tessel.pNext = &domain_origin;
 				domain_origin.domainOrigin = static_cast<VkTessellationDomainOrigin>(compile.static_state.state.domain_origin);
@@ -1414,7 +1414,7 @@ namespace Vulkan
 	void* CommandBuffer::UpdateImage(const Image& image, uint32_t row_length, uint32_t image_height)
 	{
 		const VkImageSubresourceLayers subresource = {
-			format_to_aspect_mask(image.GetFormat()), 0, 0, 1,
+			FormatToAspectMask(image.GetFormat()), 0, 0, 1,
 		};
 		return UpdateImage(image, { 0, 0, 0 }, { image.GetWidth(), image.GetHeight(), image.GetDepth() }, row_length, image_height, subresource);
 	}
@@ -1425,6 +1425,8 @@ namespace Vulkan
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(buffer.GetCreateInfo().usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 		VK_ASSERT(current_layout);
+		VK_ASSERT(current_layout->HasDescriptorSet(set));
+		VK_ASSERT(current_layout->HasDescriptorBinding(set, binding));
 		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
 
 		auto& b = current_layout->GetDescriptor(set, binding, array_index);
@@ -1455,6 +1457,8 @@ namespace Vulkan
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(buffer.GetCreateInfo().usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 		VK_ASSERT(current_layout);
+		VK_ASSERT(current_layout->HasDescriptorSet(set));
+		VK_ASSERT(current_layout->HasDescriptorBinding(set, binding));
 		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
 		auto& b = current_layout->GetDescriptor(set, binding, array_index);
 
@@ -1483,6 +1487,8 @@ namespace Vulkan
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(current_layout);
+		VK_ASSERT(current_layout->HasDescriptorSet(set));
+		VK_ASSERT(current_layout->HasDescriptorBinding(set, binding));
 		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
 
 		auto& b = current_layout->GetDescriptor(set, binding, array_index);
@@ -1502,6 +1508,8 @@ namespace Vulkan
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(current_layout);
+		VK_ASSERT(current_layout->HasDescriptorSet(set));
+		VK_ASSERT(current_layout->HasDescriptorBinding(set, binding));
 		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
 		VK_ASSERT(view.GetBuffer().GetCreateInfo().usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
 
@@ -1556,6 +1564,8 @@ namespace Vulkan
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(current_layout);
+		VK_ASSERT(current_layout->HasDescriptorSet(set));
+		VK_ASSERT(current_layout->HasDescriptorBinding(set, binding));
 		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
 
 		auto& b = current_layout->GetDescriptor(set, binding, array_index);
@@ -1649,7 +1659,7 @@ namespace Vulkan
 		//	return;
 		//}
 
-		auto& set_layout = current_layout->GetDecriptorSet(set)->set_layout;
+		auto& set_layout = current_layout->GetDescriptorSet(set)->set_layout;
 		
 		uint32_t num_dynamic_offsets = 0;
 		// Allocate the max needed array size. This type of allocation is basically free, so this is fine
@@ -1682,7 +1692,7 @@ namespace Vulkan
 			return;
 		}*/
 
-		auto& set_layout = current_layout->GetDecriptorSet(set)->set_layout;
+		auto& set_layout = current_layout->GetDescriptorSet(set)->set_layout;
 
 		uint32_t num_dynamic_offsets = 0;
 		// Allocate the max needed array size. This type of allocation is basically free, so this is fine
@@ -1772,7 +1782,7 @@ namespace Vulkan
 	void CommandBuffer::DrawMultiIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride, const Buffer& count, uint32_t count_offset)
 	{
 		VK_ASSERT(!is_compute);
-		if (!GetDevice().GetDeviceFeatures().supports_draw_indirect_count)
+		if (!GetDevice().GetDeviceExtensions().supports_draw_indirect_count)
 		{
 			QM_LOG_ERROR("VK_KHR_draw_indirect_count not supported, dropping draw call.\n");
 			return;
@@ -1791,7 +1801,7 @@ namespace Vulkan
 	void CommandBuffer::DrawIndexedMultiIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride, const Buffer& count, uint32_t count_offset)
 	{
 		VK_ASSERT(!is_compute);
-		if (!GetDevice().GetDeviceFeatures().supports_draw_indirect_count)
+		if (!GetDevice().GetDeviceExtensions().supports_draw_indirect_count)
 		{
 			QM_LOG_ERROR("VK_KHR_draw_indirect_count not supported, dropping draw call.\n");
 			return;
