@@ -1111,7 +1111,7 @@ namespace Vulkan
 
 		image_info.samples = static_cast<VkSampleCountFlagBits>(samples);
 		image_info.layers = layers;
-		node = attachments.emplace(hash, device->CreateImage(image_info, nullptr));
+		node = attachments.emplace(hash, device->CreateImage(image_info, RESOURCE_EXCLUSIVE_GENERIC, nullptr));
 		node->handle->SetInternalSyncObject();
 		node->handle->GetView().SetInternalSyncObject();
 		return node->handle->GetView();

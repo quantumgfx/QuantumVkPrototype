@@ -6,7 +6,7 @@ namespace Vulkan
 {
 static thread_local unsigned thread_id_to_index = ~0u;
 
-unsigned get_current_thread_index()
+unsigned GetCurrentThreadIndex()
 {
 	auto ret = thread_id_to_index;
 	if (ret == ~0u)

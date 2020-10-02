@@ -182,6 +182,8 @@ set(QM_CPP_FILES
 		${QM_VK_DIR}/device.cpp
 		${QM_VK_DIR}/device_shaders.cpp 
 		${QM_VK_DIR}/device_submission.cpp
+		${QM_VK_DIR}/device_resources.cpp
+		${QM_VK_DIR}/device_frame_contexts.cpp
 		
 		${QM_EXTERN_BUILD_DIR}/vma_build.cpp
 		${QM_EXTERN_BUILD_DIR}/volk_build.cpp

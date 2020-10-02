@@ -45,7 +45,7 @@ namespace Vulkan
 		info.size = size;
 		info.usage = usage | extra_usage;
 
-		block.gpu = device->CreateBuffer(info, nullptr);
+		block.gpu = device->CreateBuffer(info);
 		block.gpu->SetInternalSyncObject();
 
 		if (device->AllocationHasMemoryPropertyFlags(block.gpu->GetAllocation(), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
@@ -63,7 +63,7 @@ namespace Vulkan
 			cpu_info.size = size;
 			cpu_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-			block.cpu = device->CreateBuffer(cpu_info, nullptr);
+			block.cpu = device->CreateBuffer(cpu_info);
 
 			VK_ASSERT(block.cpu->GetAllocation().persistantly_mapped);
 

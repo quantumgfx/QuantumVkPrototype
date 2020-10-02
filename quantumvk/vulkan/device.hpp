@@ -252,7 +252,7 @@ namespace Vulkan
 
 		void InitSwapchain(const std::vector<VkImage>& swapchain_images, unsigned width, unsigned height, VkFormat format);
 		void InitExternalSwapchain(const std::vector<ImageHandle>& swapchain_images);
-		// This is done automatically for us in Device::set_context().
+		// This is done automatically for us in Device::SetContext().
 		// The default for desktop is 2 frame contexts, and 3 frame contexts on Android
 		// (since TBDR renderers typically require a bit more buffering for optimal performance).
 		// A frame context generally maps to an on-screen frame, but it does not have to.
@@ -625,8 +625,6 @@ namespace Vulkan
 
 		ImplementationWorkarounds workarounds;
 		void InitWorkarounds();
-
-		void FillBufferSharingIndices(VkBufferCreateInfo& create_info, uint32_t* sharing_indices);
 	};
 
 }

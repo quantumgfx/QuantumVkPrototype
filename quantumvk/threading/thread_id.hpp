@@ -4,6 +4,6 @@
 
 namespace Vulkan
 {
-	unsigned get_current_thread_index();
+	unsigned GetCurrentThreadIndex();
 	void register_thread_index(unsigned thread_index);
 }

@@ -5,9 +5,9 @@
 
 #ifdef QM_VULKAN_MT
 #include "quantumvk/threading/thread_id.hpp"
-static unsigned get_thread_index()
+static unsigned GetThreadIndex()
 {
-	return Vulkan::get_current_thread_index();
+	return Vulkan::GetCurrentThreadIndex();
 }
 #define LOCK() std::lock_guard<std::mutex> holder__{lock.lock}
 #define DRAIN_FRAME_LOCK() \
@@ -18,7 +18,7 @@ static unsigned get_thread_index()
 #else
 #define LOCK() ((void)0)
 #define DRAIN_FRAME_LOCK() VK_ASSERT(lock.counter == 0)
-static unsigned get_thread_index()
+static unsigned GetThreadIndex()
 {
 	return 0;
 }
@@ -29,7 +29,7 @@ namespace Vulkan
 
 	CommandBufferHandle Device::RequestCommandBuffer(CommandBuffer::Type type)
 	{
-		return RequestCommandBufferForThread(get_thread_index(), type);
+		return RequestCommandBufferForThread(GetThreadIndex(), type);
 	}
 
 	CommandBufferHandle Device::RequestCommandBufferForThread(unsigned thread_index, CommandBuffer::Type type)
@@ -149,6 +149,61 @@ namespace Vulkan
 		case CommandBuffer::Type::AsyncTransfer:
 			return Frame().transfer_submissions;
 		}
+	}
+
+	uint32_t Device::GetQueueFamilyIndex(CommandBuffer::Type type) const
+	{
+		CommandBuffer::Type physical_type = GetPhysicalQueueType(type);
+		switch (physical_type)
+		{
+		case Vulkan::CommandBuffer::Type::Generic:       return graphics_queue_family_index;
+		case Vulkan::CommandBuffer::Type::AsyncCompute:  return compute_queue_family_index;
+		case Vulkan::CommandBuffer::Type::AsyncTransfer: return transfer_queue_family_index;
+		}
+
+		QM_LOG_ERROR("Unrecognized command buffer type");
+		return graphics_queue_family_index;
+	}
+
+	VkQueue Device::GetQueue(CommandBuffer::Type type) const
+	{
+		CommandBuffer::Type physical_type = GetPhysicalQueueType(type);
+		switch (physical_type)
+		{
+		case Vulkan::CommandBuffer::Type::Generic:       return graphics_queue;
+		case Vulkan::CommandBuffer::Type::AsyncCompute:  return compute_queue;
+		case Vulkan::CommandBuffer::Type::AsyncTransfer: return transfer_queue;
+		}
+
+		QM_LOG_ERROR("Unrecognized command buffer type");
+		return graphics_queue;
+	}
+
+	void Device::AddWaitSemaphore(CommandBuffer::Type type, Semaphore semaphore, VkPipelineStageFlags stages, bool flush)
+	{
+		LOCK();
+		AddWaitSemaphoreNolock(type, semaphore, stages, flush);
+	}
+
+	void Device::AddWaitSemaphoreNolock(CommandBuffer::Type type, Semaphore semaphore, VkPipelineStageFlags stages, bool flush)
+	{
+		VK_ASSERT(stages != 0);
+		if (flush)
+			FlushFrame(type);
+		auto& data = GetQueueData(type);
+
+#ifdef VULKAN_DEBUG
+		for (auto& sem : data.wait_semaphores)
+			VK_ASSERT(sem.Get() != semaphore.Get());
+#endif
+
+		semaphore->SignalPendingWaits();
+		data.wait_semaphores.push_back(semaphore);
+		data.wait_stages.push_back(stages);
+		data.need_fence = true;
+
+		// Sanity check.
+		VK_ASSERT(data.wait_semaphores.size() < 16 * 1024);
 	}
 
 	void Device::Submit(CommandBufferHandle& cmd, Fence* fence, unsigned semaphore_count, Semaphore* semaphores)

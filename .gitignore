@@ -1,10 +1,7 @@
 # cmake output thingy
 
-bin/
-out/
-
-# ImGui config files
-**.ini
+tests/extern/
+tests/build/
 
 # Visual Studio files and folder
 .vs/
@@ -13,5 +10,4 @@ out/
 **.vcxproj.filters
 **.vcxproj.user
 
-CMakeSettings.json
 
