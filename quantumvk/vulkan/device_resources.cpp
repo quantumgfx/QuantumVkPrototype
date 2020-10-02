@@ -1346,7 +1346,6 @@ namespace Vulkan
 					if (graphics_queue == transfer_queue)
 					{ // No barrier between graphics queue and transfer queue 
 						auto graphics_cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
-						auto target_cmd = RequestCommandBuffer(exclusive_owner);
 
 						graphics_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 							VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -1416,9 +1415,9 @@ namespace Vulkan
 
 							transfer_cmd->Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 1, &transfer_release);
 
-							Semaphore sem;
-							Submit(transfer_cmd, nullptr, 1, &sem);
-							AddWaitSemaphore(CommandBuffer::Type::Generic, sem, VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+							Semaphore transfer_sem;
+							Submit(transfer_cmd, nullptr, 1, &transfer_sem);
+							AddWaitSemaphore(CommandBuffer::Type::Generic, transfer_sem, VK_PIPELINE_STAGE_TRANSFER_BIT, true);
 
 							auto graphics_cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
 
@@ -1444,9 +1443,9 @@ namespace Vulkan
 
 							graphics_cmd->Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, nullptr, 0, nullptr, 1, &transfer_release);
 
-							Semaphore sem;
-							Submit(graphics_cmd, nullptr, 1, &sem);
-							AddWaitSemaphore(exclusive_owner, sem, possible_image_stages, true);
+							Semaphore graphics_sem;
+							Submit(graphics_cmd, nullptr, 1, &graphics_sem);
+							AddWaitSemaphore(exclusive_owner, graphics_sem, possible_image_stages, true);
 
 							auto target_cmd = RequestCommandBuffer(exclusive_owner);
 

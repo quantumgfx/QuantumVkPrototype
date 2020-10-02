@@ -55,9 +55,6 @@ add_library(QuantumVk STATIC)
 target_include_directories(QuantumVk PUBLIC  ${VULKAN_SDK_DIR}/Include)
 target_include_directories(QuantumVk PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR})
 
-# libraries that QuantumVk links to
-target_link_libraries(QuantumVk PRIVATE spirv-cross-core)
-
 if (NOT WIN32)
     target_link_libraries(QuantumVk PRIVATE dl)
 endif()
