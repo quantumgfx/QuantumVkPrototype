@@ -523,6 +523,8 @@ namespace Vulkan
 
 	void Device::EndFrameNolock()
 	{
+		UpdateInvalidProgramsNoLock();
+
 		// Kept handles alive until end-of-frame, free now if appropriate.
 		for (auto& image : Frame().keep_alive_images)
 		{
@@ -1146,8 +1148,6 @@ namespace Vulkan
 	void Device::NextFrameContext()
 	{
 		DRAIN_FRAME_LOCK();
-
-		UpdateInvalidProgramsNoLock();
 
 		// Flush the frame here as we might have pending staging command buffers from init stage.
 		EndFrameNolock();

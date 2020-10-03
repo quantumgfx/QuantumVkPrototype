@@ -4,6 +4,8 @@ development, remove boiler-plate and provide a higher-level API for Vulkan, with
 QuantumVk takes inspiration from [Granite Engine](https://github.com/Themaister/Granite), created by the Themaister
 (specifically Granite's Vulkan backend).
 
+For examples of QuantumVk in use, check out the [QuantumVkExamples](https://github.com/quantumgfx/QuantumVkExamples) repository.
+
 # Building
 In order to build QuantumVk, you must have downloaded the following, regardless of platform:
 - [Git](https://git-scm.com/downloads): To retrieve the repository.

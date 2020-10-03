@@ -1100,6 +1100,9 @@ namespace Vulkan
 
 	Program::~Program()
 	{
+#ifdef VULKAN_DEBUG
+		QM_LOG_INFO("Destroying program\n");
+#endif
 		auto& table = device->GetDeviceTable();
 		for (auto& pipe : pipelines)
 			table.vkDestroyPipeline(device->GetDevice(), pipe.get(), nullptr);
