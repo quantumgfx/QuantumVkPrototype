@@ -68,64 +68,6 @@ namespace Vulkan
 		return ptr;
 	}
 
-	void* Device::MapLinearHostImage(const LinearHostImage& image, MemoryAccessFlags access)
-	{
-		void* host = managers.memory.MapMemory(image.GetHostVisibleAllocation(), access);
-		return host;
-	}
-
-	void Device::UnmapLinearHostImageAndSync(const LinearHostImage& image, MemoryAccessFlags access)
-	{
-		managers.memory.UnmapMemory(image.GetHostVisibleAllocation(), access);
-		if (image.NeedStagingCopy())
-		{
-			// Kinda icky fallback, shouldn't really be used on discrete cards.
-			auto cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncTransfer);
-			cmd->ImageBarrier(image.GetImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
-				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
-			cmd->CopyBufferToImage(image.GetImage(), image.GetHostVisibleBuffer(),
-				0, {},
-				{ image.GetImage().GetWidth(), image.GetImage().GetHeight(), 1 },
-				0, 0, { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 });
-
-			// Don't care about dstAccessMask, semaphore takes care of everything.
-			cmd->ImageBarrier(image.GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-				VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
-
-			Semaphore sem;
-			Submit(cmd, nullptr, 1, &sem);
-
-			// The queue type is an assumption. Should add some parameter for that.
-			AddWaitSemaphore(CommandBuffer::Type::Generic, sem, image.GetUsedPipelineStages(), true);
-		}
-	}
-	
-	void* Device::MapLinearHostImage(const Image& image, MemoryAccessFlags access)
-	{
-		VK_ASSERT(image.GetCreateInfo().domain == ImageDomain::LinearHost || image.GetCreateInfo().domain == ImageDomain::LinearHostCached);
-		void* host = managers.memory.MapMemory(image.GetAllocation(), access);
-		return host;
-	}
-	
-	void Device::UnmapLinearHostImage(const Image& image, MemoryAccessFlags access)
-	{
-		VK_ASSERT(image.GetCreateInfo().domain == ImageDomain::LinearHost || image.GetCreateInfo().domain == ImageDomain::LinearHostCached);
-		managers.memory.UnmapMemory(image.GetAllocation(), access);
-	}
-
-	void* Device::MapHostBuffer(const Buffer& buffer, MemoryAccessFlags access)
-	{
-		void* host = managers.memory.MapMemory(buffer.GetAllocation(), access);
-		return host;
-	}
-
-	void Device::UnmapHostBuffer(const Buffer& buffer, MemoryAccessFlags access)
-	{
-		managers.memory.UnmapMemory(buffer.GetAllocation(), access);
-	}
-
 	void Device::InitWorkarounds()
 	{
 		workarounds = {};

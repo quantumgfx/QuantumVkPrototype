@@ -464,14 +464,14 @@ namespace Vulkan
 		//Submit a draw call
 		void Draw(uint32_t vertex_count, uint32_t instance_count = 1, uint32_t first_vertex = 0, uint32_t first_instance = 0);
 		void DrawIndexed(uint32_t index_count, uint32_t instance_count = 1, uint32_t first_index = 0, int32_t vertex_offset = 0, uint32_t first_instance = 0);
-
-		void Dispatch(uint32_t groups_x, uint32_t groups_y, uint32_t groups_z);
-		void DispatchIndirect(const Buffer& buffer, uint32_t offset);
-
 		void DrawIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride);
 		void DrawIndexedIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride);
 		void DrawMultiIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride, const Buffer& count, uint32_t count_offset);
 		void DrawIndexedMultiIndirect(const Buffer& buffer, uint32_t offset, uint32_t draw_count, uint32_t stride, const Buffer& count, uint32_t count_offset);
+		//Dispatches a compute program
+		void Dispatch(uint32_t groups_x, uint32_t groups_y, uint32_t groups_z);
+		void DispatchIndirect(const Buffer& buffer, uint32_t offset);
+
 		//Culls back bit, disables blending, enables depth testing, triangle list topology.
 		void SetOpaqueState();
 		//No culling, disables blending, disables depth testing, triangle strip topology.
@@ -480,8 +480,9 @@ namespace Vulkan
 		void SetOpaqueSpriteState();
 		//No culling, src alpha blending, enables depth testing, triangle strip topology.
 		void SetTransparentSpriteState();
-
+		//Saves a render state to be later restored to the command buffer
 		void SaveState(CommandBufferSaveStateFlags flags, CommandBufferSavedState& state);
+		//Restores a previouse render state to the command buffer
 		void RestoreState(const CommandBufferSavedState& state);
 
 #define SET_STATIC_STATE(value)                               \
@@ -503,28 +504,35 @@ namespace Vulkan
 			set_dirty(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT);     \
 		}                                                         \
 	} while (0)
+		
+		//Basic render state specification
 
+		//Enables depth testing and depth writing
 		inline void SetDepthTest(bool depth_test, bool depth_write)
 		{
 			SET_STATIC_STATE(depth_test);
 			SET_STATIC_STATE(depth_write);
 		}
 
+		//Enables wireframe mode
 		inline void SetWireframe(bool wireframe)
 		{
 			SET_STATIC_STATE(wireframe);
 		}
 
+		//Set depth compare mode
 		inline void SetDepthCompare(VkCompareOp depth_compare)
 		{
 			SET_STATIC_STATE(depth_compare);
 		}
-
+		
+		//Enables blening
 		inline void SetBlendEnable(bool blend_enable)
 		{
 			SET_STATIC_STATE(blend_enable);
 		}
 
+		//Sets the blend factors
 		inline void SetBlendFactors(VkBlendFactor src_color_blend, VkBlendFactor src_alpha_blend, VkBlendFactor dst_color_blend, VkBlendFactor dst_alpha_blend)
 		{
 			SET_STATIC_STATE(src_color_blend);
@@ -533,17 +541,20 @@ namespace Vulkan
 			SET_STATIC_STATE(dst_alpha_blend);
 		}
 
+		//Sets blend factors
 		inline void SetBlendFactors(VkBlendFactor src_blend, VkBlendFactor dst_blend)
 		{
 			SetBlendFactors(src_blend, src_blend, dst_blend, dst_blend);
 		}
 
+		//Sets the blend op to use in the blending operation
 		inline void SetBlendOp(VkBlendOp color_blend_op, VkBlendOp alpha_blend_op)
 		{
 			SET_STATIC_STATE(color_blend_op);
 			SET_STATIC_STATE(alpha_blend_op);
 		}
 
+		//Sets the blend op to use in the blending operation
 		inline void SetBlendOp(VkBlendOp blend_op)
 		{
 			SetBlendOp(blend_op, blend_op);

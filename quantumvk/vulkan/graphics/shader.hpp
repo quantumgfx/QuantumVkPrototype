@@ -75,7 +75,7 @@ namespace Vulkan
 		void operator()(Shader* shader);
 	};
 
-	// Essentially just a vkShaderModule
+	// Essentially just a ref counted VkShaderModule
 	class Shader : public Util::IntrusivePtrEnabled<Shader, ShaderDeleter, HandleCounter>
 	{
 	public:
@@ -194,7 +194,7 @@ namespace Vulkan
 		// Returns the descriptor stored at a particular (set, binding, array_index)
 		UniformBinding& GetDescriptor(uint32_t set, uint32_t binding, uint32_t array_index) const { return GetDescriptorSet(set)->GetDescriptor(binding, array_index); }
 
-		// Descriptor Sets
+		// Updates the descriptor set
 		VkDescriptorSet FlushDescriptorSet(uint32_t thread_index, uint32_t set);
 
 		void ResetDescriptorSets();
