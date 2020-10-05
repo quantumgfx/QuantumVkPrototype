@@ -363,9 +363,9 @@ namespace Vulkan
 		// Returns the default depth format
 		VkFormat GetDefaultDepthFormat() const;
 		// Returns a transiant attachment
-		ImageView& GetTransientAttachment(unsigned width, unsigned height, VkFormat format, unsigned index = 0, unsigned samples = 1, unsigned layers = 1);
+		ImageView& GetTransientAttachment(uint32_t width, uint32_t height, VkFormat format, uint32_t index = 0, VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT, uint32_t layers = 1);
 		// Returns a physical attachment
-		ImageView& GetPhysicalAttachment(unsigned width, unsigned height, VkFormat format, unsigned index = 0, unsigned samples = 1, unsigned layers = 1);
+		ImageView& GetPhysicalAttachment(uint32_t width, uint32_t height, VkFormat format, uint32_t index = 0, VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT, uint32_t layers = 1);
 		// Gets the renderpassinfo from a SwapchainRenderPass enum
 		RenderPassInfo GetSwapchainRenderPass(SwapchainRenderPass style);
 

@@ -1109,7 +1109,7 @@ namespace Vulkan
 		if (current_pipeline == VK_NULL_HANDLE)
 			set_dirty(COMMAND_BUFFER_DIRTY_PIPELINE_BIT);
 
-		if (get_and_clear(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT | COMMAND_BUFFER_DIRTY_PIPELINE_BIT))
+		if (GetAndClear(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT | COMMAND_BUFFER_DIRTY_PIPELINE_BIT))
 		{
 			VkPipeline old_pipe = current_pipeline;
 			if (!FlushComputePipeline(synchronous))
@@ -1124,7 +1124,7 @@ namespace Vulkan
 
 		FlushDescriptorSets();
 
-		if (get_and_clear(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT))
+		if (GetAndClear(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT))
 		{
 			auto& range = current_layout->GetPushConstantRange();
 			if (range.stageFlags != 0)
@@ -1147,7 +1147,7 @@ namespace Vulkan
 			set_dirty(COMMAND_BUFFER_DIRTY_PIPELINE_BIT);
 
 		// We've invalidated pipeline state, update the VkPipeline.
-		if (get_and_clear(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT | COMMAND_BUFFER_DIRTY_PIPELINE_BIT | COMMAND_BUFFER_DIRTY_STATIC_VERTEX_BIT))
+		if (GetAndClear(COMMAND_BUFFER_DIRTY_STATIC_STATE_BIT | COMMAND_BUFFER_DIRTY_PIPELINE_BIT | COMMAND_BUFFER_DIRTY_STATIC_VERTEX_BIT))
 		{
 			VkPipeline old_pipe = current_pipeline;
 			if (!FlushGraphicsPipeline(synchronous))
@@ -1165,7 +1165,7 @@ namespace Vulkan
 
 		FlushDescriptorSets();
 
-		if (get_and_clear(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT))
+		if (GetAndClear(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT))
 		{
 			auto& range = current_layout->GetPushConstantRange();
 			if (range.stageFlags != 0)
@@ -1175,13 +1175,13 @@ namespace Vulkan
 			}
 		}
 
-		if (get_and_clear(COMMAND_BUFFER_DIRTY_VIEWPORT_BIT))
+		if (GetAndClear(COMMAND_BUFFER_DIRTY_VIEWPORT_BIT))
 			table.vkCmdSetViewport(cmd, 0, 1, &viewport);
-		if (get_and_clear(COMMAND_BUFFER_DIRTY_SCISSOR_BIT))
+		if (GetAndClear(COMMAND_BUFFER_DIRTY_SCISSOR_BIT))
 			table.vkCmdSetScissor(cmd, 0, 1, &scissor);
-		if (pipeline_state.static_state.state.depth_bias_enable && get_and_clear(COMMAND_BUFFER_DIRTY_DEPTH_BIAS_BIT))
+		if (pipeline_state.static_state.state.depth_bias_enable && GetAndClear(COMMAND_BUFFER_DIRTY_DEPTH_BIAS_BIT))
 			table.vkCmdSetDepthBias(cmd, dynamic_state.depth_bias_constant, 0.0f, dynamic_state.depth_bias_slope);
-		if (pipeline_state.static_state.state.stencil_test && get_and_clear(COMMAND_BUFFER_DIRTY_STENCIL_REFERENCE_BIT))
+		if (pipeline_state.static_state.state.stencil_test && GetAndClear(COMMAND_BUFFER_DIRTY_STENCIL_REFERENCE_BIT))
 		{
 			table.vkCmdSetStencilCompareMask(cmd, VK_STENCIL_FACE_FRONT_BIT, dynamic_state.front_compare_mask);
 			table.vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_BIT, dynamic_state.front_reference);
@@ -1328,7 +1328,7 @@ namespace Vulkan
 		current_pipeline_layout = current_layout->GetVkLayout();
 	}
 
-	void* CommandBuffer::AllocateConstantData(unsigned set, unsigned binding, VkDeviceSize size, unsigned array_index)
+	void* CommandBuffer::AllocateConstantData(unsigned set, unsigned binding, unsigned array_index, VkDeviceSize size)
 	{
 		VK_ASSERT(size <= VULKAN_MAX_UBO_SIZE);
 		auto data = ubo_block.Allocate(size);
@@ -1337,7 +1337,7 @@ namespace Vulkan
 			device->RequestUniformBlock(ubo_block, size);
 			data = ubo_block.Allocate(size);
 		}
-		SetUniformBuffer(set, binding, *ubo_block.gpu, data.offset, data.padded_size, array_index);
+		SetUniformBuffer(set, binding, array_index,  *ubo_block.gpu, data.offset, data.padded_size);
 		return data.host;
 	}
 
@@ -1419,7 +1419,7 @@ namespace Vulkan
 		return UpdateImage(image, { 0, 0, 0 }, { image.GetWidth(), image.GetHeight(), image.GetDepth() }, row_length, image_height, subresource);
 	}
 
-	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range, unsigned array_index)
+	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, unsigned array_index, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
@@ -1451,7 +1451,7 @@ namespace Vulkan
 		}
 	}
 
-	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range, unsigned array_index)
+	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, unsigned array_index, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
@@ -1472,17 +1472,17 @@ namespace Vulkan
 		dirty_sets |= 1u << set;
 	}
 
-	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, unsigned array_index)
+	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, unsigned array_index, const Buffer& buffer)
 	{
-		SetUniformBuffer(set, binding, buffer, 0, buffer.GetCreateInfo().size, array_index);
+		SetUniformBuffer(set, binding, array_index, buffer, 0, buffer.GetCreateInfo().size);
 	}
 
-	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, unsigned array_index)
+	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, unsigned array_index, const Buffer& buffer)
 	{
-		SetStorageBuffer(set, binding, buffer, 0, buffer.GetCreateInfo().size, array_index);
+		SetStorageBuffer(set, binding, array_index, buffer, 0, buffer.GetCreateInfo().size);
 	}
 
-	void CommandBuffer::SetSampler(unsigned set, unsigned binding, const Sampler& sampler, unsigned array_index)
+	void CommandBuffer::SetSampler(unsigned set, unsigned binding, unsigned array_index, const Sampler& sampler)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
@@ -1503,7 +1503,7 @@ namespace Vulkan
 		b.secondary_cookie = sampler.GetCookie();
 	}
 
-	void CommandBuffer::SetBufferView(unsigned set, unsigned binding, const BufferView& view, unsigned array_index)
+	void CommandBuffer::SetBufferView(unsigned set, unsigned binding, unsigned array_index, const BufferView& view)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
@@ -1550,15 +1550,16 @@ namespace Vulkan
 			b.resource.image.integer.imageLayout = ref.layout;
 			b.resource.image.fp.imageView = view->GetFloatView();
 			b.resource.image.integer.imageView = view->GetIntegerView();
+
 			b.cookie = view->GetCookie();
 			dirty_sets |= 1u << set;
 		}
 	}
 
-	void CommandBuffer::SetTexture(unsigned set, unsigned binding,
+	void CommandBuffer::SetTexture(unsigned set, unsigned binding, unsigned array_index,
 		VkImageView float_view, VkImageView integer_view,
 		VkImageLayout layout,
-		uint64_t cookie, unsigned array_index)
+		uint64_t cookie)
 	{
 
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
@@ -1589,10 +1590,10 @@ namespace Vulkan
 	}*/
 
 
-	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index)
+	void CommandBuffer::SetSeparateTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view)
 	{
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
-		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie(), array_index);
+		SetTexture(set, binding, array_index, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie());
 	}
 
 	enum CookieBits
@@ -1601,47 +1602,31 @@ namespace Vulkan
 		COOKIE_BIT_SRGB = 1 << 1
 	};
 
-	void CommandBuffer::SetUnormTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index)
+	void CommandBuffer::SetSampledTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view, const Sampler& sampler)
 	{
-		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
-		auto unorm_view = view.GetUnormView();
-		VK_ASSERT(unorm_view != VK_NULL_HANDLE);
-		SetTexture(set, binding, unorm_view, unorm_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie() | COOKIE_BIT_UNORM, array_index);
+		SetSampler(set, binding, array_index, sampler);
+		SetSeparateTexture(set, binding, array_index, view);
 	}
 
-	void CommandBuffer::SetSrgbTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index)
-	{
-		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
-		auto srgb_view = view.GetSRGBView();
-		VK_ASSERT(srgb_view != VK_NULL_HANDLE);
-		SetTexture(set, binding, srgb_view, srgb_view, view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie() | COOKIE_BIT_SRGB, array_index);
-	}
-
-	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view, const Sampler& sampler, unsigned array_index)
-	{
-		SetSampler(set, binding, sampler);
-		SetTexture(set, binding, view, array_index);
-	}
-
-	void CommandBuffer::SetTexture(unsigned set, unsigned binding, const ImageView& view, StockSampler stock, unsigned array_index)
+	void CommandBuffer::SetSampledTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view, StockSampler stock)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
 		const auto& sampler = device->GetStockSampler(stock);
-		SetTexture(set, binding, view, sampler, array_index);
+		SetSampledTexture(set, binding, array_index, view, sampler);
 	}
 
-	void CommandBuffer::SetSampler(unsigned set, unsigned binding, StockSampler stock, unsigned array_index)
+	void CommandBuffer::SetSampler(unsigned set, unsigned binding, unsigned array_index, StockSampler stock)
 	{
 		const auto& sampler = device->GetStockSampler(stock);
-		SetSampler(set, binding, sampler, array_index);
+		SetSampler(set, binding, array_index, sampler);
 	}
 
-	void CommandBuffer::SetStorageTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index)
+	void CommandBuffer::SetStorageTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view)
 	{
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_STORAGE_BIT);
-		SetTexture(set, binding, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_GENERAL), view.GetCookie(), array_index);
+		SetTexture(set, binding, array_index, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_GENERAL), view.GetCookie());
 	}
 
 	void CommandBuffer::RebindDescriptorSet(uint32_t set)

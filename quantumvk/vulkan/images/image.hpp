@@ -152,13 +152,6 @@ namespace Vulkan
 	};
 	using ImageMiscFlags = uint32_t;
 
-	//Misc ImageView Create Info Flags
-	enum ImageViewMiscFlagBits
-	{
-		IMAGE_VIEW_MISC_FORCE_ARRAY_BIT = 1 << 0
-	};
-	using ImageViewMiscFlags = uint32_t;
-
 	//Forward declare image
 	class Image;
 
@@ -167,13 +160,13 @@ namespace Vulkan
 	{
 		Image* image = nullptr;
 		VkFormat format = VK_FORMAT_UNDEFINED;
-		unsigned base_level = 0;
-		unsigned levels = VK_REMAINING_MIP_LEVELS;
-		unsigned base_layer = 0;
-		unsigned layers = VK_REMAINING_ARRAY_LAYERS;
+		uint32_t base_level = 0;
+		uint32_t levels = VK_REMAINING_MIP_LEVELS;
+		uint32_t base_layer = 0;
+		uint32_t layers = VK_REMAINING_ARRAY_LAYERS;
 		VkImageViewType view_type = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
-		ImageViewMiscFlags misc = 0;
-		VkComponentMapping swizzle = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A,};
+		VkComponentMapping swizzle = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A, };
+		VkImageAspectFlags aspect = VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM;
 	};
 
 	//Forward Declare image view
@@ -209,26 +202,13 @@ namespace Vulkan
 			render_target_views = std::move(views);
 		}
 
-		void SetUnormView(VkImageView view_)
-		{
-			VK_ASSERT(unorm_view == VK_NULL_HANDLE);
-			unorm_view = view_;
-		}
-
-		void SetSrgbView(VkImageView view_)
-		{
-			VK_ASSERT(srgb_view == VK_NULL_HANDLE);
-			srgb_view = view_;
-		}
-
 		// By default, gets a combined view which includes all aspects in the image.
-		// This would be used mostly for render targets.
 		VkImageView GetView() const
 		{
 			return view;
 		}
 
-		VkImageView GetRenderTargetView(unsigned layer) const;
+		VkImageView GetRenderTargetView(uint32_t layer) const;
 
 		// Gets an image view which only includes floating point domains.
 		// Takes effect when we want to sample from an image which is Depth/Stencil,
@@ -244,16 +224,6 @@ namespace Vulkan
 		VkImageView GetIntegerView() const
 		{
 			return stencil_view != VK_NULL_HANDLE ? stencil_view : view;
-		}
-
-		VkImageView GetUnormView() const
-		{
-			return unorm_view;
-		}
-
-		VkImageView GetSRGBView() const
-		{
-			return srgb_view;
 		}
 
 		VkFormat GetFormat() const
@@ -278,12 +248,16 @@ namespace Vulkan
 
 	private:
 		Device* device;
-		VkImageView view;
-		std::vector<VkImageView> render_target_views;
+		// Default view, contains all aspects and all layers and levels
+		VkImageView view = VK_NULL_HANDLE;
+		// Depth view, null if the image isn't of a depth_stencil format, identical to view excepting the aspect is VK_ASPECT_DEPTH_BIT
 		VkImageView depth_view = VK_NULL_HANDLE;
+		// Stencil view, null if the image isn't of a depth_stencil format, identical to view excepting the aspect is VK_ASPECT_STENCIL_BIT
 		VkImageView stencil_view = VK_NULL_HANDLE;
-		VkImageView unorm_view = VK_NULL_HANDLE;
-		VkImageView srgb_view = VK_NULL_HANDLE;
+		// Image view for each layer of image
+		// This has no heap allocation (in general), as for most views this is empty.
+		// And is only filled if the imageview could be potentially be used as an multiview attachment.
+		std::vector<VkImageView> render_target_views;
 		ImageViewCreateInfo info;
 	};
 
@@ -353,7 +327,7 @@ namespace Vulkan
 			info.format = format;
 			info.type = VK_IMAGE_TYPE_2D;
 			info.layers = 1;
-			info.usage = (format_has_depth_or_stencil_aspect(format) ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT :
+			info.usage = (FormatHasDepthOrStencilAspect(format) ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT :
 				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) |
 				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
@@ -375,7 +349,7 @@ namespace Vulkan
 			info.format = format;
 			info.type = VK_IMAGE_TYPE_2D;
 			info.layers = 1;
-			info.usage = (format_has_depth_or_stencil_aspect(format) ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT :
+			info.usage = (FormatHasDepthOrStencilAspect(format) ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT :
 				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) |
 				VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 			info.samples = VK_SAMPLE_COUNT_1_BIT;

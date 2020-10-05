@@ -15,7 +15,7 @@ namespace Vulkan
 	{
 	}
 
-	VkImageView ImageView::GetRenderTargetView(unsigned layer) const
+	VkImageView ImageView::GetRenderTargetView(uint32_t layer) const
 	{
 		// Transient images just have one layer.
 		if (info.image->GetCreateInfo().domain == ImageDomain::Transient)
@@ -41,11 +41,6 @@ namespace Vulkan
 				device->DestroyImageViewNolock(depth_view);
 			if (stencil_view != VK_NULL_HANDLE)
 				device->DestroyImageViewNolock(stencil_view);
-			if (unorm_view != VK_NULL_HANDLE)
-				device->DestroyImageViewNolock(unorm_view);
-			if (srgb_view != VK_NULL_HANDLE)
-				device->DestroyImageViewNolock(srgb_view);
-
 			for (auto& v : render_target_views)
 				device->DestroyImageViewNolock(v);
 		}
@@ -56,11 +51,6 @@ namespace Vulkan
 				device->DestroyImageView(depth_view);
 			if (stencil_view != VK_NULL_HANDLE)
 				device->DestroyImageView(stencil_view);
-			if (unorm_view != VK_NULL_HANDLE)
-				device->DestroyImageView(unorm_view);
-			if (srgb_view != VK_NULL_HANDLE)
-				device->DestroyImageView(srgb_view);
-
 			for (auto& v : render_target_views)
 				device->DestroyImageView(v);
 		}

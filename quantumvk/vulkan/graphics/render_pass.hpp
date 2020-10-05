@@ -199,7 +199,7 @@ namespace Vulkan
 	{
 	public:
 		explicit FramebufferAllocator(Device* device);
-		Framebuffer& request_framebuffer(const RenderPassInfo& info);
+		Framebuffer& RequestFramebuffer(const RenderPassInfo& info);
 
 		void BeginFrame();
 		void Clear();
@@ -231,7 +231,7 @@ namespace Vulkan
 		{
 		}
 
-		ImageView& request_attachment(unsigned width, unsigned height, VkFormat format, unsigned index = 0, unsigned samples = 1, unsigned layers = 1);
+		ImageView& RequestAttachment(uint32_t width, uint32_t height, VkFormat format, uint32_t index = 0, VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT, uint32_t layers = 1);
 
 		void BeginFrame();
 		void Clear();

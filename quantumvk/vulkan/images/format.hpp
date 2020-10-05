@@ -79,7 +79,7 @@ namespace Vulkan
 		}
 	}
 
-	static inline bool format_has_depth_or_stencil_aspect(VkFormat format)
+	static inline bool FormatHasDepthOrStencilAspect(VkFormat format)
 	{
 		return FormatHasDepthAspect(format) || FormatHasStencilAspect(format);
 	}

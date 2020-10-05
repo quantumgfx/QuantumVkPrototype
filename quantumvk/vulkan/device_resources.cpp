@@ -416,15 +416,15 @@ namespace Vulkan
 	//Image Creation////////////////////////
 	////////////////////////////////////////
 
-	static inline VkImageViewType GetImageViewType(const ImageCreateInfo& create_info, const ImageViewCreateInfo* view)
+	static inline VkImageViewType GetImageViewType(const ImageCreateInfo& create_info)
 	{
-		unsigned layers = view ? view->layers : create_info.layers;
-		unsigned base_layer = view ? view->base_layer : 0;
+		unsigned layers = create_info.layers;
+		unsigned base_layer = 0;
 
 		if (layers == VK_REMAINING_ARRAY_LAYERS)
 			layers = create_info.layers - base_layer;
 
-		bool force_array = view ? (view->misc & IMAGE_VIEW_MISC_FORCE_ARRAY_BIT) : (create_info.misc & IMAGE_MISC_FORCE_ARRAY_BIT);
+		bool force_array = (create_info.misc & IMAGE_MISC_FORCE_ARRAY_BIT);
 
 		switch (create_info.type)
 		{
@@ -497,10 +497,9 @@ namespace Vulkan
 		VkImageView image_view = VK_NULL_HANDLE;
 		VkImageView depth_view = VK_NULL_HANDLE;
 		VkImageView stencil_view = VK_NULL_HANDLE;
-		VkImageView unorm_view = VK_NULL_HANDLE;
-		VkImageView srgb_view = VK_NULL_HANDLE;
-		VkImageViewType default_view_type = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
 		std::vector<VkImageView> rt_views;
+
+		VkImageViewType default_view_type = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
 		DeviceAllocator* allocator = nullptr;
 		bool owned = true;
 
@@ -509,7 +508,7 @@ namespace Vulkan
 			return default_view_type;
 		}
 
-		bool CreateDefaultViews(const ImageCreateInfo& create_info, const VkImageViewCreateInfo* view_info, bool create_unorm_srgb_views = false, const VkFormat* view_formats = nullptr)
+		bool CreateDefaultViews(const ImageCreateInfo& create_info, const VkImageViewCreateInfo* view_info)
 		{
 			VkDevice vkdevice = device->GetDevice();
 
@@ -528,7 +527,7 @@ namespace Vulkan
 				default_view_info.format = create_info.format;
 				default_view_info.components = create_info.swizzle;
 				default_view_info.subresourceRange.aspectMask = FormatToAspectMask(default_view_info.format);
-				default_view_info.viewType = GetImageViewType(create_info, nullptr);
+				default_view_info.viewType = GetImageViewType(create_info);
 				default_view_info.subresourceRange.baseMipLevel = 0;
 				default_view_info.subresourceRange.baseArrayLayer = 0;
 				default_view_info.subresourceRange.levelCount = create_info.levels;
@@ -550,23 +549,21 @@ namespace Vulkan
 			if (!CreateDefaultView(*view_info))
 				return false;
 
-			if (create_unorm_srgb_views)
-			{
-				auto info = *view_info;
-
-				info.format = view_formats[0];
-				if (table.vkCreateImageView(vkdevice, &info, nullptr, &unorm_view) != VK_SUCCESS)
-					return false;
-
-				info.format = view_formats[1];
-				if (table.vkCreateImageView(vkdevice, &info, nullptr, &srgb_view) != VK_SUCCESS)
-					return false;
-			}
-
 			return true;
 		}
 
 	private:
+
+		bool CreateDefaultView(const VkImageViewCreateInfo& info)
+		{
+			VkDevice vkdevice = device->GetDevice();
+
+			// Create the normal image view. This one contains every subresource.
+			if (table.vkCreateImageView(vkdevice, &info, nullptr, &image_view) != VK_SUCCESS)
+				return false;
+
+			return true;
+		}
 
 		bool CreateRenderTargetViews(const ImageCreateInfo& image_create_info, const VkImageViewCreateInfo& info)
 		{
@@ -574,7 +571,7 @@ namespace Vulkan
 
 			if (info.viewType == VK_IMAGE_VIEW_TYPE_3D)
 				return true;
-
+			
 			// If we have a render target, and non-trivial case (layers = 1, levels = 1),
 			// create an array of render targets which correspond to each layer (mip 0).
 			if ((image_create_info.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) != 0 && ((info.subresourceRange.levelCount > 1) || (info.subresourceRange.layerCount > 1)))
@@ -641,16 +638,6 @@ namespace Vulkan
 			return true;
 		}
 
-		bool CreateDefaultView(const VkImageViewCreateInfo& info)
-		{
-			VkDevice vkdevice = device->GetDevice();
-
-			// Create the normal image view. This one contains every subresource.
-			if (table.vkCreateImageView(vkdevice, &info, nullptr, &image_view) != VK_SUCCESS)
-				return false;
-
-			return true;
-		}
 
 		void CleanUp()
 		{
@@ -658,16 +645,6 @@ namespace Vulkan
 
 			if (image_view)
 				table.vkDestroyImageView(vkdevice, image_view, nullptr);
-			if (depth_view)
-				table.vkDestroyImageView(vkdevice, depth_view, nullptr);
-			if (stencil_view)
-				table.vkDestroyImageView(vkdevice, stencil_view, nullptr);
-			if (unorm_view)
-				table.vkDestroyImageView(vkdevice, unorm_view, nullptr);
-			if (srgb_view)
-				table.vkDestroyImageView(vkdevice, srgb_view, nullptr);
-			for (auto& view : rt_views)
-				table.vkDestroyImageView(vkdevice, view, nullptr);
 
 			if (image)
 				device->managers.memory.FreeImage(image, allocation);
@@ -691,10 +668,9 @@ namespace Vulkan
 		view_info.subresourceRange.levelCount = create_info.levels;
 		view_info.subresourceRange.layerCount = create_info.layers;
 
-		if (create_info.view_type == VK_IMAGE_VIEW_TYPE_MAX_ENUM)
-			view_info.viewType = GetImageViewType(image_create_info, &create_info);
-		else
-			view_info.viewType = create_info.view_type;
+		VK_ASSERT(create_info.view_type != VK_IMAGE_VIEW_TYPE_MAX_ENUM);
+
+		view_info.viewType = create_info.view_type;
 
 		unsigned num_levels;
 		if (view_info.subresourceRange.levelCount == VK_REMAINING_MIP_LEVELS)
@@ -721,7 +697,7 @@ namespace Vulkan
 		{
 			holder.owned = false;
 			ret->SetAltViews(holder.depth_view, holder.stencil_view);
-			ret->SetRenderTargetViews(move(holder.rt_views));
+			ret->SetRenderTargetViews(std::move(holder.rt_views));
 			return ret;
 		}
 		else
@@ -1073,7 +1049,7 @@ namespace Vulkan
 		VkImageViewType view_type = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
 		if (has_view)
 		{
-			if (!holder.CreateDefaultViews(tmpinfo, nullptr, create_unorm_srgb_views, view_formats))
+			if (!holder.CreateDefaultViews(tmpinfo, nullptr))
 				return ImageHandle(nullptr);
 			view_type = holder.GetDefaltViewType();
 		}
@@ -1082,14 +1058,8 @@ namespace Vulkan
 		if (handle)
 		{
 			holder.owned = false;
-			if (has_view)
-			{
-				handle->GetView().SetAltViews(holder.depth_view, holder.stencil_view);
-				handle->GetView().SetRenderTargetViews(move(holder.rt_views));
-				handle->GetView().SetUnormView(holder.unorm_view);
-				handle->GetView().SetSrgbView(holder.srgb_view);
-			}
-
+			handle->GetView().SetAltViews(holder.depth_view, holder.stencil_view);
+			handle->GetView().SetRenderTargetViews(std::move(holder.rt_views));
 			// Set possible dstStage and dstAccess.
 			handle->SetStageFlags(ImageUsageToPossibleStages(info.usage));
 			handle->SetAccessFlags(ImageUsageToPossibleAccess(info.usage));

@@ -378,6 +378,7 @@ namespace Vulkan
 					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp) + sizeof(ResourceBinding) * offsets[binding];
 				else
 					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.integer) + sizeof(ResourceBinding) * offsets[binding];
+				//entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image) + sizeof(ResourceBinding) * offsets[binding];
 				entry.stride = sizeof(UniformBinding);
 				});
 
@@ -393,6 +394,7 @@ namespace Vulkan
 					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp) + sizeof(ResourceBinding) * offsets[binding];
 				else
 					entry.offset = offsetof(UniformBinding, resource)  + offsetof(ResourceBinding, image.integer) + sizeof(ResourceBinding) * offsets[binding];
+				//entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image) + sizeof(ResourceBinding) * offsets[binding];
 				entry.stride = sizeof(UniformBinding);
 				});
 
@@ -405,6 +407,7 @@ namespace Vulkan
 				entry.dstArrayElement = 0;
 				entry.descriptorCount = array_size;
 				entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp) + sizeof(ResourceBinding) * offsets[binding];
+				//entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image) + sizeof(ResourceBinding) * offsets[binding];
 				entry.stride = sizeof(UniformBinding);
 				});
 
@@ -420,6 +423,7 @@ namespace Vulkan
 					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp) + sizeof(ResourceBinding) * offsets[binding];
 				else
 					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.integer) + sizeof(ResourceBinding) * offsets[binding];
+				//entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image) + sizeof(ResourceBinding) * offsets[binding];
 				entry.stride = sizeof(UniformBinding);
 				});
 
@@ -435,6 +439,7 @@ namespace Vulkan
 					entry.offset = offsetof(UniformBinding, resource) +  offsetof(ResourceBinding, image.fp) + sizeof(ResourceBinding) * offsets[binding];
 				else
 					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.integer) + sizeof(ResourceBinding) * offsets[binding];
+				//entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image) + sizeof(ResourceBinding) * offsets[binding];
 				entry.stride = sizeof(UniformBinding);
 				});
 
@@ -527,6 +532,8 @@ namespace Vulkan
 					write.pImageInfo = &GetDescriptor(set, binding, i).resource.image.fp;
 				else
 					write.pImageInfo = &GetDescriptor(set, binding, i).resource.image.integer;
+
+				//write.pImageInfo = &GetDescriptor(set, binding, i).resource.image;
 			}
 			});
 
@@ -547,6 +554,8 @@ namespace Vulkan
 					write.pImageInfo = &GetDescriptor(set, binding, i).resource.image.fp;
 				else
 					write.pImageInfo = &GetDescriptor(set, binding, i).resource.image.integer;
+
+				//write.pImageInfo = &GetDescriptor(set, binding, i).resource.image;
 			}
 			});
 
@@ -583,6 +592,8 @@ namespace Vulkan
 					write.pImageInfo = &GetDescriptor(set, binding, i).resource.image.fp;
 				else
 					write.pImageInfo = &GetDescriptor(set, binding, i).resource.image.integer;
+
+				//write.pImageInfo = &GetDescriptor(set, binding, i).resource.image;
 			}
 			});
 
@@ -602,6 +613,8 @@ namespace Vulkan
 					write.pImageInfo = &GetDescriptor(set, binding, i).resource.image.fp;
 				else
 					write.pImageInfo = &GetDescriptor(set, binding, i).resource.image.integer;
+
+				//write.pImageInfo = &GetDescriptor(set, binding, i).resource.image;
 			}
 			});
 
@@ -670,6 +683,7 @@ namespace Vulkan
 				if (!HasImmutableSampler(set_layout, binding + i))
 				{
 					h.u64(b.secondary_cookie);
+					//VK_ASSERT(b.resource.image.fp.sampler != VK_NULL_HANDLE);
 					VK_ASSERT(b.resource.image.fp.sampler != VK_NULL_HANDLE);
 				}
 				h.u32(b.resource.image.fp.imageLayout);

@@ -364,11 +364,10 @@ namespace Vulkan
 			unsigned buffer_barriers, const VkBufferMemoryBarrier* buffers,
 			unsigned image_barriers, const VkImageMemoryBarrier* images);
 
-		//Blits one image into another
+		// Blits one image into another
 		void BlitImage(const Image& dst, const Image& src,
-			const VkOffset3D& dst_offset, const VkOffset3D& dst_extent,
-			const VkOffset3D& src_offset, const VkOffset3D& src_extent, unsigned dst_level, unsigned src_level,
-			unsigned dst_base_layer = 0, uint32_t src_base_layer = 0, unsigned num_layers = 1,
+			const VkOffset3D& dst_offset, const VkOffset3D& dst_extent, const VkOffset3D& src_offset, const VkOffset3D& src_extent, 
+			unsigned dst_level, unsigned src_level, unsigned dst_base_layer = 0, uint32_t src_base_layer = 0, unsigned num_layers = 1,
 			VkFilter filter = VK_FILTER_LINEAR);
 
 		// Prepares an image to have its mipmap generated.
@@ -401,20 +400,38 @@ namespace Vulkan
 		void SetProgram(ProgramHandle& program);
 		//-------------------Setting Uniforms----------------------------
 
-		void SetBufferView(unsigned set, unsigned binding, const BufferView& view, unsigned array_index = 0);
+		void SetBufferView(unsigned set, unsigned binding, unsigned array_index, const BufferView& view);
 		void SetInputAttachments(unsigned set, unsigned start_binding);
-		void SetTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index = 0);
-		void SetUnormTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index = 0);
-		void SetSrgbTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index = 0);
-		void SetTexture(unsigned set, unsigned binding, const ImageView& view, const Sampler& sampler, unsigned array_index = 0);
-		void SetTexture(unsigned set, unsigned binding, const ImageView& view, StockSampler sampler, unsigned array_index = 0);
-		void SetStorageTexture(unsigned set, unsigned binding, const ImageView& view, unsigned array_index = 0);
-		void SetSampler(unsigned set, unsigned binding, const Sampler& sampler, unsigned array_index = 0);
-		void SetSampler(unsigned set, unsigned binding, StockSampler sampler, unsigned array_index = 0);
-		void SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, unsigned array_index = 0);
-		void SetUniformBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range, unsigned array_index = 0);
-		void SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, unsigned array_index = 0);
-		void SetStorageBuffer(unsigned set, unsigned binding, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range, unsigned array_index = 0);
+		// Sets the separate texture at (set, binding, array_index) to the given image view
+		// If the view has both a depth and stencil aspect, a float sampler vs unsigned sampler 
+		// is used to determine which aspect is sampled from (ie in GLSL, if the sampler is 
+		// sampler2D the depth aspect will be sampled from, whereas if it is usampler2D the stencil
+		// aspect will be sampled from).
+		void SetSeparateTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view);
+		// Sets the sampled texture at (set, binding, array_index) to the given image view and sampler
+		// If the view has both a depth and stencil aspect, a float sampler vs unsigned sampler 
+		// is used to determine which aspect is sampled from (ie in GLSL, if the sampler is 
+		// sampler2D the depth aspect will be sampled from, whereas if it is usampler2D the stencil
+		// aspect will be sampled from).
+		void SetSampledTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view, const Sampler& sampler);
+		// Sets the sampled texture at (set, binding, array_index) to the given image view and stock sampler
+		// If the view has both a depth and stencil aspect, a float sampler vs unsigned sampler 
+		// is used to determine which aspect is sampled from (ie in GLSL, if the sampler is 
+		// sampler2D the depth aspect will be sampled from, whereas if it is usampler2D the stencil
+		// aspect will be sampled from).
+		void SetSampledTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view, StockSampler sampler);
+		// Sets the storage texture at (set, binding, array_index) to the given image view
+		// If the view has both a depth and stencil aspect, a float sampler vs unsigned sampler 
+		// is used to determine which aspect is sampled from (ie in GLSL, if the sampler is 
+		// sampler2D the depth aspect will be sampled from, whereas if it is usampler2D the stencil
+		// aspect will be sampled from).
+		void SetStorageTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view);
+		void SetSampler(unsigned set, unsigned binding, unsigned array_index, const Sampler& sampler);
+		void SetSampler(unsigned set, unsigned binding, unsigned array_index, StockSampler sampler);
+		void SetUniformBuffer(unsigned set, unsigned binding, unsigned array_index, const Buffer& buffer);
+		void SetUniformBuffer(unsigned set, unsigned binding, unsigned array_index, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range);
+		void SetStorageBuffer(unsigned set, unsigned binding, unsigned array_index,  const Buffer& buffer);
+		void SetStorageBuffer(unsigned set, unsigned binding, unsigned array_index,  const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range);
 
 		// void SetBindless(unsigned set, VkDescriptorSet desc_set);
 		void PushConstants(const void* data, VkDeviceSize offset, VkDeviceSize range);
@@ -422,12 +439,12 @@ namespace Vulkan
 		//-----------------------------------------------------------------
 
 		//Allocates a uniform buffer from the command buffers internal pool. Binds it to the set and binding, than returns it's mapped data.
-		void* AllocateConstantData(unsigned set, unsigned binding, VkDeviceSize size, unsigned array_index = 0);
+		void* AllocateConstantData(unsigned set, unsigned binding, unsigned array_index, VkDeviceSize size);
 		//Allocates a uniform buffer from the command buffers internal pool. Binds it to the set and binding, than returns it's mapped data.
 		template <typename T>
-		T* AllocateTypedConstantData(unsigned set, unsigned binding, unsigned count, unsigned array_index = 0)
+		T* AllocateTypedConstantData(unsigned set, unsigned binding, unsigned array_index, unsigned count)
 		{
-			return static_cast<T*>(AllocateConstantData(set, binding, count * sizeof(T), array_index));
+			return static_cast<T*>(AllocateConstantData(set, binding, array_index, count * sizeof(T)));
 		}
 		//Allocates a vertex buffer from the command buffers internal pool. Binds it to the binding than returns it's mapped data.
 		void* AllocateVertexData(unsigned binding, VkDeviceSize size);
@@ -779,7 +796,7 @@ namespace Vulkan
 		}
 
 		//Return which Flags are dirty (have been changed) clear the dirty mask.
-		CommandBufferDirtyFlags get_and_clear(CommandBufferDirtyFlags flags)
+		CommandBufferDirtyFlags GetAndClear(CommandBufferDirtyFlags flags)
 		{
 			auto mask = dirty & flags;
 			dirty &= ~flags;
@@ -811,7 +828,8 @@ namespace Vulkan
 		BufferBlock ubo_block;
 		BufferBlock staging_block;
 
-		void SetTexture(unsigned set, unsigned binding, VkImageView float_view, VkImageView integer_view, VkImageLayout layout, uint64_t cookie, unsigned array_index);
+		// Unless image is depth_stencil float_view and integer_view will be identical
+		void SetTexture(unsigned set, unsigned binding, unsigned array_index, VkImageView float_view, VkImageView integer_view, VkImageLayout layout, uint64_t cookie);
 
 		void InitViewportScissor(const RenderPassInfo& info, const Framebuffer* framebuffer);
 

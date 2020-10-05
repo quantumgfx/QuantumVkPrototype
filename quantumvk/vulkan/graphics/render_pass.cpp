@@ -71,7 +71,7 @@ namespace Vulkan
 		if (create_info.attachmentCount > 0)
 		{
 			auto& att = create_info.pAttachments[create_info.attachmentCount - 1];
-			if (format_has_depth_or_stencil_aspect(att.format))
+			if (FormatHasDepthOrStencilAspect(att.format))
 			{
 				depth_stencil = att.format;
 				num_color_attachments = create_info.attachmentCount - 1;
@@ -780,7 +780,7 @@ namespace Vulkan
 			rp_info.pNext = &multiview_info;
 		}
 		else if (multiview)
-			QM_LOG_ERROR("Multiview not supported. Predending render pass is not multiview.");
+			QM_LOG_ERROR("Multiview not supported. Pertending render pass is not multiview.");
 
 		// Fixup after, we want the Fossilize render pass to be generic.
 		VkAttachmentDescription fixup_attachments[VULKAN_NUM_ATTACHMENTS + 1];
@@ -862,7 +862,7 @@ namespace Vulkan
 		if (info.depth_stencil)
 		{
 			// For multiview, we use view indices to pick right layers.
-			if (info.num_layers > 1)
+			if(info.num_layers > 1)
 				views[num_views++] = info.depth_stencil->GetView();
 			else
 				views[num_views++] = info.depth_stencil->GetRenderTargetView(info.base_layer);
@@ -1016,7 +1016,7 @@ namespace Vulkan
 		framebuffers.begin_frame();
 	}
 
-	Framebuffer& FramebufferAllocator::request_framebuffer(const RenderPassInfo& info)
+	Framebuffer& FramebufferAllocator::RequestFramebuffer(const RenderPassInfo& info)
 	{
 		auto& rp = device->RequestRenderPass(info, true);
 		Hasher h;
@@ -1080,7 +1080,7 @@ namespace Vulkan
 		attachments.begin_frame();
 	}
 
-	ImageView& AttachmentAllocator::request_attachment(unsigned width, unsigned height, VkFormat format, unsigned index, unsigned samples, unsigned layers)
+	ImageView& AttachmentAllocator::RequestAttachment(uint32_t width, uint32_t height, VkFormat format, uint32_t index, VkSampleCountFlagBits samples, uint32_t layers)
 	{
 		Hasher h;
 		h.u32(width);
@@ -1109,7 +1109,7 @@ namespace Vulkan
 			image_info.usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 		}
 
-		image_info.samples = static_cast<VkSampleCountFlagBits>(samples);
+		image_info.samples = samples;
 		image_info.layers = layers;
 		node = attachments.emplace(hash, device->CreateImage(image_info, RESOURCE_EXCLUSIVE_GENERIC, nullptr));
 		node->handle->SetInternalSyncObject();
