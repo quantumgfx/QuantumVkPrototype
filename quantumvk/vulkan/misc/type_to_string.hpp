@@ -6,7 +6,7 @@
 
 namespace Vulkan
 {
-	static inline const char* layout_to_string(VkImageLayout layout)
+	static inline const char* LayoutToString(VkImageLayout layout)
 	{
 		switch (layout)
 		{
@@ -31,7 +31,7 @@ namespace Vulkan
 		}
 	}
 
-	static inline std::string access_flags_to_string(VkAccessFlags flags)
+	static inline std::string AccessFlagsToString(VkAccessFlags flags)
 	{
 		std::string result;
 
@@ -64,7 +64,7 @@ namespace Vulkan
 		return result;
 	}
 
-	static inline std::string stage_flags_to_string(VkPipelineStageFlags flags)
+	static inline std::string StageFlagsToString(VkPipelineStageFlags flags)
 	{
 		std::string result;
 

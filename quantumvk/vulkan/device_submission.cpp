@@ -2,6 +2,7 @@
 #include "quantumvk/utils/bitops.hpp"
 #include "quantumvk/utils/hash.hpp"
 #include "quantumvk/utils/small_vector.hpp"
+#include "quantumvk/vulkan/misc/type_to_string.hpp"
 
 #ifdef QM_VULKAN_MT
 #include "quantumvk/threading/thread_id.hpp"
@@ -460,7 +461,7 @@ namespace Vulkan
 		{
 			//QM_LOG_INFO("  Waiting for semaphore: %llx in stages %s\n",
 				//reinterpret_cast<unsigned long long>(submit.pWaitSemaphores[i]),
-				//stage_flags_to_string(submit.pWaitDstStageMask[i]).c_str());
+				//StageFlagsToString(submit.pWaitDstStageMask[i]).c_str());
 		}
 
 		for (uint32_t i = 0; i < submit.signalSemaphoreCount; i++)

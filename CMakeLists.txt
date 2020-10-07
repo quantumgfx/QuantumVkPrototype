@@ -194,9 +194,7 @@ if (QM_VULKAN_MT)
     target_compile_definitions(QuantumVk PUBLIC QM_VULKAN_MT)
 endif()
 
-if (${CMAKE_BUILD_TYPE} MATCHES "Debug")
-    target_compile_definitions(QuantumVk PUBLIC VULKAN_DEBUG)
-endif()
+target_compile_definitions(QuantumVk PUBLIC $<$<CONFIG:DEBUG>:VULKAN_DEBUG>)
 
 if (WIN32)
 	target_compile_definitions(QuantumVk PUBLIC VK_USE_PLATFORM_WIN32_KHR)

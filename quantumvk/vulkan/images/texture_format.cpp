@@ -6,7 +6,7 @@ using namespace std;
 
 namespace Vulkan
 {
-	uint32_t TextureFormatLayout::num_miplevels(uint32_t width, uint32_t height, uint32_t depth)
+	uint32_t TextureFormatLayout::NumMiplevels(uint32_t width, uint32_t height, uint32_t depth)
 	{
 		uint32_t size = unsigned(max(max(width, height), depth));
 		uint32_t levels = 0;
@@ -18,7 +18,7 @@ namespace Vulkan
 		return levels;
 	}
 
-	void TextureFormatLayout::format_block_dim(VkFormat format, uint32_t& width, uint32_t& height)
+	void TextureFormatLayout::FormatBlockDim(VkFormat format, uint32_t& width, uint32_t& height)
 	{
 #define fmt(x, w, h)     \
     case VK_FORMAT_##x: \
@@ -94,7 +94,7 @@ namespace Vulkan
 #undef fmt
 	}
 
-	uint32_t TextureFormatLayout::format_block_size(VkFormat format, VkImageAspectFlags aspect)
+	uint32_t TextureFormatLayout::FormatBlockSize(VkFormat format, VkImageAspectFlags aspect)
 	{
 #define fmt(x, bpp)     \
     case VK_FORMAT_##x: \
@@ -340,174 +340,4 @@ namespace Vulkan
 #undef fmt
 #undef fmt2
 	}
-
-	void TextureFormatLayout::fill_mipinfo(uint32_t width, uint32_t height, uint32_t depth)
-	{
-		block_stride = format_block_size(format, 0);
-		format_block_dim(format, block_dim_x, block_dim_y);
-
-		if (mip_levels == 0)
-			mip_levels = num_miplevels(width, height, depth);
-
-		size_t offset = 0;
-
-		for (uint32_t mip = 0; mip < mip_levels; mip++)
-		{
-			offset = (offset + 15) & ~15;
-
-			uint32_t blocks_x = (width + block_dim_x - 1) / block_dim_x;
-			uint32_t blocks_y = (height + block_dim_y - 1) / block_dim_y;
-			size_t mip_size = blocks_x * blocks_y * array_layers * depth * block_stride;
-
-			mips[mip].offset = offset;
-
-			mips[mip].block_row_length = blocks_x;
-			mips[mip].block_image_height = blocks_y;
-
-			mips[mip].row_length = blocks_x * block_dim_x;
-			mips[mip].image_height = blocks_y * block_dim_y;
-
-			mips[mip].width = width;
-			mips[mip].height = height;
-			mips[mip].depth = depth;
-
-			offset += mip_size;
-
-			width = max((width >> 1u), 1u);
-			height = max((height >> 1u), 1u);
-			depth = max((depth >> 1u), 1u);
-		}
-
-		required_size = offset;
-	}
-
-	void TextureFormatLayout::set_1d(VkFormat format_, uint32_t width, uint32_t array_layers_, uint32_t mip_levels_)
-	{
-		image_type = VK_IMAGE_TYPE_1D;
-		format = format_;
-		array_layers = array_layers_;
-		mip_levels = mip_levels_;
-
-		fill_mipinfo(width, 1, 1);
-	}
-
-	void TextureFormatLayout::set_2d(VkFormat format_, uint32_t width, uint32_t height,
-		uint32_t array_layers_, uint32_t mip_levels_)
-	{
-		image_type = VK_IMAGE_TYPE_2D;
-		format = format_;
-		array_layers = array_layers_;
-		mip_levels = mip_levels_;
-
-		fill_mipinfo(width, height, 1);
-	}
-
-	void TextureFormatLayout::set_3d(VkFormat format_, uint32_t width, uint32_t height, uint32_t depth, uint32_t mip_levels_)
-	{
-		image_type = VK_IMAGE_TYPE_3D;
-		format = format_;
-		array_layers = 1;
-		mip_levels = mip_levels_;
-
-		fill_mipinfo(width, height, depth);
-	}
-
-	void TextureFormatLayout::set_buffer(void* buffer_, size_t size)
-	{
-		buffer = static_cast<uint8_t*>(buffer_);
-		buffer_size = size;
-	}
-
-	uint32_t TextureFormatLayout::get_width(uint32_t mip) const
-	{
-		return mips[mip].width;
-	}
-
-	uint32_t TextureFormatLayout::get_height(uint32_t mip) const
-	{
-		return mips[mip].height;
-	}
-
-	uint32_t TextureFormatLayout::get_depth(uint32_t mip) const
-	{
-		return mips[mip].depth;
-	}
-
-	uint32_t TextureFormatLayout::get_layers() const
-	{
-		return array_layers;
-	}
-
-	VkImageType TextureFormatLayout::get_image_type() const
-	{
-		return image_type;
-	}
-
-	VkFormat TextureFormatLayout::get_format() const
-	{
-		return format;
-	}
-
-	uint32_t TextureFormatLayout::get_block_stride() const
-	{
-		return block_stride;
-	}
-
-	uint32_t TextureFormatLayout::get_levels() const
-	{
-		return mip_levels;
-	}
-
-	size_t TextureFormatLayout::get_required_size() const
-	{
-		return required_size;
-	}
-
-	const TextureFormatLayout::MipInfo& TextureFormatLayout::get_mip_info(uint32_t mip) const
-	{
-		return mips[mip];
-	}
-
-	uint32_t TextureFormatLayout::get_block_dim_x() const
-	{
-		return block_dim_x;
-	}
-
-	uint32_t TextureFormatLayout::get_block_dim_y() const
-	{
-		return block_dim_y;
-	}
-
-	size_t TextureFormatLayout::row_byte_stride(uint32_t row_length) const
-	{
-		return ((row_length + block_dim_x - 1) / block_dim_x) * block_stride;
-	}
-
-	size_t TextureFormatLayout::layer_byte_stride(uint32_t image_height, size_t row_byte_stride) const
-	{
-		return ((image_height + block_dim_y - 1) / block_dim_y) * row_byte_stride;
-	}
-
-	void TextureFormatLayout::build_buffer_image_copies(std::vector<VkBufferImageCopy>& copies) const
-	{
-		copies.resize(mip_levels);
-		for (unsigned level = 0; level < mip_levels; level++)
-		{
-			const auto& mip_info = mips[level];
-
-			auto& blit = copies[level];
-			blit = {};
-			blit.bufferOffset = mip_info.offset;
-			blit.bufferRowLength = mip_info.row_length;
-			blit.bufferImageHeight = mip_info.image_height;
-			blit.imageSubresource.aspectMask = FormatToAspectMask(format);
-			blit.imageSubresource.mipLevel = level;
-			blit.imageSubresource.baseArrayLayer = 0;
-			blit.imageSubresource.layerCount = array_layers;
-			blit.imageExtent.width = mip_info.width;
-			blit.imageExtent.height = mip_info.height;
-			blit.imageExtent.depth = mip_info.depth;
-		}
-	}
-
 }

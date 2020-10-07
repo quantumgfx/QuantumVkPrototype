@@ -818,6 +818,16 @@ namespace Vulkan
 		return frame_context_index;
 	}
 
+	uint32_t Device::GetSwapchainWidth() const
+	{
+		return wsi.swapchain[wsi.index]->GetCreateInfo().width;
+	}
+
+	uint32_t Device::GetSwapchainHeight() const
+	{
+		return wsi.swapchain[wsi.index]->GetCreateInfo().height;
+	}
+
 	RenderPassInfo Device::GetSwapchainRenderPass(SwapchainRenderPass style)
 	{
 		RenderPassInfo info;
@@ -831,14 +841,14 @@ namespace Vulkan
 		case SwapchainRenderPass::Depth:
 		{
 			info.op_flags |= RENDER_PASS_OP_CLEAR_DEPTH_STENCIL_BIT;
-			info.depth_stencil = &GetTransientAttachment(wsi.swapchain[wsi.index]->GetCreateInfo().width, wsi.swapchain[wsi.index]->GetCreateInfo().height, GetDefaultDepthFormat());
+			info.depth_stencil = &GetTransientAttachment(GetSwapchainWidth(), GetSwapchainHeight(), GetDefaultDepthFormat());
 			break;
 		}
 
 		case SwapchainRenderPass::DepthStencil:
 		{
 			info.op_flags |= RENDER_PASS_OP_CLEAR_DEPTH_STENCIL_BIT;
-			info.depth_stencil = &GetTransientAttachment(wsi.swapchain[wsi.index]->GetCreateInfo().width, wsi.swapchain[wsi.index]->GetCreateInfo().height, GetDefaultDepthStencilFormat());
+			info.depth_stencil = &GetTransientAttachment(GetSwapchainWidth(), GetSwapchainHeight(), GetDefaultDepthStencilFormat());
 			break;
 		}
 

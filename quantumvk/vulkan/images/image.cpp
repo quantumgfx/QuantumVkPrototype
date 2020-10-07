@@ -150,7 +150,7 @@ namespace Vulkan
 		}
 		else
 		{
-			row_pitch = gpu_image->GetWidth() * TextureFormatLayout::format_block_size(gpu_image->GetFormat(), FormatToAspectMask(gpu_image->GetFormat()));
+			row_pitch = gpu_image->GetWidth() * TextureFormatLayout::FormatBlockSize(gpu_image->GetFormat(), FormatToAspectMask(gpu_image->GetFormat()));
 			row_offset = 0;
 		}
 	}

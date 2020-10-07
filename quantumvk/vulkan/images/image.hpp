@@ -128,11 +128,45 @@ namespace Vulkan
 		return flags;
 	}
 
-	//Data used to initialize image
-	struct ImageInitialData
+	// Specifies what data to load into a layer of an image
+	struct InitialImageLayerData
 	{
-		ImageInitialData* next_mip = nullptr;
-		const void* data = nullptr;
+		// Data to load into layer (nullptr zero initializes that layer)
+
+
+
+
+		void* data = nullptr;
+	};
+
+	// Specifies what data to load into all the layers of one mip level of an image
+	struct InitialImageLevelData
+	{
+		// Array of InitialImageLayerData to load into each layer.
+		InitialImageLayerData* layers;
+	};
+
+	struct InitialImageData
+	{
+		// Array of InitialImageLevelData to load into each layer.
+		InitialImageLevelData* levels;
+	};
+
+	struct ImageStagingCopyInfo
+	{
+		// Position within buffer (void*) to copy memory from
+		uint32_t buffer_offset = 0;
+		// Width of larger image stored in buffer (leave at zero to make the region in the buffer correspond exactly to the data in the image)
+		uint32_t buffer_row_length = 0;
+		// Height of larger image stored in buffer (leave at zero to make the region in the buffer correspond exactly to the data in the image)
+		uint32_t buffer_image_height = 0;
+
+		uint32_t mip_level = 0;
+		uint32_t base_array_layer = 0;
+		uint32_t num_layers = 1;
+
+		VkOffset3D image_offset = { 0, 0, 0 };
+		VkExtent3D image_extent;
 	};
 
 	// Misc Image Create Info Flags

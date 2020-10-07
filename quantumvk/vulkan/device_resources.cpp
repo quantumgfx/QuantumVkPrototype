@@ -52,7 +52,7 @@ namespace Vulkan
 			BufferCreateInfo buffer;
 			buffer.domain = (info.flags & LINEAR_HOST_IMAGE_HOST_CACHED_BIT) != 0 ? BufferDomain::CachedHost : BufferDomain::Host;
 			buffer.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-			buffer.size = info.width * info.height * TextureFormatLayout::format_block_size(info.format, FormatToAspectMask(info.format));
+			buffer.size = info.width * info.height * TextureFormatLayout::FormatBlockSize(info.format, FormatToAspectMask(info.format));
 			cpu_image = CreateBuffer(buffer);
 			if (!cpu_image)
 				return LinearHostImageHandle(nullptr);
@@ -704,113 +704,186 @@ namespace Vulkan
 			return ImageViewHandle(nullptr);
 	}
 
-	InitialImageBuffer Device::CreateImageStagingBuffer(const TextureFormatLayout& layout)
+	static inline uint32_t RoundUpToNearestMultiple(uint32_t number, uint32_t multiple)
 	{
-		InitialImageBuffer result;
-
-		BufferCreateInfo buffer_info = {};
-		buffer_info.domain = BufferDomain::Host;
-		buffer_info.size = layout.get_required_size();
-		buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		result.buffer = CreateBuffer(buffer_info);
-
-		auto* mapped = static_cast<uint8_t*>(MapHostBuffer(*result.buffer, MEMORY_ACCESS_WRITE_BIT));
-		memcpy(mapped, layout.data(), layout.get_required_size());
-		UnmapHostBuffer(*result.buffer, MEMORY_ACCESS_WRITE_BIT);
-
-		layout.build_buffer_image_copies(result.blits);
-		return result;
+		return ((number + multiple - 1) / multiple) * multiple;
 	}
 
-	InitialImageBuffer Device::CreateImageStagingBuffer(const ImageCreateInfo& info, const ImageInitialData* initial)
+	static inline uint32_t AlignNumberToPowerOf2(uint32_t number, uint32_t alignment)
 	{
-		InitialImageBuffer result;
+		return (number + alignment - 1) & ~(alignment - 1);
+	}
+
+	static inline uint32_t GetRequiredSize(const ImageCreateInfo& info,  uint32_t levels)
+	{
+		uint32_t required_size = 0;
+
+		// Number of bytes each block takes up
+		uint32_t pixel_stride = TextureFormatLayout::FormatBlockSize(info.format, 0);
+
+		uint32_t mip_width = info.width;
+		uint32_t mip_height = info.height;
+		uint32_t mip_depth = info.depth;
+
+		for (uint32_t level = 0; level < levels; level++)
+		{
+			required_size = AlignNumberToPowerOf2(required_size, 16);
+
+			required_size += info.layers * pixel_stride * mip_width * mip_height * mip_depth;
+
+			mip_width = std::max((mip_width >> 1u), 1u);
+			mip_height = std::max((mip_height >> 1u), 1u);
+			mip_depth = std::max((mip_depth >> 1u), 1u);
+		}
+
+		return required_size;
+	}
+
+	InitialImageBuffer Device::CreateUncompressedImageStagingBuffer(const ImageCreateInfo& info, InitialImageData initial)
+	{
+
+#ifdef VULKAN_DEBUG
+		// Dimensions of block (typically (1, 1))
+		uint32_t block_dim_x, block_dim_y;
+		TextureFormatLayout::FormatBlockDim(info.format, block_dim_x, block_dim_y);
+
+		// Currently this function can only run with images with uncompressed
+		VK_ASSERT(block_dim_x == 1 && block_dim_y == 1);
+#endif
 
 		bool generate_mips = (info.misc & IMAGE_MISC_GENERATE_MIPS_BIT) != 0;
-		TextureFormatLayout layout;
 
-		unsigned copy_levels;
+		uint32_t copy_levels;
 		if (generate_mips)
 			copy_levels = 1;
 		else if (info.levels == 0)
-			copy_levels = TextureFormatLayout::num_miplevels(info.width, info.height, info.depth);
+			copy_levels = TextureFormatLayout::NumMiplevels(info.width, info.height, info.depth);
 		else
 			copy_levels = info.levels;
 
-		switch (info.type)
+		uint32_t required_size = GetRequiredSize(info, copy_levels);
+
+		uint8_t* dst = static_cast<uint8_t*>(malloc(required_size));
+
+		uint32_t offset = 0;
+
+		uint32_t mip_width = info.width;
+		uint32_t mip_height = info.height;
+		uint32_t mip_depth = info.depth;
+
+		// Number of bytes each block takes up
+		uint32_t pixel_stride = TextureFormatLayout::FormatBlockSize(info.format, 0);
+
+		std::vector<ImageStagingCopyInfo> copies(copy_levels);
+
+		for (unsigned level = 0; level < copy_levels; level++)
 		{
-		case VK_IMAGE_TYPE_1D:
-			layout.set_1d(info.format, info.width, info.layers, copy_levels);
-			break;
-		case VK_IMAGE_TYPE_2D:
-			layout.set_2d(info.format, info.width, info.height, info.layers, copy_levels);
-			break;
-		case VK_IMAGE_TYPE_3D:
-			layout.set_3d(info.format, info.width, info.height, info.depth, copy_levels);
-			break;
-		default:
-			return {};
+			offset = AlignNumberToPowerOf2(offset, 16);
+
+			// Data to be loaded into this level
+			InitialImageLevelData& level_data = initial.levels[level];
+			//const auto& mip_info = layout.GetMipInfo(level);
+
+			// Number of bytes in a single layer
+			size_t layer_stride = mip_width * mip_height * mip_depth * pixel_stride;
+
+			auto& copy = copies[level];
+			copy.buffer_offset = offset;
+			copy.buffer_row_length = 0;
+			copy.buffer_image_height = 0;
+			copy.base_array_layer = 0;
+			copy.num_layers = info.layers;
+			copy.mip_level = level;
+			copy.image_offset = { 0, 0, 0 };
+			copy.image_extent.width = mip_width;
+			copy.image_extent.height = mip_height;
+			copy.image_extent.depth = mip_depth;
+
+			for (unsigned layer = 0; layer < info.layers; layer++)
+			{
+				InitialImageLayerData& layer_data = level_data.layers[layer];
+				if (layer_data.data)
+					memcpy(dst + offset, layer_data.data, layer_stride);
+				else
+					memset(dst + offset, 0, layer_stride);
+				offset += layer_stride;
+			}
+
+			mip_width = std::max((mip_width >> 1u), 1u);
+			mip_height = std::max((mip_height >> 1u), 1u);
+			mip_depth = std::max((mip_depth >> 1u), 1u);
 		}
+
+		InitialImageBuffer result = CreateImageStagingBuffer(info, required_size, dst, copies.size(), copies.data());
+
+		free(dst);
+
+		return result;
+
+	}
+
+	InitialImageBuffer Device::CreateImageStagingBuffer(const ImageCreateInfo& info, size_t buffer_size, void* buffer, uint32_t num_copies, ImageStagingCopyInfo* copies)
+	{
+		InitialImageBuffer result;
 
 		BufferCreateInfo buffer_info = {};
 		buffer_info.domain = BufferDomain::Host;
-		buffer_info.size = layout.get_required_size();
+		buffer_info.size = buffer_size;
 		buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 		result.buffer = CreateBuffer(buffer_info);
 
 		// And now, do the actual copy.
-		auto* mapped = static_cast<uint8_t*>(MapHostBuffer(*result.buffer, MEMORY_ACCESS_WRITE_BIT));
-		unsigned index = 0;
+		void* mapped = MapHostBuffer(*result.buffer, MEMORY_ACCESS_WRITE_BIT);
+		memcpy(mapped, buffer, buffer_size);
+		UnmapHostBuffer(*result.buffer, MEMORY_ACCESS_WRITE_BIT);
 
-		layout.set_buffer(mapped, layout.get_required_size());
+		result.blits.resize(num_copies);
 
-		for (unsigned layer = 0; layer < info.layers; layer++)
+		for (uint32_t i = 0; i < num_copies; i++)
 		{
-			ImageInitialData layer_data = initial[layer];
+			const auto& copy = copies[i];
 
-			for (unsigned level = 0; level < copy_levels; level++)
-			{
-				const auto& mip_info = layout.get_mip_info(level);
-				uint32_t dst_height_stride = layout.get_layer_size(level);
-				size_t row_size = layout.get_row_size(level);
-
-				uint32_t src_row_length = mip_info.row_length;
-				uint32_t src_array_height = mip_info.image_height;
-
-				uint32_t src_row_stride = layout.row_byte_stride(src_row_length);
-				uint32_t src_height_stride = layout.layer_byte_stride(src_array_height, src_row_stride);
-
-				uint8_t* dst = static_cast<uint8_t*>(layout.data(layer, level));
-				const uint8_t* src = static_cast<const uint8_t*>(layer_data.data);
-
-				if (src == nullptr)
-					break;
-
-				for (uint32_t z = 0; z < mip_info.depth; z++)
-					for (uint32_t y = 0; y < mip_info.block_image_height; y++)
-						memcpy(dst + z * dst_height_stride + y * row_size, src + z * src_height_stride + y * src_row_stride, row_size);
-
-				if (layer_data.next_mip)
-					layer_data = *layer_data.next_mip;
-				else
-					break;
-			}
+			auto& blit = result.blits[i];
+			blit = {};
+			blit.bufferOffset = copy.buffer_offset;
+			blit.bufferRowLength = copy.buffer_row_length;
+			blit.bufferImageHeight = copy.buffer_image_height;
+			blit.imageSubresource.aspectMask = FormatToAspectMask(info.format);
+			blit.imageSubresource.mipLevel = copy.mip_level;
+			blit.imageSubresource.baseArrayLayer = copy.base_array_layer;
+			blit.imageSubresource.layerCount = copy.num_layers;
+			blit.imageOffset = copy.image_offset;
+			blit.imageExtent = copy.image_extent;
 		}
 
-		UnmapHostBuffer(*result.buffer, MEMORY_ACCESS_WRITE_BIT);
-		layout.build_buffer_image_copies(result.blits);
 		return result;
 	}
 
-	ImageHandle Device::CreateImage(const ImageCreateInfo& create_info, ResourceQueueOwnershipFlags ownership, const ImageInitialData* initial)
+	ImageHandle Device::CreateImage(const ImageCreateInfo& create_info, ResourceQueueOwnershipFlags ownership)
 	{
-		if (initial)
+		return CreateImageFromStagingBuffer(create_info, ownership, nullptr);
+	}
+
+	ImageHandle Device::CreateImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, size_t buffer_size, void* buffer, uint32_t num_copies, ImageStagingCopyInfo* copies)
+	{
+		if (buffer)
 		{
-			auto staging_buffer = CreateImageStagingBuffer(create_info, initial);
-			return CreateImageFromStagingBuffer(create_info, ownership, &staging_buffer);
+			auto staging_buffer = CreateImageStagingBuffer(info, buffer_size, buffer, num_copies, copies);
+			return CreateImageFromStagingBuffer(info, ownership, &staging_buffer);
 		}
 		else
-			return CreateImageFromStagingBuffer(create_info, ownership, nullptr);
+			return CreateImageFromStagingBuffer(info, ownership, nullptr);
+	}
+
+	ImageHandle Device::CreateUncompessedImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, InitialImageData initial)
+	{
+		if (initial.levels)
+		{
+			auto staging_buffer = CreateUncompressedImageStagingBuffer(info, initial);
+			return CreateImageFromStagingBuffer(info, ownership, &staging_buffer);
+		}
+		else
+			return CreateImageFromStagingBuffer(info, ownership, nullptr);
 	}
 
 	ImageHandle Device::CreateImageFromStagingBuffer(const ImageCreateInfo& create_info, ResourceQueueOwnershipFlags ownership, const InitialImageBuffer* staging_buffer)
@@ -1033,12 +1106,6 @@ namespace Vulkan
 			}
 		}
 
-		if (table->vkCreateImage(device, &info, nullptr, &holder.image) != VK_SUCCESS)
-		{
-			QM_LOG_ERROR("Failed to create image in vkCreateImage.\n");
-			return ImageHandle(nullptr);
-		}
-
 		auto tmpinfo = create_info;
 		tmpinfo.usage = info.usage;
 		tmpinfo.flags = info.flags;
@@ -1220,9 +1287,7 @@ namespace Vulkan
 
 						auto cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
 
-						cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-							VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
-							VK_ACCESS_TRANSFER_WRITE_BIT);
+						cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
 
 						cmd->CopyBufferToImage(*handle, *staging_buffer->buffer, staging_buffer->blits.size(), staging_buffer->blits.data());
 
@@ -1241,12 +1306,15 @@ namespace Vulkan
 								VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, create_info.initial_layout,
 								VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
 								possible_image_stages, possible_image_access);
+
 						}
 
 						Submit(cmd);
 					}
 					else
 					{ // One barrier needed between transfer and graphics
+
+						QM_LOG_TRACE("ELSE graphics (%p), transfer(%p)\n", graphics_queue, transfer_queue);
 
 						VkPipelineStageFlags dst_stages = generate_mips ? VK_PIPELINE_STAGE_TRANSFER_BIT : possible_image_stages;
 

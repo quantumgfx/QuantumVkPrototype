@@ -35,7 +35,7 @@ namespace Vulkan
 			index = other.index;
 			other.index = 0;
 #ifdef VULKAN_DEBUG
-			in_flight.Clear();
+			in_flight.clear();
 			std::swap(in_flight, other.in_flight);
 #endif
 		}

@@ -337,7 +337,7 @@ namespace Vulkan
 				entry.dstBinding = binding;
 				entry.dstArrayElement = 0;
 				entry.descriptorCount = array_size;
-				entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, buffer) + sizeof(ResourceBinding) * offsets[binding];
+				entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, buffer);
 				entry.stride = sizeof(UniformBinding);
 				});
 
@@ -349,7 +349,7 @@ namespace Vulkan
 				entry.dstBinding = binding;
 				entry.dstArrayElement = 0;
 				entry.descriptorCount = array_size;
-				entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, buffer) + sizeof(ResourceBinding) * offsets[binding];
+				entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, buffer);
 				entry.stride = sizeof(UniformBinding);
 				});
 
@@ -361,7 +361,7 @@ namespace Vulkan
 				entry.dstBinding = binding;
 				entry.dstArrayElement = 0;
 				entry.descriptorCount = array_size;
-				entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, buffer_view) + sizeof(ResourceBinding) * offsets[binding];
+				entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, buffer);
 				entry.stride = sizeof(UniformBinding);
 				});
 
@@ -375,9 +375,9 @@ namespace Vulkan
 				entry.dstArrayElement = 0;
 				entry.descriptorCount = array_size;
 				if (set_layout.fp_mask & (1u << binding))
-					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp) + sizeof(ResourceBinding) * offsets[binding];
+					entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp);
 				else
-					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.integer) + sizeof(ResourceBinding) * offsets[binding];
+					entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.integer);
 				//entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image) + sizeof(ResourceBinding) * offsets[binding];
 				entry.stride = sizeof(UniformBinding);
 				});
@@ -391,9 +391,9 @@ namespace Vulkan
 				entry.dstArrayElement = 0;
 				entry.descriptorCount = array_size;
 				if (set_layout.fp_mask & (1u << binding))
-					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp) + sizeof(ResourceBinding) * offsets[binding];
+					entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp);
 				else
-					entry.offset = offsetof(UniformBinding, resource)  + offsetof(ResourceBinding, image.integer) + sizeof(ResourceBinding) * offsets[binding];
+					entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.integer);
 				//entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image) + sizeof(ResourceBinding) * offsets[binding];
 				entry.stride = sizeof(UniformBinding);
 				});
@@ -406,7 +406,7 @@ namespace Vulkan
 				entry.dstBinding = binding;
 				entry.dstArrayElement = 0;
 				entry.descriptorCount = array_size;
-				entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp) + sizeof(ResourceBinding) * offsets[binding];
+				entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp);
 				//entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image) + sizeof(ResourceBinding) * offsets[binding];
 				entry.stride = sizeof(UniformBinding);
 				});
@@ -420,9 +420,9 @@ namespace Vulkan
 				entry.dstArrayElement = 0;
 				entry.descriptorCount = array_size;
 				if (set_layout.fp_mask & (1u << binding))
-					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp) + sizeof(ResourceBinding) * offsets[binding];
+					entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp);
 				else
-					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.integer) + sizeof(ResourceBinding) * offsets[binding];
+					entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.integer);
 				//entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image) + sizeof(ResourceBinding) * offsets[binding];
 				entry.stride = sizeof(UniformBinding);
 				});
@@ -436,9 +436,9 @@ namespace Vulkan
 				entry.dstArrayElement = 0;
 				entry.descriptorCount = array_size;
 				if (set_layout.fp_mask & (1u << binding))
-					entry.offset = offsetof(UniformBinding, resource) +  offsetof(ResourceBinding, image.fp) + sizeof(ResourceBinding) * offsets[binding];
+					entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.fp);
 				else
-					entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.integer) + sizeof(ResourceBinding) * offsets[binding];
+					entry.offset = sizeof(UniformBinding) * offsets[binding] + offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image.integer);
 				//entry.offset = offsetof(UniformBinding, resource) + offsetof(ResourceBinding, image) + sizeof(ResourceBinding) * offsets[binding];
 				entry.stride = sizeof(UniformBinding);
 				});

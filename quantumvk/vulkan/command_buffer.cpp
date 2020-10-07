@@ -1398,7 +1398,7 @@ namespace Vulkan
 		uint32_t blocks_y = image_height;
 		format_num_blocks(create_info.format, blocks_x, blocks_y);
 
-		VkDeviceSize size = TextureFormatLayout::format_block_size(create_info.format, subresource.aspectMask) * subresource.layerCount * depth * blocks_x * blocks_y;
+		VkDeviceSize size = TextureFormatLayout::FormatBlockSize(create_info.format, subresource.aspectMask) * subresource.layerCount * depth * blocks_x * blocks_y;
 
 		auto data = staging_block.Allocate(size);
 		if (!data.host)
@@ -1704,7 +1704,6 @@ namespace Vulkan
 
 	void CommandBuffer::FlushDescriptorSets()
 	{
-
 		uint32_t set_update = current_layout->GetDescriptorSetMask() & dirty_sets;
 		Util::for_each_bit(set_update, [&](uint32_t set) { FlushDescriptorSet(set); });
 		dirty_sets &= ~set_update;
@@ -1716,6 +1715,7 @@ namespace Vulkan
 		uint32_t dynamic_set_update = current_layout->GetDescriptorSetMask() & dirty_sets_dynamic;
 		Util::for_each_bit(dynamic_set_update, [&](uint32_t set) { RebindDescriptorSet(set); });
 		dirty_sets_dynamic &= ~dynamic_set_update;
+
 	}
 
 	void CommandBuffer::Draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)

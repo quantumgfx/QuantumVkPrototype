@@ -271,6 +271,9 @@ namespace Vulkan
 		// Returns the current frame context index
 		unsigned GetCurrentFrameContext() const;
 
+		uint32_t GetSwapchainWidth() const;
+		uint32_t GetSwapchainHeight() const;
+
 		// Retrieves the pipeline cache data. This should be stored in a file (before device is destroyed) by the client and loaded up in SetContext.
 		std::vector<uint8_t> GetPipelineCacheData(size_t override_max_size = 0);
 
@@ -333,17 +336,20 @@ namespace Vulkan
 		// Creates and allocates a buffer and images.
 		BufferHandle CreateBuffer(const BufferCreateInfo& info, ResourceQueueOwnershipFlags ownership = RESOURCE_CONCURRENT_GENERIC | RESOURCE_CONCURRENT_ASYNC_TRANSFER | RESOURCE_CONCURRENT_ASYNC_GRAPHICS | RESOURCE_CONCURRENT_ASYNC_COMPUTE, const void* initial = nullptr);
 		// Creates and allocates an image
-		// Initial is a pointer to an array of ImageInitialData structs, one for each layer in info.layers, specifying the data to be loaded
-		// into that layer, along with any data to be loaded into lower mips of that layer.
-		ImageHandle CreateImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, const ImageInitialData* initial = nullptr);
+		ImageHandle CreateImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership);
+		ImageHandle CreateImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, size_t buffer_size, void* buffer, uint32_t num_copies, ImageStagingCopyInfo* copies);
+		ImageHandle CreateUncompessedImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, InitialImageData initial);
+
 		// Creates an image using a staging buffer
 		ImageHandle CreateImageFromStagingBuffer(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, const InitialImageBuffer* buffer);
 		// Essentially an image that can be sampled on the GPU as a vk image, but it also has a vkbuffer conterpart on the cpu
 		LinearHostImageHandle CreateLinearHostImage(const LinearHostImageCreateInfo& info);
 
 		// Create staging buffers for images.
-		InitialImageBuffer CreateImageStagingBuffer(const ImageCreateInfo& info, const ImageInitialData* initial);
-		InitialImageBuffer CreateImageStagingBuffer(const TextureFormatLayout& layout);
+
+		// Image must be uncompressed.
+		InitialImageBuffer CreateUncompressedImageStagingBuffer(const ImageCreateInfo& info, InitialImageData initial);
+		InitialImageBuffer CreateImageStagingBuffer(const ImageCreateInfo& info, size_t buffer_size, void* buffer, uint32_t num_copies, ImageStagingCopyInfo* copies);
 
 		// Create image view
 		ImageViewHandle CreateImageView(const ImageViewCreateInfo& view_info);

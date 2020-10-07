@@ -108,6 +108,8 @@ namespace Vulkan
 
 		VK_ASSERT(info.num_color_attachments || info.depth_stencil);
 
+		// TODO clean this whole system up
+
 		// Want to make load/store to transient a very explicit thing to do, since it will kill performance.
 		bool enable_transient_store = (info.op_flags & RENDER_PASS_OP_ENABLE_TRANSIENT_STORE_BIT) != 0;
 		bool enable_transient_load = (info.op_flags & RENDER_PASS_OP_ENABLE_TRANSIENT_LOAD_BIT) != 0;
@@ -170,7 +172,16 @@ namespace Vulkan
 		VkImageLayout depth_stencil_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 		if (info.depth_stencil)
 		{
-			depth_stencil_layout = info.depth_stencil->GetImage().GetLayout(ds_read_only ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+			if (ds_load_op == VK_ATTACHMENT_LOAD_OP_LOAD)
+			{
+				depth_stencil_layout = info.depth_stencil->GetImage().GetLayout(ds_read_only ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+			}
+			else
+			{
+				// The image is cleared or it's inital contents are ignored, so just start in layout undefined.
+				depth_stencil_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+			}
+
 		}
 
 		for (unsigned i = 0; i < info.num_color_attachments; i++)
@@ -1111,7 +1122,7 @@ namespace Vulkan
 
 		image_info.samples = samples;
 		image_info.layers = layers;
-		node = attachments.emplace(hash, device->CreateImage(image_info, RESOURCE_EXCLUSIVE_GENERIC, nullptr));
+		node = attachments.emplace(hash, device->CreateImage(image_info, RESOURCE_EXCLUSIVE_GENERIC));
 		node->handle->SetInternalSyncObject();
 		node->handle->GetView().SetInternalSyncObject();
 		return node->handle->GetView();

@@ -112,7 +112,7 @@ namespace Vulkan
 	static inline void format_align_dim(VkFormat format, uint32_t& width, uint32_t& height)
 	{
 		uint32_t align_width, align_height;
-		TextureFormatLayout::format_block_dim(format, align_width, align_height);
+		TextureFormatLayout::FormatBlockDim(format, align_width, align_height);
 		width = ((width + align_width - 1) / align_width) * align_width;
 		height = ((height + align_height - 1) / align_height) * align_height;
 	}
@@ -120,7 +120,7 @@ namespace Vulkan
 	static inline void format_num_blocks(VkFormat format, uint32_t& width, uint32_t& height)
 	{
 		uint32_t align_width, align_height;
-		TextureFormatLayout::format_block_dim(format, align_width, align_height);
+		TextureFormatLayout::FormatBlockDim(format, align_width, align_height);
 		width = (width + align_width - 1) / align_width;
 		height = (height + align_height - 1) / align_height;
 	}
@@ -132,7 +132,7 @@ namespace Vulkan
 		format_num_blocks(format, blocks_x, blocks_y);
 		format_align_dim(format, width, height);
 
-		VkDeviceSize size = TextureFormatLayout::format_block_size(format, aspect) * depth * blocks_x * blocks_y;
+		VkDeviceSize size = TextureFormatLayout::FormatBlockSize(format, aspect) * depth * blocks_x * blocks_y;
 		return size;
 	}
 
