@@ -697,23 +697,37 @@ namespace Vulkan
 
 		for (unsigned i = 0; i < info.num_color_attachments; i++)
 		{
-			VK_ASSERT(info.color_attachments[i]);
-			formats[i] = info.color_attachments[i]->GetFormat();
-			if (info.color_attachments[i]->GetImage().GetCreateInfo().domain == ImageDomain::Transient)
+			VK_ASSERT(info.color_attachments[i].view);
+			formats[i] = info.color_attachments[i].view->GetFormat();
+			if (info.color_attachments[i].view->GetImage().GetCreateInfo().domain == ImageDomain::Transient)
 				lazy |= 1u << i;
-			if (info.color_attachments[i]->GetImage().GetLayoutType() == Layout::Optimal)
+			if (info.color_attachments[i].view->GetImage().GetLayoutType() == Layout::Optimal)
 				optimal |= 1u << i;
 
 			// This can change external subpass dependencies, so it must always be hashed.
-			h.u32(info.color_attachments[i]->GetImage().GetSwapchainLayout());
+			h.u32(info.color_attachments[i].view->GetImage().GetSwapchainLayout());
+
+			// Compatible render passes do not care image layouts.
+			if (!compatible)
+			{
+				h.u32(info.color_attachments[i].initial_layout);
+				h.u32(info.color_attachments[i].final_layout);
+			}
 		}
 
-		if (info.depth_stencil)
+		if (info.depth_stencil.view)
 		{
-			if (info.depth_stencil->GetImage().GetCreateInfo().domain == ImageDomain::Transient)
+			if (info.depth_stencil.view->GetImage().GetCreateInfo().domain == ImageDomain::Transient)
 				lazy |= 1u << info.num_color_attachments;
-			if (info.depth_stencil->GetImage().GetLayoutType() == Layout::Optimal)
+			if (info.depth_stencil.view->GetImage().GetLayoutType() == Layout::Optimal)
 				optimal |= 1u << info.num_color_attachments;
+
+			// Compatible render passes do not care image layouts.
+			if (!compatible)
+			{
+				h.u32(info.depth_stencil.initial_layout);
+				h.u32(info.depth_stencil.final_layout);
+			}
 		}
 
 		// For multiview, base layer is encoded into the view mask.
@@ -743,7 +757,7 @@ namespace Vulkan
 				h.u32(info.subpasses[i].resolve_attachments[j]);
 		}
 
-		depth_stencil = info.depth_stencil ? info.depth_stencil->GetFormat() : VK_FORMAT_UNDEFINED;
+		depth_stencil = info.depth_stencil.view ? info.depth_stencil.view->GetFormat() : VK_FORMAT_UNDEFINED;
 		h.data(formats, info.num_color_attachments * sizeof(VkFormat));
 		h.u32(info.num_color_attachments);
 		h.u32(depth_stencil);
@@ -832,7 +846,7 @@ namespace Vulkan
 	{
 		RenderPassInfo info;
 		info.num_color_attachments = 1;
-		info.color_attachments[0] = &GetSwapchainView();
+		info.color_attachments[0].view = &GetSwapchainView();
 		info.clear_attachments = ~0u;
 		info.store_attachments = 1u << 0;
 
@@ -841,14 +855,14 @@ namespace Vulkan
 		case SwapchainRenderPass::Depth:
 		{
 			info.op_flags |= RENDER_PASS_OP_CLEAR_DEPTH_STENCIL_BIT;
-			info.depth_stencil = &GetTransientAttachment(GetSwapchainWidth(), GetSwapchainHeight(), GetDefaultDepthFormat());
+			info.depth_stencil.view = &GetTransientAttachment(GetSwapchainWidth(), GetSwapchainHeight(), GetDefaultDepthFormat());
 			break;
 		}
 
 		case SwapchainRenderPass::DepthStencil:
 		{
 			info.op_flags |= RENDER_PASS_OP_CLEAR_DEPTH_STENCIL_BIT;
-			info.depth_stencil = &GetTransientAttachment(GetSwapchainWidth(), GetSwapchainHeight(), GetDefaultDepthStencilFormat());
+			info.depth_stencil.view = &GetTransientAttachment(GetSwapchainWidth(), GetSwapchainHeight(), GetDefaultDepthStencilFormat());
 			break;
 		}
 

@@ -19,9 +19,8 @@ namespace Vulkan
 		RENDER_PASS_OP_CLEAR_DEPTH_STENCIL_BIT = 1 << 0,
 		RENDER_PASS_OP_LOAD_DEPTH_STENCIL_BIT = 1 << 1,
 		RENDER_PASS_OP_STORE_DEPTH_STENCIL_BIT = 1 << 2,
-		RENDER_PASS_OP_DEPTH_STENCIL_READ_ONLY_BIT = 1 << 3,
-		RENDER_PASS_OP_ENABLE_TRANSIENT_STORE_BIT = 1 << 4,
-		RENDER_PASS_OP_ENABLE_TRANSIENT_LOAD_BIT = 1 << 5
+		RENDER_PASS_OP_ENABLE_TRANSIENT_STORE_BIT = 1 << 3,
+		RENDER_PASS_OP_ENABLE_TRANSIENT_LOAD_BIT = 1 << 4
 	};
 	using RenderPassOpFlags = uint32_t;
 
@@ -29,53 +28,15 @@ namespace Vulkan
 
 	struct RenderPassInfo
 	{
-		const ImageView* color_attachments[VULKAN_NUM_ATTACHMENTS];
-		const ImageView* depth_stencil = nullptr;
-		unsigned num_color_attachments = 0;
-		RenderPassOpFlags op_flags = 0;
-		uint32_t clear_attachments = 0;
-		uint32_t load_attachments = 0;
-		uint32_t store_attachments = 0;
-		uint32_t base_layer = 0;
-		uint32_t num_layers = 1;
-
-		// Render area will be clipped to the actual framebuffer.
-		VkRect2D render_area = { { 0, 0 }, { UINT32_MAX, UINT32_MAX } };
-
-		VkClearColorValue clear_color[VULKAN_NUM_ATTACHMENTS] = {};
-		VkClearDepthStencilValue clear_depth_stencil = { 1.0f, 0 };
-
-		enum class DepthStencil
-		{
-			None,
-			ReadOnly,
-			ReadWrite
-		};
-
-		struct Subpass
-		{
-			uint32_t color_attachments[VULKAN_NUM_ATTACHMENTS];
-			uint32_t input_attachments[VULKAN_NUM_ATTACHMENTS];
-			uint32_t resolve_attachments[VULKAN_NUM_ATTACHMENTS];
-			unsigned num_color_attachments = 0;
-			unsigned num_input_attachments = 0;
-			unsigned num_resolve_attachments = 0;
-			DepthStencil depth_stencil_mode = DepthStencil::ReadWrite;
-		};
-		// If 0/nullptr, assume a default subpass.
-		const Subpass* subpasses = nullptr;
-		unsigned num_subpasses = 0;
-	};
-
-	struct RenderPassInfoM
-	{
 		struct ColorAttachment
 		{
 			// Pointer to ImageView of attachment
 			ImageView* view = nullptr;
-			// Layout that the attachment will be in at the start of the renderpass. VK_IMAGE_LAYOUT_UNDEFINED means it doesn't matter, and the contents of the image can be destructively transitioned away from.
+			// Layout that the attachment will be in at the start of the renderpass. VK_IMAGE_LAYOUT_UNDEFINED meanslayout doesn't matter, and the contents of the image can be destructively transitioned away from.
+			// This is ignored if the view is a swapchain image. Initial_layout must not be UNDEFINED if this attachment is set to be loaded at the start of the pass.
 			VkImageLayout initial_layout;
 			// Layout that the attachment will be transitioned to at end of renderpass. VK_IMAGE_LAYOUT_UNDEFINED means it will use the layout from the last subpass.
+			// This is ignored if the view is a swapchain image
 			VkImageLayout final_layout;
 			// Color the attachment will be cleared to at start of renderpass if this attachment's index bit is set in uint32_t clear_attachment.
 			VkClearColorValue clear_color;
@@ -86,11 +47,12 @@ namespace Vulkan
 			// Pointer to ImageView of attachment
 			ImageView* view = nullptr;
 			// Layout that the attachment will be in at the start of the renderpass. VK_IMAGE_LAYOUT_UNDEFINED means it doesn't matter, and the contents of the image can be destructively transitioned away from.
+			// Initial_layout must not be UNDEFINED if this attachment is set to be loaded at the start of the pass.
 			VkImageLayout initial_layout;
 			// Layout that the attachment will be transitioned to at end of renderpass. VK_IMAGE_LAYOUT_UNDEFINED means it will use the layout from the last subpass.
 			VkImageLayout final_layout;
 			// DepthStencilClearValue the attachment will be cleared to at start of renderpass if the RENDER_PASS_OP_CLEAR_DEPTH_STENCIL_BIT bit is set in op_flags
-			VkClearDepthStencilValue clear_depth_stencil = { 1.0f, 0 };
+			VkClearDepthStencilValue clear_value = { 1.0f, 0 };
 		};
 
 		uint32_t num_color_attachments = 0;
@@ -118,13 +80,6 @@ namespace Vulkan
 
 		struct Subpass
 		{
-			// Override layout used for the color attachment of the same index, in this subpass. If the layout is 
-			// VK_IMAGE_LAYOUT_UNDEFINED (default) the layout is automatically determined from how the attachmet is used in the subpass.
-			VkImageLayout color_attachments_layout[VULKAN_NUM_ATTACHMENTS];
-			// Override layout used for the depth stencil attachment in this subpass. If the layout is 
-			// VK_IMAGE_LAYOUT_UNDEFINED (default) the layout is automatically determined from how the attachmet is used in the subpass.
-			VkImageLayout depth_stencil_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-
 			uint32_t num_color_attachments = 0;
 			uint32_t color_attachments[VULKAN_NUM_ATTACHMENTS];
 			uint32_t num_input_attachments = 0;

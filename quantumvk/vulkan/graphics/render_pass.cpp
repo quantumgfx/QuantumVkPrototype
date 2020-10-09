@@ -18,6 +18,7 @@ using namespace Util;
 
 namespace Vulkan
 {
+
 	void RenderPass::SetupSubpasses(const VkRenderPassCreateInfo& create_info)
 	{
 		auto* attachments = create_info.pAttachments;
@@ -106,7 +107,7 @@ namespace Vulkan
 	{
 		fill(begin(color_attachments), end(color_attachments), VK_FORMAT_UNDEFINED);
 
-		VK_ASSERT(info.num_color_attachments || info.depth_stencil);
+		VK_ASSERT(info.num_color_attachments || info.depth_stencil.view);
 
 		// TODO clean this whole system up
 
@@ -122,10 +123,7 @@ namespace Vulkan
 		if (!info.subpasses)
 		{
 			default_subpass_info.num_color_attachments = info.num_color_attachments;
-			if (info.op_flags & RENDER_PASS_OP_DEPTH_STENCIL_READ_ONLY_BIT)
-				default_subpass_info.depth_stencil_mode = RenderPassInfo::DepthStencil::ReadOnly;
-			else
-				default_subpass_info.depth_stencil_mode = RenderPassInfo::DepthStencil::ReadWrite;
+			default_subpass_info.depth_stencil_mode = RenderPassInfo::DepthStencil::ReadWrite;
 
 			for (unsigned i = 0; i < info.num_color_attachments; i++)
 				default_subpass_info.color_attachments[i] = i;
@@ -134,7 +132,7 @@ namespace Vulkan
 		}
 
 		// First, set up attachment descriptions.
-		const unsigned num_attachments = info.num_color_attachments + (info.depth_stencil ? 1 : 0);
+		const uint32_t num_attachments = info.num_color_attachments + (info.depth_stencil.view ? 1 : 0);
 		VkAttachmentDescription attachments[VULKAN_NUM_ATTACHMENTS + 1];
 		uint32_t implicit_transitions = 0;
 		uint32_t implicit_bottom_of_pipe = 0;
@@ -168,27 +166,13 @@ namespace Vulkan
 		if (info.op_flags & RENDER_PASS_OP_STORE_DEPTH_STENCIL_BIT)
 			ds_store_op = VK_ATTACHMENT_STORE_OP_STORE;
 
-		bool ds_read_only = (info.op_flags & RENDER_PASS_OP_DEPTH_STENCIL_READ_ONLY_BIT) != 0;
-		VkImageLayout depth_stencil_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-		if (info.depth_stencil)
-		{
-			if (ds_load_op == VK_ATTACHMENT_LOAD_OP_LOAD)
-			{
-				depth_stencil_layout = info.depth_stencil->GetImage().GetLayout(ds_read_only ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-			}
-			else
-			{
-				// The image is cleared or it's inital contents are ignored, so just start in layout undefined.
-				depth_stencil_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-			}
-
-		}
-
 		for (unsigned i = 0; i < info.num_color_attachments; i++)
 		{
-			VK_ASSERT(info.color_attachments[i]);
-			color_attachments[i] = info.color_attachments[i]->GetFormat();
-			auto& image = info.color_attachments[i]->GetImage();
+			VK_ASSERT(info.color_attachments[i].view);
+
+
+			color_attachments[i] = info.color_attachments[i].view->GetFormat();
+			auto& image = info.color_attachments[i].view->GetImage();
 			auto& att = attachments[i];
 			att.flags = 0;
 			att.format = color_attachments[i];
@@ -197,20 +181,16 @@ namespace Vulkan
 			att.storeOp = color_store_op(i);
 			att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			att.initialLayout = info.color_attachments[i].initial_layout;
 			// Undefined final layout here for now means that we will just use the layout of the last
 			// subpass which uses this attachment to avoid any dummy transition at the end.
-			att.finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			att.finalLayout = info.color_attachments[i].final_layout;
 
 			if (image.GetCreateInfo().domain == ImageDomain::Transient)
 			{
-				if (enable_transient_load)
+
+				if (!enable_transient_load)
 				{
-					// The transient will behave like a normal image.
-					att.initialLayout = info.color_attachments[i]->GetImage().GetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-				}
-				else
-				{
-					// Force a clean discard.
 					VK_ASSERT(att.loadOp != VK_ATTACHMENT_LOAD_OP_LOAD);
 					att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 				}
@@ -236,23 +216,24 @@ namespace Vulkan
 					implicit_bottom_of_pipe |= 1u << i;
 				implicit_transitions |= 1u << i;
 			}
-			else
-				att.initialLayout = info.color_attachments[i]->GetImage().GetLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+			VK_ASSERT(!(att.initialLayout == VK_IMAGE_LAYOUT_UNDEFINED && att.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD));
 		}
 
-		depth_stencil = info.depth_stencil ? info.depth_stencil->GetFormat() : VK_FORMAT_UNDEFINED;
-		if (info.depth_stencil)
+		depth_stencil = info.depth_stencil.view ? info.depth_stencil.view->GetFormat() : VK_FORMAT_UNDEFINED;
+		if (info.depth_stencil.view)
 		{
-			auto& image = info.depth_stencil->GetImage();
+			auto& image = info.depth_stencil.view->GetImage();
 			auto& att = attachments[info.num_color_attachments];
 			att.flags = 0;
 			att.format = depth_stencil;
 			att.samples = image.GetCreateInfo().samples;
 			att.loadOp = ds_load_op;
 			att.storeOp = ds_store_op;
+			att.initialLayout = info.depth_stencil.initial_layout;
 			// Undefined final layout here for now means that we will just use the layout of the last
 			// subpass which uses this attachment to avoid any dummy transition at the end.
-			att.finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			att.finalLayout = info.depth_stencil.final_layout;
 
 			if (FormatToAspectMask(depth_stencil) & VK_IMAGE_ASPECT_STENCIL_BIT)
 			{
@@ -267,12 +248,7 @@ namespace Vulkan
 
 			if (image.GetCreateInfo().domain == ImageDomain::Transient)
 			{
-				if (enable_transient_load)
-				{
-					// The transient will behave like a normal image.
-					att.initialLayout = depth_stencil_layout;
-				}
-				else
+				if (!enable_transient_load)
 				{
 					if (att.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
 						att.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -291,8 +267,8 @@ namespace Vulkan
 
 				implicit_transitions |= 1u << info.num_color_attachments;
 			}
-			else
-				att.initialLayout = depth_stencil_layout;
+
+			VK_ASSERT(!(att.initialLayout == VK_IMAGE_LAYOUT_UNDEFINED && att.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD));
 		}
 
 		Util::StackAllocator<VkAttachmentReference, 1024> reference_allocator;
@@ -351,7 +327,7 @@ namespace Vulkan
 				}
 			}
 
-			if (info.depth_stencil && subpass_infos[i].depth_stencil_mode != RenderPassInfo::DepthStencil::None)
+			if (info.depth_stencil.view && subpass_infos[i].depth_stencil_mode != RenderPassInfo::DepthStencil::None)
 			{
 				depth->attachment = info.num_color_attachments;
 				// Fill in later.
@@ -659,8 +635,7 @@ namespace Vulkan
 		rp_info.attachmentCount = num_attachments;
 
 		// Add external subpass dependencies.
-		for_each_bit(external_color_dependencies | external_depth_dependencies | external_input_dependencies,
-			[&](unsigned subpass) {
+		for_each_bit(external_color_dependencies | external_depth_dependencies | external_input_dependencies, [&](unsigned subpass) {
 				external_dependencies.emplace_back();
 				auto& dep = external_dependencies.back();
 				dep.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -861,22 +836,22 @@ namespace Vulkan
 		unsigned num_views = 0;
 		for (unsigned i = 0; i < info.num_color_attachments; i++)
 		{
-			VK_ASSERT(info.color_attachments[i]);
+			VK_ASSERT(info.color_attachments[i].view);
 
 			// For multiview, we use view indices to pick right layers.
 			if (info.num_layers > 1)
-				views[num_views++] = info.color_attachments[i]->GetView();
+				views[num_views++] = info.color_attachments[i].view->GetView();
 			else
-				views[num_views++] = info.color_attachments[i]->GetRenderTargetView(info.base_layer);
+				views[num_views++] = info.color_attachments[i].view->GetRenderTargetView(info.base_layer);
 		}
 
-		if (info.depth_stencil)
+		if (info.depth_stencil.view)
 		{
 			// For multiview, we use view indices to pick right layers.
 			if(info.num_layers > 1)
-				views[num_views++] = info.depth_stencil->GetView();
+				views[num_views++] = info.depth_stencil.view->GetView();
 			else
-				views[num_views++] = info.depth_stencil->GetRenderTargetView(info.base_layer);
+				views[num_views++] = info.depth_stencil.view->GetRenderTargetView(info.base_layer);
 		}
 
 		return num_views;
@@ -885,9 +860,9 @@ namespace Vulkan
 	static const ImageView* get_image_view(const RenderPassInfo& info, unsigned index)
 	{
 		if (index < info.num_color_attachments)
-			return info.color_attachments[index];
+			return info.color_attachments[index].view;
 		else
-			return info.depth_stencil;
+			return info.depth_stencil.view;
 	}
 
 	void Framebuffer::ComputeAttachmentDimensions(const RenderPassInfo& info, unsigned index,
@@ -904,21 +879,21 @@ namespace Vulkan
 	{
 		width = UINT32_MAX;
 		height = UINT32_MAX;
-		VK_ASSERT(info.num_color_attachments || info.depth_stencil);
+		VK_ASSERT(info.num_color_attachments || info.depth_stencil.view);
 
 		for (unsigned i = 0; i < info.num_color_attachments; i++)
 		{
-			VK_ASSERT(info.color_attachments[i]);
-			unsigned lod = info.color_attachments[i]->GetCreateInfo().base_level;
-			width = std::min(width, info.color_attachments[i]->GetImage().GetWidth(lod));
-			height = std::min(height, info.color_attachments[i]->GetImage().GetHeight(lod));
+			VK_ASSERT(info.color_attachments[i].view);
+			unsigned lod = info.color_attachments[i].view->GetCreateInfo().base_level;
+			width = std::min(width, info.color_attachments[i].view->GetImage().GetWidth(lod));
+			height = std::min(height, info.color_attachments[i].view->GetImage().GetHeight(lod));
 		}
 
-		if (info.depth_stencil)
+		if (info.depth_stencil.view)
 		{
-			unsigned lod = info.depth_stencil->GetCreateInfo().base_level;
-			width = std::min(width, info.depth_stencil->GetImage().GetWidth(lod));
-			height = std::min(height, info.depth_stencil->GetImage().GetHeight(lod));
+			unsigned lod = info.depth_stencil.view->GetCreateInfo().base_level;
+			width = std::min(width, info.depth_stencil.view->GetImage().GetWidth(lod));
+			height = std::min(height, info.depth_stencil.view->GetImage().GetHeight(lod));
 		}
 	}
 
@@ -959,7 +934,7 @@ namespace Vulkan
 		if (!imageless)
 			num_views = SetupRawViews(views, info_);
 		else
-			num_views = info.num_color_attachments + (info.depth_stencil ? 1 : 0);
+			num_views = info.num_color_attachments + (info.depth_stencil.view ? 1 : 0);
 
 		VkFramebufferCreateInfo fb_info = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
 		VkFramebufferAttachmentsCreateInfoKHR attachments_info = { VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO_KHR };
@@ -1038,7 +1013,7 @@ namespace Vulkan
 
 		if (imageless)
 		{
-			unsigned num_views = info.num_color_attachments + (info.depth_stencil ? 1 : 0);
+			unsigned num_views = info.num_color_attachments + (info.depth_stencil.view ? 1 : 0);
 			for (unsigned i = 0; i < num_views; i++)
 			{
 				auto* view = get_image_view(info, i);
@@ -1057,12 +1032,12 @@ namespace Vulkan
 		{
 			for (unsigned i = 0; i < info.num_color_attachments; i++)
 			{
-				VK_ASSERT(info.color_attachments[i]);
-				h.u64(info.color_attachments[i]->GetCookie());
+				VK_ASSERT(info.color_attachments[i].view);
+				h.u64(info.color_attachments[i].view->GetCookie());
 			}
 
-			if (info.depth_stencil)
-				h.u64(info.depth_stencil->GetCookie());
+			if (info.depth_stencil.view)
+				h.u64(info.depth_stencil.view->GetCookie());
 		}
 
 		// For multiview we bind the whole attachment, and base layer is encoded in the render pass.

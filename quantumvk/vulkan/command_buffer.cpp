@@ -513,9 +513,9 @@ namespace Vulkan
 
 		unsigned i;
 		for (i = 0; i < info.num_color_attachments; i++)
-			cmd->framebuffer_attachments[i] = info.color_attachments[i];
-		if (info.depth_stencil)
-			cmd->framebuffer_attachments[i++] = info.depth_stencil;
+			cmd->framebuffer_attachments[i] = info.color_attachments[i].view;
+		if (info.depth_stencil.view)
+			cmd->framebuffer_attachments[i++] = info.depth_stencil.view;
 
 		cmd->InitViewportScissor(info, fb);
 		cmd->pipeline_state.subpass_index = subpass;
@@ -581,9 +581,9 @@ namespace Vulkan
 		memset(framebuffer_attachments, 0, sizeof(framebuffer_attachments));
 		unsigned att;
 		for (att = 0; att < info.num_color_attachments; att++)
-			framebuffer_attachments[att] = info.color_attachments[att];
-		if (info.depth_stencil)
-			framebuffer_attachments[att++] = info.depth_stencil;
+			framebuffer_attachments[att] = info.color_attachments[att].view;
+		if (info.depth_stencil.view)
+			framebuffer_attachments[att++] = info.depth_stencil.view;
 
 		InitViewportScissor(info, framebuffer);
 
@@ -592,20 +592,20 @@ namespace Vulkan
 
 		for (unsigned i = 0; i < info.num_color_attachments; i++)
 		{
-			VK_ASSERT(info.color_attachments[i]);
+			VK_ASSERT(info.color_attachments[i].view);
 			if (info.clear_attachments & (1u << i))
 			{
-				clear_values[i].color = info.clear_color[i];
+				clear_values[i].color = info.color_attachments[i].clear_color;
 				num_clear_values = i + 1;
 			}
 
-			if (info.color_attachments[i]->GetImage().IsSwapchainImage())
+			if (info.color_attachments[i].view->GetImage().IsSwapchainImage())
 				uses_swapchain = true;
 		}
 
-		if (info.depth_stencil && (info.op_flags & RENDER_PASS_OP_CLEAR_DEPTH_STENCIL_BIT) != 0)
+		if (info.depth_stencil.view && (info.op_flags & RENDER_PASS_OP_CLEAR_DEPTH_STENCIL_BIT) != 0)
 		{
-			clear_values[info.num_color_attachments].depthStencil = info.clear_depth_stencil;
+			clear_values[info.num_color_attachments].depthStencil = info.depth_stencil.clear_value;
 			num_clear_values = info.num_color_attachments + 1;
 		}
 
