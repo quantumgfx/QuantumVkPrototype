@@ -75,7 +75,7 @@ namespace Vulkan
 #ifdef __APPLE__
 		// Events are not supported in MoltenVK.
 		workarounds.emulate_event_as_pipeline_barrier = true;
-		LOGW("Emulating events as pipeline barriers on Metal emulation.\n");
+		QM_LOG_WARN("Emulating events as pipeline barriers on Metal emulation.\n");
 #else
 		if (gpu_props.vendorID == VENDOR_ID_NVIDIA &&
 #ifdef _WIN32

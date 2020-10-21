@@ -1314,8 +1314,6 @@ namespace Vulkan
 					else
 					{ // One barrier needed between transfer and graphics
 
-						QM_LOG_TRACE("ELSE graphics (%p), transfer(%p)\n", graphics_queue, transfer_queue);
-
 						VkPipelineStageFlags dst_stages = generate_mips ? VK_PIPELINE_STAGE_TRANSFER_BIT : possible_image_stages;
 
 						CommandBufferHandle graphics_cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);

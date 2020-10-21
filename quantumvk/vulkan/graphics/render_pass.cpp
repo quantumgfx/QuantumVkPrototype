@@ -635,7 +635,7 @@ namespace Vulkan
 		rp_info.attachmentCount = num_attachments;
 
 		// Add external subpass dependencies.
-		for_each_bit(external_color_dependencies | external_depth_dependencies | external_input_dependencies, [&](unsigned subpass) {
+		ForEachBit(external_color_dependencies | external_depth_dependencies | external_input_dependencies, [&](unsigned subpass) {
 				external_dependencies.emplace_back();
 				auto& dep = external_dependencies.back();
 				dep.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -672,7 +672,7 @@ namespace Vulkan
 			});
 
 		// Queue up self-dependencies (COLOR | DEPTH) -> INPUT.
-		for_each_bit(color_self_dependencies | depth_self_dependencies, [&](unsigned subpass) {
+		ForEachBit(color_self_dependencies | depth_self_dependencies, [&](unsigned subpass) {
 			external_dependencies.emplace_back();
 			auto& dep = external_dependencies.back();
 			dep.srcSubpass = subpass;
@@ -897,27 +897,6 @@ namespace Vulkan
 		}
 	}
 
-	static VkImageUsageFlags get_attachment_usage(const RenderPassInfo& info, unsigned index)
-	{
-		auto* view = get_image_view(info, index);
-		VK_ASSERT(view);
-		return view->GetImage().GetCreateInfo().usage;
-	}
-
-	static VkImageCreateFlags get_attachment_flags(const RenderPassInfo& info, unsigned index)
-	{
-		auto* view = get_image_view(info, index);
-		VK_ASSERT(view);
-		return view->GetImage().GetCreateInfo().flags;
-	}
-
-	static uint32_t compute_view_formats(const RenderPassInfo& info, unsigned index, VkFormat* formats)
-	{
-		auto* view = get_image_view(info, index);
-		VK_ASSERT(view);
-		return ImageCreateInfo::ComputeViewFormats(view->GetImage().GetCreateInfo(), formats);
-	}
-
 	Framebuffer::Framebuffer(Device* device_, const RenderPass& rp, const RenderPassInfo& info_)
 		: Cookie(device_)
 		, device(device_)
@@ -926,50 +905,15 @@ namespace Vulkan
 	{
 		ComputeDimensions(info_, width, height);
 		VkImageView views[VULKAN_NUM_ATTACHMENTS + 1];
-		unsigned num_views = 0;
-
-		auto& features = device->GetDeviceExtensions();
-		bool imageless = features.imageless_features.imagelessFramebuffer == VK_TRUE;
-
-		if (!imageless)
-			num_views = SetupRawViews(views, info_);
-		else
-			num_views = info.num_color_attachments + (info.depth_stencil.view ? 1 : 0);
-
+		unsigned num_views = SetupRawViews(views, info_);
+		
 		VkFramebufferCreateInfo fb_info = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
-		VkFramebufferAttachmentsCreateInfoKHR attachments_info = { VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO_KHR };
 		fb_info.renderPass = rp.GetRenderPass();
 		fb_info.attachmentCount = num_views;
-
-		unsigned num_layers = info.num_layers > 1 ? (info.num_layers + info.base_layer) : 1;
-		VkFormat view_formats[VULKAN_NUM_ATTACHMENTS][2];
-		VkFramebufferAttachmentImageInfoKHR image_infos[VULKAN_NUM_ATTACHMENTS + 1];
-
-		if (imageless)
-		{
-			// Got to provide all this useless information, le sigh ...
-			fb_info.pNext = &attachments_info;
-			fb_info.flags = VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT_KHR;
-			attachments_info.attachmentImageInfoCount = num_views;
-			attachments_info.pAttachmentImageInfos = image_infos;
-			for (unsigned view = 0; view < num_views; view++)
-			{
-				auto& image_info = image_infos[view];
-				image_info = { VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO_KHR };
-				ComputeAttachmentDimensions(info_, view, image_info.width, image_info.height);
-				image_info.layerCount = num_layers;
-				image_info.usage = get_attachment_usage(info_, view);
-				image_info.flags = get_attachment_flags(info_, view);
-				image_info.viewFormatCount = compute_view_formats(info_, view, view_formats[view]);
-				image_info.pViewFormats = view_formats[view];
-			}
-		}
-		else
-			fb_info.pAttachments = views;
-
+		fb_info.pAttachments = views;
 		fb_info.width = width;
 		fb_info.height = height;
-		fb_info.layers = num_layers;
+		fb_info.layers = 1; // For multiview, layers must be 1. The render pass encodes a mask.
 
 		auto& table = device->GetDeviceTable();
 		if (table.vkCreateFramebuffer(device->GetDevice(), &fb_info, nullptr, &framebuffer) != VK_SUCCESS)
@@ -1008,37 +952,14 @@ namespace Vulkan
 		Hasher h;
 		h.u64(rp.get_hash());
 
-		auto& features = device->GetDeviceExtensions();
-		bool imageless = features.imageless_features.imagelessFramebuffer == VK_TRUE;
-
-		if (imageless)
+		for (unsigned i = 0; i < info.num_color_attachments; i++)
 		{
-			unsigned num_views = info.num_color_attachments + (info.depth_stencil.view ? 1 : 0);
-			for (unsigned i = 0; i < num_views; i++)
-			{
-				auto* view = get_image_view(info, i);
-				VK_ASSERT(view);
-				auto& image_info = view->GetImage().GetCreateInfo();
-				uint32_t width, height;
-				Framebuffer::ComputeAttachmentDimensions(info, i, width, height);
-				h.u32(width);
-				h.u32(height);
-				h.u32(image_info.flags);
-				h.u32(image_info.usage);
-				h.u32(image_info.misc & IMAGE_MISC_MUTABLE_SRGB_BIT);
-			}
+			VK_ASSERT(info.color_attachments[i].view);
+			h.u64(info.color_attachments[i].view->GetCookie());
 		}
-		else
-		{
-			for (unsigned i = 0; i < info.num_color_attachments; i++)
-			{
-				VK_ASSERT(info.color_attachments[i].view);
-				h.u64(info.color_attachments[i].view->GetCookie());
-			}
 
-			if (info.depth_stencil.view)
-				h.u64(info.depth_stencil.view->GetCookie());
-		}
+		if (info.depth_stencil.view)
+			h.u64(info.depth_stencil.view->GetCookie());
 
 		// For multiview we bind the whole attachment, and base layer is encoded in the render pass.
 		if (info.num_layers > 1)

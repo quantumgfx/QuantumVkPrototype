@@ -210,14 +210,6 @@ namespace Vulkan
 		Frame().destroyed_programs.push_back(program);
 	}
 
-	void Device::DestroyShader(Shader* shader)
-	{
-#ifdef QM_VULKAN_MT
-		std::lock_guard holder_{ lock.shader_lock };
-#endif
-		Frame().destroyed_shaders.push_back(shader);
-	}
-
 	void Device::DestroyBufferView(VkBufferView view)
 	{
 		LOCK();
@@ -418,17 +410,11 @@ namespace Vulkan
 			managers.event.RecycleEvent(event);
 
 		{
-#ifdef QM_VULKAN_MT
-			std::lock_guard program_holder_{ device.lock.program_lock };
-#endif
 			for (auto& program : destroyed_programs)
 				device.handle_pool.programs.free(program);
 		}
 
 		{
-#ifdef QM_VULKAN_MT
-			std::lock_guard shader_holder_{ device.lock.shader_lock };
-#endif
 			for (auto& shader : destroyed_shaders)
 				device.handle_pool.shaders.free(shader);
 		}
@@ -528,9 +514,15 @@ namespace Vulkan
 		transient_allocator.Clear();
 		physical_allocator.Clear();
 
-		descriptor_set_allocators.for_each([](DescriptorSetAllocator* allocator) {
-			allocator->Clear();
-			});
+		{
+#ifdef QM_VULKAN_MT
+			std::lock_guard holder_{ lock.program_lock };
+#endif
+
+			for (auto& program : active_programs)
+				if(program)
+					program->Clear();
+		}
 
 		for (auto& frame : per_frame)
 		{
@@ -551,9 +543,15 @@ namespace Vulkan
 		transient_allocator.BeginFrame();
 		physical_allocator.BeginFrame();
 
-		descriptor_set_allocators.for_each([](DescriptorSetAllocator* allocator) {
-			allocator->BeginFrame();
-			});
+		{
+#ifdef QM_VULKAN_MT
+			std::lock_guard holder_{ lock.program_lock };
+#endif
+
+			for (auto& program : active_programs)
+				if (program)
+					program->BeginFrame();
+		}
 
 		VK_ASSERT(!per_frame.empty());
 

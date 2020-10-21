@@ -55,7 +55,7 @@ namespace Vulkan
 		friend struct SamplerDeleter;
 		~Sampler();
 
-		VkSampler get_sampler() const
+		VkSampler GetSampler() const
 		{
 			return sampler;
 		}

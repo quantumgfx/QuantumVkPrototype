@@ -21,6 +21,11 @@
 #define VK_ASSERT(x) ((void)0)
 #endif
 
+#define QM_NO_MOVE_NO_COPY(type) \
+void operator=(const type##&) = delete; \
+type##(const type##&) = delete;
+
+
 namespace Vulkan
 {
 	struct NoCopyNoMove

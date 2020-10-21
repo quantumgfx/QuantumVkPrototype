@@ -8,6 +8,10 @@
 
 namespace Util
 {
+	/**
+	 * @brief Object must inheiret from this class to be used in the TemporaryHashmap
+	 * @tparam T Object Type
+	*/
 	template <typename T>
 	class TemporaryHashmapEnabled
 	{
@@ -17,7 +21,7 @@ namespace Util
 			hash = hash_;
 		}
 
-		void set_index(unsigned index_)
+		void set_index(uint32_t index_)
 		{
 			index = index_;
 		}
@@ -27,17 +31,18 @@ namespace Util
 			return hash;
 		}
 
-		unsigned get_index() const
+		uint32_t get_index() const
 		{
 			return index;
 		}
 
 	private:
 		Hash hash = 0;
-		unsigned index = 0;
+		uint32_t index = 0;
 	};
 
-	template <typename T, unsigned RingSize = 4, bool ReuseObjects = false>
+	
+	template <typename T, uint32_t RingSize = 4, bool ReuseObjects = false>
 	class TemporaryHashmap
 	{
 	public:
@@ -46,6 +51,9 @@ namespace Util
 			clear();
 		}
 
+		/**
+		 * @brief Clears all elements in the temporary hash map, and frees and destructs any vacant objects
+		*/
 		void clear()
 		{
 			for (auto& ring : rings)
@@ -54,6 +62,7 @@ namespace Util
 					object_pool.free(static_cast<T*>(&node));
 				ring.clear();
 			}
+
 			hashmap.clear();
 
 			for (auto& vacant : vacants)
@@ -62,6 +71,10 @@ namespace Util
 			object_pool.clear();
 		}
 
+		/**
+		 * @brief Begins a new frame, if Reuse objects is true then it moves every object that has existed for RingSize frames into
+		 * the vacants list. Otherwise it destructs all objects that have existed for more that ringsize frames.
+		*/
 		void begin_frame()
 		{
 			index = (index + 1) & (RingSize - 1);
@@ -125,11 +138,11 @@ namespace Util
 	private:
 		IntrusiveList<T> rings[RingSize];
 		ObjectPool<T> object_pool;
-		unsigned index = 0;
+		uint32_t index = 0;
 		IntrusiveHashMap<IntrusivePODWrapper<typename IntrusiveList<T>::Iterator>> hashmap;
 		std::vector<typename IntrusiveList<T>::Iterator> vacants;
 
-		template <bool reuse>
+		template <bool Reuse>
 		struct ReuseTag
 		{
 		};

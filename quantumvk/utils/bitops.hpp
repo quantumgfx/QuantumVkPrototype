@@ -40,8 +40,9 @@ namespace Util
 #error "Implement me."
 #endif
 
+	// Searches through the bitmask "value", from least signifigant to most and for every 1 set in the bitmask, calls func on the position of that 1.
 	template <typename T>
-	inline void for_each_bit(uint32_t value, const T& func)
+	inline void ForEachBit(uint32_t value, const T& func)
 	{
 		while (value)
 		{
@@ -52,7 +53,7 @@ namespace Util
 	}
 
 	template <typename T>
-	inline void for_each_bit_range(uint32_t value, const T& func)
+	inline void ForEachBitRange(uint32_t value, const T& func)
 	{
 		if (value == ~0u)
 		{
@@ -72,7 +73,7 @@ namespace Util
 		}
 	}
 
-	inline uint32_t next_pow2(uint32_t v)
+	inline uint32_t NextPow2(uint32_t v)
 	{
 		v--;
 		v |= v >> 16;
@@ -81,5 +82,13 @@ namespace Util
 		v |= v >> 2;
 		v |= v >> 1;
 		return v + 1;
+	}
+
+	inline uint32_t GetMostSignificantBitSet(uint32_t value)
+	{
+		if (!value)
+			return 32;
+		
+		return 31 - leading_zeroes(value);
 	}
 }

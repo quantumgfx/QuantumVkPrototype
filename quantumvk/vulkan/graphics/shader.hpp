@@ -52,22 +52,6 @@ namespace Vulkan
 		DescriptorSetLayout sets[VULKAN_NUM_DESCRIPTOR_SETS];
 	};
 
-	// Represents a single descriptor in a descriptor set. 
-	struct ResourceBinding
-	{
-		union 
-		{
-			VkDescriptorBufferInfo buffer;
-			struct
-			{
-				VkDescriptorImageInfo fp;
-				VkDescriptorImageInfo integer;
-			} image;
-			VkBufferView buffer_view;
-		};
-		VkDeviceSize dynamic_offset;
-	};
-
 	class Shader;
 
 	struct ShaderDeleter
@@ -99,6 +83,7 @@ namespace Vulkan
 		}
 
 		static const char* StageToName(ShaderStage stage);
+		static VkShaderStageFlagBits StageToVkType(ShaderStage stage);
 
 	private:
 
@@ -117,43 +102,6 @@ namespace Vulkan
 
 	using ShaderHandle = Util::IntrusivePtr<Shader>;
 
-	// Contains extra infomation, wrapping a ResourceBinding
-	struct UniformBinding
-	{
-		// Resource bound to this uniform
-		ResourceBinding resource;
-		// Primary object cookie
-		uint64_t cookie = 0;
-		// Secondary object cookie (for example: sampler)
-		uint64_t secondary_cookie = 0;
-	};
-
-	struct PerDescriptorSet
-	{
-		uint32_t stages = 0;
-		uint32_t stages_for_bindings[VULKAN_NUM_BINDINGS] = {};
-		DescriptorSetLayout set_layout = {};
-		DescriptorSetAllocator* set_allocator = nullptr;
-		VkDescriptorUpdateTemplateKHR update_template;
-
-		// Descriptors
-
-		// Offset into the descriptor array for each binding
-		uint32_t offset[VULKAN_NUM_BINDINGS] = {};
-		uint32_t descriptor_count = 0;
-		UniformBinding* descriptor_array = nullptr;
-
-		void SetDescriptor(uint32_t binding, uint32_t array_index, const UniformBinding& resource)
-		{
-			*(descriptor_array + offset[binding] + array_index) = resource;
-		}
-
-		UniformBinding& GetDescriptor(uint32_t binding, uint32_t array_index) const
-		{
-			return *(descriptor_array + offset[binding] + array_index);
-		}
-	};
-
 	// Forward declaration
 	class Program;
 
@@ -166,61 +114,26 @@ namespace Vulkan
 		ProgramLayout(Device* device);
 		~ProgramLayout();
 
-		VkPipelineLayout GetVkLayout() const { return vklayout; }
 		// Masks
 		uint32_t GetAttribMask() const { return attribute_mask; }
 		uint32_t GetRenderTargetMask() const { return render_target_mask; }
 		uint32_t GetSpecConstantMask(ShaderStage stage) const { return spec_constant_mask[static_cast<uint32_t>(stage)]; }
 		uint32_t GetCombindedSpecConstantMask() const { return combined_spec_constant_mask; }
-		uint32_t GetDescriptorSetMask() const { return descriptor_set_mask; }
-		// Push constants
-		const VkPushConstantRange& GetPushConstantRange() const { return push_constant_range; }
+		UniformManager& GetUniformManager() { return uniforms; }
+
 		// Creates the layout
-		void CreateLayout(Program& program);
-		void DestroyLayout();
-
-		// Returns a particular descriptor set
-		PerDescriptorSet* GetDescriptorSet(uint32_t set) const { return per_set_array + set; }
-
-		// Returns whether a descriptor set is active
-		bool HasDescriptorSet(uint32_t set) const { return (descriptor_set_mask & (1u << set)); }
-		// Returns whether a descriptor binding is active
-		bool HasDescriptorBinding(uint32_t set, uint32_t binding) const { return GetDescriptorSet(set)->stages_for_bindings[binding] != 0; }
-
-		// Returns the number of descriptors a set has
-		uint32_t GetDescriptorCount(uint32_t set) const { return GetDescriptorSet(set)->descriptor_count; };
-		// Returns the array size of a particular binding
-		uint32_t GetArraySize(uint32_t set, uint32_t binding) const { return GetDescriptorSet(set)->set_layout.array_size[binding]; }
-		// Returns the descriptor stored at a particular (set, binding, array_index)
-		UniformBinding& GetDescriptor(uint32_t set, uint32_t binding, uint32_t array_index) const { return GetDescriptorSet(set)->GetDescriptor(binding, array_index); }
-
-		// Updates the descriptor set
-		VkDescriptorSet FlushDescriptorSet(uint32_t thread_index, uint32_t set);
-
-		void ResetDescriptorSets();
+		void InitLayout(Program& program);
 
 	private:
 
-		void CreateUpdateTemplates();
-		void UpdateDescriptorSetLegacy(VkDescriptorSet desc_set, const DescriptorSetLayout& set_layout, uint32_t set);
-
 		Device* device;
 
-		VkPipelineLayout vklayout = VK_NULL_HANDLE;
 		uint32_t attribute_mask = 0;
 		uint32_t render_target_mask = 0;
 		uint32_t spec_constant_mask[Util::ecast(ShaderStage::Count)] = {};
 		uint32_t combined_spec_constant_mask = 0;
 
-		uint32_t descriptor_set_mask = 0;
-		//uint32_t bindless_descriptor_set_mask = 0;
-
-		uint32_t desc_set_count = 0;
-		PerDescriptorSet* per_set_array = nullptr;
-		uint32_t descriptor_count = 0;
-		UniformBinding* descriptor_array = nullptr;
-
-		VkPushConstantRange push_constant_range = {};
+		UniformManager uniforms;
 
 	};
 
@@ -274,7 +187,7 @@ namespace Vulkan
 				if (stage == ShaderStage::Geometry)
 					return stages.geometry;
 			}
-			if (shaders.index() == 1)
+			else if (shaders.index() == 1)
 			{
 				auto& stages = std::get<1>(shaders);
 				if (stage == ShaderStage::Compute)
@@ -297,28 +210,17 @@ namespace Vulkan
 			}
 		}
 
-		ProgramType GetProgramType()
-		{
-			return shaders.index() == 0 ? ProgramType::Graphics : ProgramType::Compute;
-		}
+		ProgramType GetProgramType() { return shaders.index() == 0 ? ProgramType::Graphics : ProgramType::Compute; }
 
-		Util::Hash GetHash() const
-		{
-			return hash;
-		}
-
-		ProgramLayout& GetLayout()
-		{
-			return program_layout;
-		}
+		Util::Hash GetHash() const { return hash; }
+		ProgramLayout& GetLayout() { return program_layout; }
+		UniformManager& GetUniforms() { return program_layout.GetUniformManager(); }
 
 		VkPipeline GetPipeline(Util::Hash hash) const;
 		VkPipeline AddPipeline(Util::Hash hash, VkPipeline pipeline);
 
-		void ResetUniforms()
-		{
-			program_layout.ResetDescriptorSets();
-		}
+		void BeginFrame();
+		void Clear();
 
 	private:
 

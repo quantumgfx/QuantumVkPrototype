@@ -15,7 +15,7 @@ namespace Vulkan
 		ProgramHandle program = ProgramHandle(handle_pool.programs.allocate(this, shaders));
 
 #ifdef QM_VULKAN_MT
-		std::lock_guard holder_{ lock.shader_lock };
+		std::lock_guard holder_{ lock.program_lock };
 #endif
 		if (!invalid_programs.empty())
 		{
@@ -35,7 +35,7 @@ namespace Vulkan
 		ProgramHandle program = ProgramHandle(handle_pool.programs.allocate(this, shaders));
 
 #ifdef QM_VULKAN_MT
-		std::lock_guard holder_{ lock.shader_lock };
+		std::lock_guard holder_{ lock.program_lock };
 #endif
 		if (!invalid_programs.empty())
 		{
@@ -52,6 +52,9 @@ namespace Vulkan
 
 	void Device::UpdateInvalidProgramsNoLock()
 	{
+#ifdef QM_VULKAN_MT
+		std::lock_guard holder_{ lock.program_lock };
+#endif
 		// Always called inside device
 
 		for (uint32_t i = 0; i < active_programs.size(); i++)

@@ -133,17 +133,17 @@ namespace Vulkan
 
 		// Program lock, managing program and shader deletion
 		std::mutex program_lock;
-		std::mutex shader_lock;
 #endif
 		unsigned counter = 0;
 	};
 
 	struct PerFrame
 	{
+
+		QM_NO_MOVE_NO_COPY(PerFrame)
+
 		PerFrame(Device* device, unsigned index);
 		~PerFrame();
-		void operator=(const PerFrame&) = delete;
-		PerFrame(const PerFrame&) = delete;
 
 		void Begin();
 
@@ -235,7 +235,7 @@ namespace Vulkan
 		friend class FramebufferAllocator;
 		friend class RenderPass;
 		friend class Texture;
-		friend class DescriptorSetAllocator;
+		friend class UniformManager;
 		friend class ImageResourceHolder;
 		friend struct PerFrame;
 
@@ -490,15 +490,7 @@ namespace Vulkan
 
 		DeviceManagers managers;
 
-//#ifdef QM_VULKAN_MT
-//		Quantum::ThreadGroup thread_group;
-//		std::mutex thread_group_mutex;
-//#endif
-
 		DeviceLock lock;
-
-		// Must be freed after per_frame stuff
-		VulkanIntrusiveObjectPool<DescriptorSetAllocator> descriptor_set_allocators;
 
 		// The per frame structure must be destroyed after
 		// the hashmap data structures below, so it must be declared before.
@@ -595,7 +587,6 @@ namespace Vulkan
 		void KeepHandleAlive(ImageHandle handle);
 
 		void DestroyProgramNoLock(Program* program);
-		void DestroyShader(Shader* shader);
 
 		void DestroyBufferNolock(VkBuffer buffer, const DeviceAllocation& allocation);
 		void DestroyImageNolock(VkImage image, const DeviceAllocation& allocation);

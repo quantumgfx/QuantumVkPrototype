@@ -470,9 +470,10 @@ namespace Vulkan
 		dirty_sets = ~0u;
 		dirty_vbos = ~0u;
 		current_pipeline = VK_NULL_HANDLE;
-		current_pipeline_layout = VK_NULL_HANDLE;
+		current_uniform_layout = VK_NULL_HANDLE;
 		current_layout = nullptr;
-		pipeline_state.program.Reset();
+		current_uniforms = nullptr;
+		pipeline_state.program = nullptr;
 		memset(&index_state, 0, sizeof(index_state));
 		memset(vbo.buffers, 0, sizeof(vbo.buffers));
 	}
@@ -610,22 +611,11 @@ namespace Vulkan
 		}
 
 		VkRenderPassBeginInfo begin_info = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
-		VkRenderPassAttachmentBeginInfoKHR attachment_info = { VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO_KHR };
 		begin_info.renderPass = actual_render_pass->GetRenderPass();
 		begin_info.framebuffer = framebuffer->GetFramebuffer();
 		begin_info.renderArea = scissor;
 		begin_info.clearValueCount = num_clear_values;
 		begin_info.pClearValues = clear_values;
-
-		auto& features = device->GetDeviceExtensions();
-		bool imageless = features.imageless_features.imagelessFramebuffer == VK_TRUE;
-		VkImageView immediate_views[VULKAN_NUM_ATTACHMENTS + 1];
-		if (imageless)
-		{
-			attachment_info.attachmentCount = Framebuffer::SetupRawViews(immediate_views, info);
-			attachment_info.pAttachments = immediate_views;
-			begin_info.pNext = &attachment_info;
-		}
 
 		table.vkCmdBeginRenderPass(cmd, &begin_info, contents);
 
@@ -653,7 +643,7 @@ namespace Vulkan
 
 		auto& shader = *compile.program->GetShader(ShaderStage::Compute);
 		VkComputePipelineCreateInfo info = { VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
-		info.layout = compile.program->GetLayout().GetVkLayout();
+		info.layout = compile.program->GetUniforms().GetUniformLayout();
 		info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 		info.stage.module = shader.GetModule();
 		info.stage.pName = "main";
@@ -671,7 +661,7 @@ namespace Vulkan
 			spec_info.pData = spec_constants;
 			spec_info.pMapEntries = spec_entries;
 
-			Util::for_each_bit(mask, [&](uint32_t bit) {
+			Util::ForEachBit(mask, [&](uint32_t bit) {
 				auto& entry = spec_entries[spec_info.mapEntryCount];
 				entry.offset = sizeof(uint32_t) * spec_info.mapEntryCount;
 				entry.size = sizeof(uint32_t);
@@ -852,7 +842,7 @@ namespace Vulkan
 		vi.pVertexAttributeDescriptions = vi_attribs;
 		uint32_t attr_mask = compile.program->GetLayout().GetAttribMask();
 		uint32_t binding_mask = 0;
-		Util::for_each_bit(attr_mask, [&](uint32_t bit) {
+		Util::ForEachBit(attr_mask, [&](uint32_t bit) {
 			auto& attr = vi_attribs[vi.vertexAttributeDescriptionCount++];
 			attr.location = bit;
 			attr.binding = compile.attribs[bit].binding;
@@ -863,7 +853,7 @@ namespace Vulkan
 
 		VkVertexInputBindingDescription vi_bindings[VULKAN_NUM_VERTEX_BUFFERS];
 		vi.pVertexBindingDescriptions = vi_bindings;
-		Util::for_each_bit(binding_mask, [&](uint32_t bit) {
+		Util::ForEachBit(binding_mask, [&](uint32_t bit) {
 			auto& bind = vi_bindings[vi.vertexBindingDescriptionCount++];
 			bind.binding = bit;
 			bind.inputRate = compile.input_rates[bit];
@@ -960,7 +950,7 @@ namespace Vulkan
 				spec_info[i].pData = spec_constants[i];
 				spec_info[i].pMapEntries = spec_entries[i];
 
-				Util::for_each_bit(mask, [&](uint32_t bit) {
+				Util::ForEachBit(mask, [&](uint32_t bit) {
 					auto& entry = spec_entries[i][spec_info[i].mapEntryCount];
 					entry.offset = sizeof(uint32_t) * spec_info[i].mapEntryCount;
 					entry.size = sizeof(uint32_t);
@@ -973,7 +963,7 @@ namespace Vulkan
 		}
 
 		VkGraphicsPipelineCreateInfo pipe = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-		pipe.layout = compile.program->GetLayout().GetVkLayout();
+		pipe.layout = compile.program->GetUniforms().GetUniformLayout();
 		pipe.renderPass = compile.compatible_render_pass->GetRenderPass();
 		pipe.subpass = compile.subpass_index;
 
@@ -1037,7 +1027,7 @@ namespace Vulkan
 		uint32_t combined_spec_constant = compile.program->GetLayout().GetCombindedSpecConstantMask();
 		combined_spec_constant &= compile.potential_static_state.spec_constant_mask;
 		h.u32(combined_spec_constant);
-		Util::for_each_bit(combined_spec_constant, [&](uint32_t bit) {
+		Util::ForEachBit(combined_spec_constant, [&](uint32_t bit) {
 			h.u32(compile.potential_static_state.spec_constants[bit]);
 			});
 
@@ -1058,7 +1048,7 @@ namespace Vulkan
 	{
 		Util::Hasher h;
 		active_vbos = 0;
-		Util::for_each_bit(compile.program->GetLayout().GetAttribMask(), [&](uint32_t bit) {
+		Util::ForEachBit(compile.program->GetLayout().GetAttribMask(), [&](uint32_t bit) {
 			h.u32(bit);
 			active_vbos |= 1u << compile.attribs[bit].binding;
 			h.u32(compile.attribs[bit].binding);
@@ -1066,7 +1056,7 @@ namespace Vulkan
 			h.u32(compile.attribs[bit].offset);
 			});
 
-		Util::for_each_bit(active_vbos, [&](uint32_t bit) {
+		Util::ForEachBit(active_vbos, [&](uint32_t bit) {
 			h.u32(compile.input_rates[bit]);
 			h.u32(compile.strides[bit]);
 			});
@@ -1093,7 +1083,7 @@ namespace Vulkan
 		uint32_t combined_spec_constant = compile.program->GetLayout().GetCombindedSpecConstantMask();
 		combined_spec_constant &= compile.potential_static_state.spec_constant_mask;
 		h.u32(combined_spec_constant);
-		Util::for_each_bit(combined_spec_constant, [&](uint32_t bit) {
+		Util::ForEachBit(combined_spec_constant, [&](uint32_t bit) {
 			h.u32(compile.potential_static_state.spec_constants[bit]);
 			});
 
@@ -1126,11 +1116,11 @@ namespace Vulkan
 
 		if (GetAndClear(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT))
 		{
-			auto& range = current_layout->GetPushConstantRange();
+			auto& range = current_layout->GetUniformManager().GetPushConstantRange();
 			if (range.stageFlags != 0)
 			{
 				VK_ASSERT(range.offset == 0);
-				table.vkCmdPushConstants(cmd, current_pipeline_layout, range.stageFlags, 0, range.size, push_constant_data);
+				table.vkCmdPushConstants(cmd, current_uniform_layout, range.stageFlags, 0, range.size, push_constant_data);
 			}
 		}
 
@@ -1167,11 +1157,11 @@ namespace Vulkan
 
 		if (GetAndClear(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT))
 		{
-			auto& range = current_layout->GetPushConstantRange();
+			auto& range = current_layout->GetUniformManager().GetPushConstantRange();
 			if (range.stageFlags != 0)
 			{
 				VK_ASSERT(range.offset == 0);
-				table.vkCmdPushConstants(cmd, current_pipeline_layout, range.stageFlags, 0, range.size, push_constant_data);
+				table.vkCmdPushConstants(cmd, current_uniform_layout, range.stageFlags, 0, range.size, push_constant_data);
 			}
 		}
 
@@ -1192,7 +1182,7 @@ namespace Vulkan
 		}
 
 		uint32_t update_vbo_mask = dirty_vbos & active_vbos;
-		Util::for_each_bit_range(update_vbo_mask, [&](uint32_t binding, uint32_t binding_count) {
+		Util::ForEachBitRange(update_vbo_mask, [&](uint32_t binding, uint32_t binding_count) {
 #ifdef VULKAN_DEBUG
 			for (unsigned i = binding; i < binding + binding_count; i++)
 				VK_ASSERT(vbo.buffers[i] != VK_NULL_HANDLE);
@@ -1301,31 +1291,31 @@ namespace Vulkan
 		set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
 	}
 
-	void CommandBuffer::SetProgram(ProgramHandle& program)
+	void CommandBuffer::SetProgram(Program& program)
 	{
 		//If this is already set as the program, ignore this call
-		if (pipeline_state.program == program)
+		if (pipeline_state.program == &program)
 			return;
 
 		//Otherwise set the current program to program
-		pipeline_state.program = program;
+		pipeline_state.program = &program;
 		current_pipeline = VK_NULL_HANDLE;
 		//And indicate that the pipeline and dynamic state have changed
 		set_dirty(COMMAND_BUFFER_DIRTY_PIPELINE_BIT | COMMAND_BUFFER_DYNAMIC_BITS);
-		if (!program)
+		if (!(&program))
 			return;
-		//Make sure there is at least either a Compute or Vertex shader
-		VK_ASSERT((framebuffer && pipeline_state.program->HasShader(ShaderStage::Vertex)) || (!framebuffer && pipeline_state.program->HasShader(ShaderStage::Compute)));
 
-		program->ResetUniforms();
+		//Make sure there is at least either a Compute or Vertex shader
+		VK_ASSERT((framebuffer && program.HasShader(ShaderStage::Vertex)) || (!framebuffer && program.HasShader(ShaderStage::Compute)));
 
 		//Indicate that all sets must be changed
 		dirty_sets = ~0u;
 		//As well as the push constants
 		set_dirty(COMMAND_BUFFER_DIRTY_PUSH_CONSTANTS_BIT);
 		//Set the layout
-		current_layout = &program->GetLayout();
-		current_pipeline_layout = current_layout->GetVkLayout();
+		current_layout = &program.GetLayout();
+		current_uniforms = &program.GetUniforms();
+		current_uniform_layout = program.GetUniforms().GetUniformLayout();
 	}
 
 	void* CommandBuffer::AllocateConstantData(unsigned set, unsigned binding, unsigned array_index, VkDeviceSize size)
@@ -1419,31 +1409,31 @@ namespace Vulkan
 		return UpdateImage(image, { 0, 0, 0 }, { image.GetWidth(), image.GetHeight(), image.GetDepth() }, row_length, image_height, subresource);
 	}
 
-	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, unsigned array_index, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
+	void CommandBuffer::SetUniformBuffer(uint32_t set, uint32_t binding, uint32_t array_index, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(buffer.GetCreateInfo().usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 		VK_ASSERT(current_layout);
-		VK_ASSERT(current_layout->HasDescriptorSet(set));
-		VK_ASSERT(current_layout->HasDescriptorBinding(set, binding));
-		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
+		VK_ASSERT(current_uniforms->HasDescriptorSet(set));
+		VK_ASSERT(current_uniforms->HasDescriptorBinding(set, binding));
+		VK_ASSERT(array_index < current_uniforms->GetDescriptorBindingArraySize(set, binding));
 
-		auto& b = current_layout->GetDescriptor(set, binding, array_index);
+		auto& b = current_uniforms->GetUniformResource(thread_index, set, binding, array_index);
 
-		if (buffer.GetCookie() == b.cookie && b.resource.buffer.range == range)
+		if (buffer.GetCookie() == b.cookie && b.buffer.range == range)
 		{
-			if (b.resource.dynamic_offset != offset)
+			if (b.dynamic_offset != offset)
 			{
 				//If just the offset changed, indicate that the dynamic set is dirty
 				dirty_sets_dynamic |= 1u << set;
-				b.resource.dynamic_offset = offset;
+				b.dynamic_offset = offset;
 			}
 		}
 		else
 		{
-			b.resource.buffer = { buffer.GetBuffer(), 0, range };
-			b.resource.dynamic_offset = offset;
+			b.buffer = { buffer.GetBuffer(), 0, range };
+			b.dynamic_offset = offset;
 			b.cookie = buffer.GetCookie();
 			b.secondary_cookie = 0;
 			//Indicate that a static set is dirty
@@ -1451,81 +1441,84 @@ namespace Vulkan
 		}
 	}
 
-	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, unsigned array_index, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
+	void CommandBuffer::SetStorageBuffer(uint32_t set, uint32_t binding, uint32_t array_index, const Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(buffer.GetCreateInfo().usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 		VK_ASSERT(current_layout);
-		VK_ASSERT(current_layout->HasDescriptorSet(set));
-		VK_ASSERT(current_layout->HasDescriptorBinding(set, binding));
-		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
-		auto& b = current_layout->GetDescriptor(set, binding, array_index);
+		VK_ASSERT(current_uniforms->HasDescriptorSet(set));
+		VK_ASSERT(current_uniforms->HasDescriptorBinding(set, binding));
+		VK_ASSERT(array_index < current_uniforms->GetDescriptorBindingArraySize(set, binding));
 
-		if (buffer.GetCookie() == b.cookie && b.resource.buffer.offset == offset && b.resource.buffer.range == range)
+		auto& b = current_uniforms->GetUniformResource(thread_index, set, binding, array_index);
+
+		if (buffer.GetCookie() == b.cookie && b.buffer.offset == offset && b.buffer.range == range)
 			return;
 
-		b.resource.buffer = { buffer.GetBuffer(), offset, range };
-		b.resource.dynamic_offset = 0;
+		b.buffer = { buffer.GetBuffer(), offset, range };
+		b.dynamic_offset = 0;
 		b.cookie = buffer.GetCookie();
 		b.secondary_cookie = 0;
 		dirty_sets |= 1u << set;
 	}
 
-	void CommandBuffer::SetUniformBuffer(unsigned set, unsigned binding, unsigned array_index, const Buffer& buffer)
+	void CommandBuffer::SetUniformBuffer(uint32_t set, uint32_t binding, uint32_t array_index, const Buffer& buffer)
 	{
 		SetUniformBuffer(set, binding, array_index, buffer, 0, buffer.GetCreateInfo().size);
 	}
 
-	void CommandBuffer::SetStorageBuffer(unsigned set, unsigned binding, unsigned array_index, const Buffer& buffer)
+	void CommandBuffer::SetStorageBuffer(uint32_t set, uint32_t binding, uint32_t array_index, const Buffer& buffer)
 	{
 		SetStorageBuffer(set, binding, array_index, buffer, 0, buffer.GetCreateInfo().size);
 	}
 
-	void CommandBuffer::SetSampler(unsigned set, unsigned binding, unsigned array_index, const Sampler& sampler)
+	void CommandBuffer::SetSampler(uint32_t set, uint32_t binding, uint32_t array_index, const Sampler& sampler)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(current_layout);
-		VK_ASSERT(current_layout->HasDescriptorSet(set));
-		VK_ASSERT(current_layout->HasDescriptorBinding(set, binding));
-		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
+		VK_ASSERT(current_uniforms->HasDescriptorSet(set));
+		VK_ASSERT(current_uniforms->HasDescriptorBinding(set, binding));
+		VK_ASSERT(array_index < current_uniforms->GetDescriptorBindingArraySize(set, binding));
 
-		auto& b = current_layout->GetDescriptor(set, binding, array_index);
+		auto& b = current_uniforms->GetUniformResource(thread_index, set, binding, array_index);
 
 		if (sampler.GetCookie() == b.secondary_cookie)
 			return;
 
-		b.resource.image.fp.sampler = sampler.get_sampler();
-		b.resource.image.integer.sampler = sampler.get_sampler();
+		b.image.sampler = sampler.GetSampler();
+		b.image.sampler = sampler.GetSampler();
 		//Indicate that the set must be updated
 		dirty_sets |= 1u << set;
 		b.secondary_cookie = sampler.GetCookie();
 	}
 
-	void CommandBuffer::SetBufferView(unsigned set, unsigned binding, unsigned array_index, const BufferView& view)
+	void CommandBuffer::SetBufferView(uint32_t set, uint32_t binding, uint32_t array_index, const BufferView& view)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(current_layout);
-		VK_ASSERT(current_layout->HasDescriptorSet(set));
-		VK_ASSERT(current_layout->HasDescriptorBinding(set, binding));
-		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
+		VK_ASSERT(current_uniforms->HasDescriptorSet(set));
+		VK_ASSERT(current_uniforms->HasDescriptorBinding(set, binding));
+		VK_ASSERT(array_index < current_uniforms->GetDescriptorBindingArraySize(set, binding));
+
 		VK_ASSERT(view.GetBuffer().GetCreateInfo().usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT);
 
-		auto& b = current_layout->GetDescriptor(set, binding, array_index);
+		auto& b = current_uniforms->GetUniformResource(thread_index, set, binding, array_index);
 
 		if (view.GetCookie() == b.cookie)
 			return;
 
-		b.resource.buffer_view = view.GetView();
+		b.buffer_view = view.GetView();
 		b.cookie = view.GetCookie();
 		b.secondary_cookie = 0;
 		dirty_sets |= 1u << set;
 	}
 
-	void CommandBuffer::SetInputAttachments(unsigned set, unsigned start_binding)
+	void CommandBuffer::SetInputAttachments(uint32_t set, uint32_t start_binding)
 	{
+		VK_ASSERT(current_layout);
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(start_binding + actual_render_pass->GetNumInputAttachments(pipeline_state.subpass_index) <= VULKAN_NUM_BINDINGS);
 		unsigned num_input_attachments = actual_render_pass->GetNumInputAttachments(pipeline_state.subpass_index);
@@ -1539,24 +1532,23 @@ namespace Vulkan
 			VK_ASSERT(view);
 			VK_ASSERT(view->GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
 
-			auto& b = current_layout->GetDescriptor(set, start_binding + i, 0);
+			auto& b = current_uniforms->GetUniformResource(thread_index, set, start_binding + i, 0);
 
-			if (view->GetCookie() == b.cookie && b.resource.image.fp.imageLayout == ref.layout)
+			if (view->GetCookie() == b.cookie && b.image.imageLayout == ref.layout)
 			{
 				continue;
 			}
 
-			b.resource.image.fp.imageLayout = ref.layout;
-			b.resource.image.integer.imageLayout = ref.layout;
-			b.resource.image.fp.imageView = view->GetFloatView();
-			b.resource.image.integer.imageView = view->GetIntegerView();
+
+			b.image.imageLayout = ref.layout;
+			b.image.imageView = current_uniforms->IsFloatDescriptor(set, start_binding + i) ? view->GetFloatView() : view->GetIntegerView();
 
 			b.cookie = view->GetCookie();
 			dirty_sets |= 1u << set;
 		}
 	}
 
-	void CommandBuffer::SetTexture(unsigned set, unsigned binding, unsigned array_index,
+	void CommandBuffer::SetTexture(uint32_t set, uint32_t binding, uint32_t array_index,
 		VkImageView float_view, VkImageView integer_view,
 		VkImageLayout layout,
 		uint64_t cookie)
@@ -1565,19 +1557,17 @@ namespace Vulkan
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
 		VK_ASSERT(current_layout);
-		VK_ASSERT(current_layout->HasDescriptorSet(set));
-		VK_ASSERT(current_layout->HasDescriptorBinding(set, binding));
-		VK_ASSERT(array_index < current_layout->GetArraySize(set, binding));
+		VK_ASSERT(current_uniforms->HasDescriptorSet(set));
+		VK_ASSERT(current_uniforms->HasDescriptorBinding(set, binding));
+		VK_ASSERT(array_index < current_uniforms->GetDescriptorBindingArraySize(set, binding));
 
-		auto& b = current_layout->GetDescriptor(set, binding, array_index);
+		auto& b = current_uniforms->GetUniformResource(thread_index, set, binding, array_index);
 
-		if (cookie == b.cookie && b.resource.image.fp.imageLayout == layout)
+		if (cookie == b.cookie && b.image.imageLayout == layout)
 			return;
 
-		b.resource.image.fp.imageLayout = layout;
-		b.resource.image.fp.imageView = float_view;
-		b.resource.image.integer.imageLayout = layout;
-		b.resource.image.integer.imageView = integer_view;
+		b.image.imageLayout = layout;
+		b.image.imageView = current_uniforms->IsFloatDescriptor(set, binding) ? float_view : integer_view;
 		b.cookie = cookie;
 		dirty_sets |= 1u << set;
 	}
@@ -1633,33 +1623,39 @@ namespace Vulkan
 	{
 		VK_ASSERT(current_layout);
 
-		if (!current_layout->HasDescriptorSet(set))
+		if (!current_uniforms->HasDescriptorSet(set))
 			return;
 		//auto& layout = current_layout->GetResourceLayout();
 		////Bind any bindless descriptors
 		//if (layout.bindless_descriptor_set_mask & (1u << set))
 		//{
 		//	VK_ASSERT(bindless_sets[set]);
-		//	table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &bindless_sets[set], 0, nullptr);
+		//	table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_uniform_layout, set, 1, &bindless_sets[set], 0, nullptr);
 		//	return;
 		//}
 
-		auto& set_layout = current_layout->GetDescriptorSet(set)->set_layout;
+		auto& set_layout = current_uniforms->GetSetLayout(set);
 		
 		uint32_t num_dynamic_offsets = 0;
-		// Allocate the max needed array size. This type of allocation is basically free, so this is fine
-		Util::RetainedDynamicArray<uint32_t> dynamic_offsets = device->AllocateHeapArray<uint32_t>(current_layout->GetDescriptorCount(set));
 
 		// UBOs
-		Util::for_each_bit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				dynamic_offsets[num_dynamic_offsets++] = current_layout->GetDescriptor(set, binding, i).resource.dynamic_offset;
-			}
+		Util::ForEachBit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
+			num_dynamic_offsets += set_layout.array_size[binding];
 			});
 
-		table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &allocated_sets[set], num_dynamic_offsets, dynamic_offsets.Data());
+		// Allocate the max needed array size. This type of allocation is basically free, so this is fine
+		Util::RetainedDynamicArray<uint32_t> dynamic_offsets = device->AllocateHeapArray<uint32_t>(num_dynamic_offsets);
+
+		num_dynamic_offsets = 0;
+
+		// UBOs
+		Util::ForEachBit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
+			uint32_t array_size = set_layout.array_size[binding];
+			for (uint32_t i = 0; i < array_size; i++)
+				dynamic_offsets[num_dynamic_offsets++] = current_uniforms->GetUniformResource(thread_index, set, binding, 0).dynamic_offset;
+			});
+
+		table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_uniform_layout, set, 1, &allocated_sets[set], num_dynamic_offsets, dynamic_offsets.Data());
 
 		device->FreeHeapArray(dynamic_offsets);
 	}
@@ -1667,35 +1663,41 @@ namespace Vulkan
 	void CommandBuffer::FlushDescriptorSet(uint32_t set)
 	{
 		VK_ASSERT(current_layout);
-		if (!current_layout->HasDescriptorSet(set))
+		if (!current_uniforms->HasDescriptorSet(set))
 			return;
 		/*if (layout.bindless_descriptor_set_mask & (1u << set))
 		{
 			VK_ASSERT(bindless_sets[set]);
 			table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE,
-				current_pipeline_layout, set, 1, &bindless_sets[set], 0, nullptr);
+				current_uniform_layout, set, 1, &bindless_sets[set], 0, nullptr);
 			return;
 		}*/
 
-		auto& set_layout = current_layout->GetDescriptorSet(set)->set_layout;
+		auto& set_layout = current_uniforms->GetSetLayout(set);
 
 		uint32_t num_dynamic_offsets = 0;
+
+		// UBOs
+		Util::ForEachBit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
+			num_dynamic_offsets += set_layout.array_size[binding];
+			});
+
 		// Allocate the max needed array size. This type of allocation is basically free, so this is fine
-		Util::RetainedDynamicArray<uint32_t> dynamic_offsets = device->AllocateHeapArray<uint32_t>(current_layout->GetDescriptorCount(set));
+		Util::RetainedDynamicArray<uint32_t> dynamic_offsets = device->AllocateHeapArray<uint32_t>(num_dynamic_offsets);
+
+		num_dynamic_offsets = 0;
 
 		// Retrieve dynamic offsets
-		Util::for_each_bit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
-			unsigned array_size = set_layout.array_size[binding];
-			for (unsigned i = 0; i < array_size; i++)
-			{
-				dynamic_offsets[num_dynamic_offsets++] = current_layout->GetDescriptor(set, binding, i).resource.dynamic_offset;
-			}
+		Util::ForEachBit(set_layout.uniform_buffer_mask, [&](uint32_t binding) {
+			uint32_t array_size = set_layout.array_size[binding];
+			for (uint32_t i = 0; i < array_size; i++)
+				dynamic_offsets[num_dynamic_offsets++] = current_uniforms->GetUniformResource(thread_index, set, binding, i).dynamic_offset;
 			});
 
 		// Gets the descriptor set (updates if the descriptor set has been changed)
-		VkDescriptorSet desc_set = current_layout->FlushDescriptorSet(thread_index, set);
+		VkDescriptorSet desc_set = current_uniforms->FlushDescriptorSet(thread_index, set);
 
-		table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_pipeline_layout, set, 1, &desc_set, num_dynamic_offsets, dynamic_offsets.Data());
+		table.vkCmdBindDescriptorSets(cmd, actual_render_pass ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE, current_uniform_layout, set, 1, &desc_set, num_dynamic_offsets, dynamic_offsets.Data());
 
 		device->FreeHeapArray(dynamic_offsets);
 
@@ -1704,18 +1706,17 @@ namespace Vulkan
 
 	void CommandBuffer::FlushDescriptorSets()
 	{
-		uint32_t set_update = current_layout->GetDescriptorSetMask() & dirty_sets;
-		Util::for_each_bit(set_update, [&](uint32_t set) { FlushDescriptorSet(set); });
+		uint32_t set_update = current_uniforms->GetDescriptorSetMask() & dirty_sets;
+		Util::ForEachBit(set_update, [&](uint32_t set) { FlushDescriptorSet(set); });
 		dirty_sets &= ~set_update;
 
 		// If we update a set, we also bind dynamically.
 		dirty_sets_dynamic &= ~set_update;
 
 		// If we only rebound UBOs, we might get away with just rebinding descriptor sets, no hashing and lookup required.
-		uint32_t dynamic_set_update = current_layout->GetDescriptorSetMask() & dirty_sets_dynamic;
-		Util::for_each_bit(dynamic_set_update, [&](uint32_t set) { RebindDescriptorSet(set); });
+		uint32_t dynamic_set_update = current_uniforms->GetDescriptorSetMask() & dirty_sets_dynamic;
+		Util::ForEachBit(dynamic_set_update, [&](uint32_t set) { RebindDescriptorSet(set); });
 		dirty_sets_dynamic &= ~dynamic_set_update;
-
 	}
 
 	void CommandBuffer::Draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
@@ -1978,8 +1979,6 @@ namespace Vulkan
 			device->RequestUniformBlockNolock(ubo_block, 0);
 		if (staging_block.mapped)
 			device->RequestStagingBlockNolock(staging_block, 0);
-
-		pipeline_state.program.Reset();
 	}
 
 	//////////////////////////////////
