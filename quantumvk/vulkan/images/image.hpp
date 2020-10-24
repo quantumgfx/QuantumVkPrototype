@@ -132,10 +132,6 @@ namespace Vulkan
 	struct InitialImageLayerData
 	{
 		// Data to load into layer (nullptr zero initializes that layer)
-
-
-
-
 		void* data = nullptr;
 	};
 
