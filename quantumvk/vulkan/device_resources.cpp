@@ -270,30 +270,19 @@ namespace Vulkan
 					bool compute_sem_needed = compute_queue != transfer_queue && is_concurrent_compute;
 					bool graphics_sem_needed = graphics_queue != transfer_queue && is_concurrent_graphics;
 
-					if (compute_sem_needed && !graphics_sem_needed)
-					{
+					uint32_t sem_count = uint32_t(compute_sem_needed) + uint32_t(graphics_sem_needed);
 
-						Semaphore sem[1];
-						Submit(cmd, nullptr, 1, sem);
-						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
-					}
-					else if (!compute_sem_needed && graphics_sem_needed)
-					{
-						Semaphore sem[1];
-						Submit(cmd, nullptr, 1, sem);
-						AddWaitSemaphore(CommandBuffer::Type::Generic, sem[0], possible_buffer_stages, true);
-					}
-					else if (compute_sem_needed && graphics_sem_needed)
-					{
-						Semaphore sem[2];
-						Submit(cmd, nullptr, 2, sem);
-						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
-						AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[1], possible_buffer_stages, true);
-					}
-					else
-					{
-						Submit(cmd);
-					}
+					Semaphore sem[2];
+					Submit(cmd, nullptr, sem_count, sem);
+
+					uint32_t sem_index = 0;
+					if (compute_sem_needed)
+						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[sem_index++], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+					if (graphics_sem_needed)
+						AddWaitSemaphore(CommandBuffer::Type::Generic, sem[sem_index++], possible_buffer_stages, true);
+
+					if (sem_index == 0)
+						FlushFrame(CommandBuffer::Type::AsyncTransfer);
 				}
 			}
 			else
@@ -335,30 +324,19 @@ namespace Vulkan
 					bool compute_sem_needed = compute_queue != transfer_queue && is_concurrent_compute;
 					bool graphics_sem_needed = graphics_queue != transfer_queue && is_concurrent_graphics;
 
-					if (compute_sem_needed && !graphics_sem_needed)
-					{
+					uint32_t sem_count = uint32_t(compute_sem_needed) + uint32_t(graphics_sem_needed);
 
-						Semaphore sem[1];
-						Submit(cmd, nullptr, 1, sem);
-						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
-					}
-					else if (!compute_sem_needed && graphics_sem_needed)
-					{
-						Semaphore sem[1];
-						Submit(cmd, nullptr, 1, sem);
-						AddWaitSemaphore(CommandBuffer::Type::Generic, sem[0], possible_buffer_stages, true);
-					}
-					else if (compute_sem_needed && graphics_sem_needed)
-					{
-						Semaphore sem[2];
-						Submit(cmd, nullptr, 2, sem);
-						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
-						AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[1], possible_buffer_stages, true);
-					}
-					else
-					{
-						Submit(cmd);
-					}
+					Semaphore sem[2];
+					Submit(cmd, nullptr, sem_count, sem);
+
+					uint32_t sem_index = 0;
+					if (compute_sem_needed)
+						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[sem_index++], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+					if (graphics_sem_needed)
+						AddWaitSemaphore(CommandBuffer::Type::Generic, sem[sem_index++], possible_buffer_stages, true);
+
+					if (sem_index == 0)
+						FlushFrame(CommandBuffer::Type::AsyncTransfer);
 				}
 			}
 		}
@@ -875,7 +853,7 @@ namespace Vulkan
 			return CreateImageFromStagingBuffer(info, ownership, nullptr);
 	}
 
-	ImageHandle Device::CreateUncompessedImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, InitialImageData initial)
+	ImageHandle Device::CreateUncompressedImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, InitialImageData initial)
 	{
 		if (initial.levels)
 		{
@@ -892,6 +870,15 @@ namespace Vulkan
 
 		bool is_exclusive = ownership & (RESOURCE_EXCLUSIVE_GENERIC | RESOURCE_EXCLUSIVE_ASYNC_COMPUTE | RESOURCE_EXCLUSIVE_ASYNC_GRAPHICS | RESOURCE_EXCLUSIVE_ASYNC_TRANSFER);
 		bool is_concurrent = ownership & (RESOURCE_CONCURRENT_GENERIC | RESOURCE_CONCURRENT_ASYNC_COMPUTE | RESOURCE_CONCURRENT_ASYNC_GRAPHICS | RESOURCE_CONCURRENT_ASYNC_TRANSFER);
+		bool generate_mips = (create_info.misc & IMAGE_MISC_GENERATE_MIPS_BIT) != 0;
+
+		VK_ASSERT(!(is_exclusive && is_concurrent));
+
+		bool is_async_graphics_on_compute_queue = GetPhysicalQueueType(CommandBuffer::Type::AsyncGraphics) == CommandBuffer::Type::AsyncCompute;
+
+		bool is_concurrent_graphics = (ownership & RESOURCE_CONCURRENT_GENERIC) || (!is_async_graphics_on_compute_queue && (ownership & RESOURCE_CONCURRENT_ASYNC_GRAPHICS));
+		bool is_concurrent_compute = (ownership & RESOURCE_CONCURRENT_ASYNC_COMPUTE) || (is_async_graphics_on_compute_queue && (ownership & RESOURCE_CONCURRENT_ASYNC_GRAPHICS));
+		bool is_concurrent_transfer = ownership & RESOURCE_CONCURRENT_ASYNC_TRANSFER;
 
 		uint32_t exclusive_target_queue_index = 0;
 		CommandBuffer::Type exclusive_owner;
@@ -902,7 +889,7 @@ namespace Vulkan
 		}
 		else if (ownership & RESOURCE_EXCLUSIVE_ASYNC_GRAPHICS)
 		{
-			exclusive_target_queue_index = graphics_queue_family_index;
+			exclusive_target_queue_index = is_async_graphics_on_compute_queue ? compute_queue_family_index : graphics_queue_family_index;
 			exclusive_owner = CommandBuffer::Type::AsyncGraphics;
 		}
 		else if (ownership & RESOURCE_EXCLUSIVE_ASYNC_COMPUTE)
@@ -915,14 +902,6 @@ namespace Vulkan
 			exclusive_target_queue_index = transfer_queue_family_index;
 			exclusive_owner = CommandBuffer::Type::AsyncTransfer;
 		}
-
-		VK_ASSERT(!(is_exclusive && is_concurrent));
-
-		bool is_async_graphics_on_compute_queue = GetPhysicalQueueType(CommandBuffer::Type::AsyncGraphics) == CommandBuffer::Type::AsyncCompute;
-
-		bool is_concurrent_graphics = (ownership & RESOURCE_CONCURRENT_GENERIC) || (!is_async_graphics_on_compute_queue && (ownership & RESOURCE_CONCURRENT_ASYNC_GRAPHICS));
-		bool is_concurrent_compute = (ownership & RESOURCE_CONCURRENT_ASYNC_COMPUTE) || (is_async_graphics_on_compute_queue && (ownership & RESOURCE_CONCURRENT_ASYNC_GRAPHICS));
-		bool is_concurrent_transfer = ownership & RESOURCE_CONCURRENT_ASYNC_TRANSFER;
 
 		ImageResourceHolder holder(this);
 
@@ -1003,7 +982,7 @@ namespace Vulkan
 				sharing_indices[queueFamilyCount++] = family;
 			};
 
-			if (ownership & RESOURCE_CONCURRENT_GENERIC)
+			if (generate_mips || (ownership & RESOURCE_CONCURRENT_GENERIC) != 0)
 				add_unique_family(graphics_queue_family_index);
 			if (ownership & RESOURCE_CONCURRENT_ASYNC_GRAPHICS)
 				add_unique_family(is_async_graphics_on_compute_queue ? compute_queue_family_index : graphics_queue_family_index);
@@ -1137,16 +1116,6 @@ namespace Vulkan
 		{
 			VK_ASSERT(create_info.domain != ImageDomain::Transient);
 			VK_ASSERT(create_info.initial_layout != VK_IMAGE_LAYOUT_UNDEFINED);
-			bool generate_mips = (create_info.misc & IMAGE_MISC_GENERATE_MIPS_BIT) != 0;
-
-			// If graphics_queue != transfer_queue, we will use a semaphore, so no srcAccess mask is necessary.
-			//VkAccessFlags final_transition_src_access = 0;
-			//if (generate_mips)
-			//	final_transition_src_access = VK_ACCESS_TRANSFER_READ_BIT; // Validation complains otherwise.
-			//else if (graphics_queue == transfer_queue)
-			//	final_transition_src_access = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-			//VkAccessFlags prepare_src_access = graphics_queue == transfer_queue ? VK_ACCESS_TRANSFER_WRITE_BIT : 0;
 
 			// Now we've used the TRANSFER queue to copy data over to the GPU.
 			// For mipmapping, we're now moving over to graphics,
@@ -1159,8 +1128,8 @@ namespace Vulkan
 			VkAccessFlags possible_image_access = handle->GetAccessFlags() & ImageLayoutToPossibleAccess(create_info.initial_layout);
 
 			if (is_concurrent)
-			{
-				auto transfer_cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncTransfer);
+			{ // If concurrent
+				CommandBufferHandle transfer_cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncTransfer);
 
 				transfer_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 					VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -1169,39 +1138,13 @@ namespace Vulkan
 				transfer_cmd->CopyBufferToImage(*handle, *staging_buffer->buffer, staging_buffer->blits.size(), staging_buffer->blits.data());
 
 				if (generate_mips)
-				{
+				{ // If concurrent and generating mips
+
+					CommandBufferHandle graphics_cmd;
+
 					if (transfer_queue == graphics_queue)
 					{
-						transfer_cmd->BarrierPrepareGenerateMipmap(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, true);
-						transfer_cmd->GenerateMipmap(*handle);
-						transfer_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, create_info.initial_layout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, possible_image_stages, possible_image_access);
-
-						bool compute_sem_needed = compute_queue != transfer_queue && is_concurrent_compute;
-						bool graphics_sem_needed = graphics_queue != transfer_queue && is_concurrent_graphics;
-
-						if (compute_sem_needed && !graphics_sem_needed)
-						{
-							Semaphore sem[1];
-							Submit(transfer_cmd, nullptr, 1, sem);
-							AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
-						}
-						else if (!compute_sem_needed && graphics_sem_needed)
-						{
-							Semaphore sem[1];
-							Submit(transfer_cmd, nullptr, 1, sem);
-							AddWaitSemaphore(CommandBuffer::Type::Generic, sem[0], possible_image_stages, true);
-						}
-						else if (compute_sem_needed && graphics_sem_needed)
-						{
-							Semaphore sem[2];
-							Submit(transfer_cmd, nullptr, 2, sem);
-							AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
-							AddWaitSemaphore(CommandBuffer::Type::Generic, sem[1], possible_image_stages, true);
-						}
-						else
-						{
-							Submit(transfer_cmd);
-						}
+						graphics_cmd = transfer_cmd;
 					}
 					else
 					{
@@ -1209,75 +1152,54 @@ namespace Vulkan
 						Submit(transfer_cmd, nullptr, 1, &sem);
 						AddWaitSemaphore(CommandBuffer::Type::Generic, sem, VK_PIPELINE_STAGE_TRANSFER_BIT, true);
 
-						auto graphics_cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
-
-						graphics_cmd->BarrierPrepareGenerateMipmap(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, true);
-						graphics_cmd->GenerateMipmap(*handle);
-						graphics_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, create_info.initial_layout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, possible_image_stages, possible_image_access);
-
-						bool compute_sem_needed = compute_queue != graphics_queue && is_concurrent_compute;
-						bool transfer_sem_needed = transfer_queue != graphics_queue && is_concurrent_transfer;
-
-						if (compute_sem_needed && !transfer_sem_needed)
-						{
-
-							Semaphore sem[1];
-							Submit(graphics_cmd, nullptr, 1, sem);
-							AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
-						}
-						else if (!compute_sem_needed && transfer_sem_needed)
-						{
-							Semaphore sem[1];
-							Submit(graphics_cmd, nullptr, 1, sem);
-							AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[0], VK_PIPELINE_STAGE_TRANSFER_BIT, true);
-						}
-						else if (compute_sem_needed && transfer_sem_needed)
-						{
-							Semaphore sem[2];
-							Submit(graphics_cmd, nullptr, 2, sem);
-							AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
-							AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[1], VK_PIPELINE_STAGE_TRANSFER_BIT, true);
-						}
-						else
-						{
-							Submit(graphics_cmd);
-						}
+						graphics_cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
 					}
+
+					graphics_cmd->BarrierPrepareGenerateMipmap(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, true);
+					graphics_cmd->GenerateMipmap(*handle);
+					graphics_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, create_info.initial_layout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, possible_image_stages, possible_image_access);
+
+					bool compute_queue_wait_on_graphics_cmd = (graphics_queue != compute_queue) && is_concurrent_compute;
+					bool transfer_queue_wait_on_graphics_cmd = (graphics_queue != transfer_queue) && is_concurrent_transfer;
+
+					uint32_t sem_count = uint32_t(compute_queue_wait_on_graphics_cmd) + uint32_t(transfer_queue_wait_on_graphics_cmd);
+
+					Semaphore sem[2];
+					Submit(graphics_cmd, nullptr, sem_count, sem);
+
+					uint32_t sem_index = 0;
+					if (compute_queue_wait_on_graphics_cmd)
+						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[sem_index++], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+					if (transfer_queue_wait_on_graphics_cmd)
+						AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[sem_index++], VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+
+					if (sem_index == 0)
+						FlushFrame(CommandBuffer::Type::Generic);
 				}
 				else
-				{
+				{ // If concurrent and not generating mips
 					transfer_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, create_info.initial_layout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, possible_image_stages, possible_image_access);
 
-					bool compute_sem_needed = compute_queue != transfer_queue && is_concurrent_compute;
-					bool graphics_sem_needed = graphics_queue != transfer_queue && is_concurrent_graphics;
+					bool graphics_queue_wait_on_transfer_cmd = (transfer_queue != graphics_queue) && is_concurrent_graphics;
+					bool compute_queue_wait_on_transfer_cmd = (transfer_queue != compute_queue) && is_concurrent_compute;
 
-					if (compute_sem_needed && !graphics_sem_needed)
-					{
-						Semaphore sem[1];
-						Submit(transfer_cmd, nullptr, 1, sem);
-						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
-					}
-					else if (!compute_sem_needed && graphics_sem_needed)
-					{
-						Semaphore sem[1];
-						Submit(transfer_cmd, nullptr, 1, sem);
-						AddWaitSemaphore(CommandBuffer::Type::Generic, sem[0], possible_image_stages, true);
-					}
-					else if (compute_sem_needed && graphics_sem_needed)
-					{
-						Semaphore sem[2];
-						Submit(transfer_cmd, nullptr, 2, sem);
-						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
-						AddWaitSemaphore(CommandBuffer::Type::Generic, sem[1], possible_image_stages, true);
-					}
-					else
-					{
-						Submit(transfer_cmd);
-					}
+					uint32_t sem_count = uint32_t(graphics_queue_wait_on_transfer_cmd) + uint32_t(compute_queue_wait_on_transfer_cmd);
+
+					Semaphore sem[2];
+					Submit(transfer_cmd, nullptr, sem_count, sem);
+
+					uint32_t sem_index = 0;
+					if (graphics_queue_wait_on_transfer_cmd)
+						AddWaitSemaphore(CommandBuffer::Type::Generic, sem[sem_index++], possible_image_stages, true);
+					if (compute_queue_wait_on_transfer_cmd)
+						AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[sem_index++], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+
+					if (sem_index == 0)
+						FlushFrame(CommandBuffer::Type::AsyncTransfer);
 				}
 			}
 			else
-			{
+			{ // Exclusive ownership
 
 				if (exclusive_target_queue_index == graphics_queue_family_index)
 				{ // No barrier needed between graphics and target
@@ -1325,7 +1247,7 @@ namespace Vulkan
 
 						transfer_cmd->CopyBufferToImage(*handle, *staging_buffer->buffer, staging_buffer->blits.size(), staging_buffer->blits.data());
 
-						VkImageMemoryBarrier release = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+						VkImageMemoryBarrier release{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 						release.image = handle->GetImage();
 						release.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 						release.dstAccessMask = 0;
@@ -1373,7 +1295,6 @@ namespace Vulkan
 
 						Submit(graphics_cmd);
 					}
-
 
 				}
 				else if (exclusive_target_queue_index != graphics_queue_family_index)
@@ -1430,8 +1351,7 @@ namespace Vulkan
 						auto transfer_cmd = RequestCommandBuffer(CommandBuffer::Type::AsyncTransfer);
 
 						transfer_cmd->ImageBarrier(*handle, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-							VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT,
-							VK_ACCESS_TRANSFER_WRITE_BIT);
+							VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
 
 						transfer_cmd->CopyBufferToImage(*handle, *staging_buffer->buffer, staging_buffer->blits.size(), staging_buffer->blits.data());
 
@@ -1548,32 +1468,23 @@ namespace Vulkan
 			auto cmd = RequestCommandBuffer(CommandBuffer::Type::Generic);
 			cmd->ImageBarrier(*handle, info.initialLayout, create_info.initial_layout, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, handle->GetStageFlags(), handle->GetAccessFlags() & ImageLayoutToPossibleAccess(create_info.initial_layout));
 
-			bool compute_sem_needed = compute_queue != graphics_queue && is_concurrent_compute;
-			bool transfer_sem_needed = transfer_queue != graphics_queue && is_concurrent_transfer;
+			bool compute_queue_wait_on_graphics_cmd = (graphics_queue != compute_queue) && is_concurrent_compute;
+			bool transfer_queue_wait_on_graphics_cmd = (graphics_queue != transfer_queue) && is_concurrent_transfer;
 
-			if (compute_sem_needed && !transfer_sem_needed)
-			{
-				Semaphore sem[1];
-				Submit(cmd, nullptr, 1, sem);
-				AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
-			}
-			else if (!compute_sem_needed && transfer_sem_needed)
-			{
-				Semaphore sem[1];
-				Submit(cmd, nullptr, 1, sem);
-				AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[0], VK_PIPELINE_STAGE_TRANSFER_BIT, true);
-			}
-			else if (compute_sem_needed && transfer_sem_needed)
-			{
-				Semaphore sem[2];
-				Submit(cmd, nullptr, 2, sem);
-				AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[0], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, false);
-				AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[1], VK_PIPELINE_STAGE_TRANSFER_BIT, true);
-			}
-			else
-			{
-				Submit(cmd);
-			}
+			uint32_t sem_count = uint32_t(compute_queue_wait_on_graphics_cmd) + uint32_t(transfer_queue_wait_on_graphics_cmd);
+
+			Semaphore sem[2];
+			Submit(cmd, nullptr, sem_count, sem);
+
+			uint32_t sem_index = 0;
+			if (compute_queue_wait_on_graphics_cmd)
+				AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[sem_index++], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+			if (transfer_queue_wait_on_graphics_cmd)
+				AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[sem_index++], VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+
+			if (sem_index == 0)
+				FlushFrame(CommandBuffer::Type::Generic);
+
 		}
 
 		return handle;

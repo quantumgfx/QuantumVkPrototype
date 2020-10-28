@@ -338,7 +338,7 @@ namespace Vulkan
 		// Creates and allocates an image
 		ImageHandle CreateImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership);
 		ImageHandle CreateImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, size_t buffer_size, void* buffer, uint32_t num_copies, ImageStagingCopyInfo* copies);
-		ImageHandle CreateUncompessedImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, InitialImageData initial);
+		ImageHandle CreateUncompressedImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, InitialImageData initial);
 
 		// Creates an image using a staging buffer
 		ImageHandle CreateImageFromStagingBuffer(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, const InitialImageBuffer* buffer);
