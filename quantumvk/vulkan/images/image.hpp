@@ -232,12 +232,13 @@ namespace Vulkan
 			render_target_views = std::move(views);
 		}
 
-		// By default, gets a combined view which includes all aspects in the image.
+		// By default, gets a combined view which includes all layers, levels, and aspects of the image
 		VkImageView GetView() const
 		{
 			return view;
 		}
 
+		
 		VkImageView GetRenderTargetView(uint32_t layer) const;
 
 		// Gets an image view which only includes floating point domains.

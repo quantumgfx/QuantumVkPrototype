@@ -857,7 +857,7 @@ namespace Vulkan
 		return num_views;
 	}
 
-	static const ImageView* get_image_view(const RenderPassInfo& info, unsigned index)
+	static const ImageView* GetImageView(const RenderPassInfo& info, unsigned index)
 	{
 		if (index < info.num_color_attachments)
 			return info.color_attachments[index].view;
@@ -868,7 +868,7 @@ namespace Vulkan
 	void Framebuffer::ComputeAttachmentDimensions(const RenderPassInfo& info, unsigned index,
 		uint32_t& width, uint32_t& height)
 	{
-		auto* view = get_image_view(info, index);
+		auto* view = GetImageView(info, index);
 		VK_ASSERT(view);
 		unsigned lod = view->GetCreateInfo().base_level;
 		width = view->GetImage().GetWidth(lod);

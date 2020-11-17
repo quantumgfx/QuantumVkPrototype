@@ -108,14 +108,14 @@ namespace Vulkan
 			levels, regions);
 	}
 
-	void CommandBuffer::CopyBufferToImage(const Image& image, const Buffer& buffer, unsigned num_blits,
+	void CommandBuffer::CopyBufferToImage(const Image& image, const Buffer& buffer, uint32_t num_blits,
 		const VkBufferImageCopy* blits)
 	{
 		table.vkCmdCopyBufferToImage(cmd, buffer.GetBuffer(),
 			image.GetImage(), image.GetLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL), num_blits, blits);
 	}
 
-	void CommandBuffer::CopyImageToBuffer(const Buffer& buffer, const Image& image, unsigned num_blits,
+	void CommandBuffer::CopyImageToBuffer(const Buffer& buffer, const Image& image, uint32_t num_blits,
 		const VkBufferImageCopy* blits)
 	{
 		table.vkCmdCopyImageToBuffer(cmd, image.GetImage(), image.GetLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
@@ -123,7 +123,7 @@ namespace Vulkan
 	}
 
 	void CommandBuffer::CopyBufferToImage(const Image& image, const Buffer& src, VkDeviceSize buffer_offset, const VkOffset3D& offset, const VkExtent3D& extent,
-		unsigned row_length, unsigned slice_height, const VkImageSubresourceLayers& subresource)
+		uint32_t row_length, uint32_t slice_height, const VkImageSubresourceLayers& subresource)
 	{
 		const VkBufferImageCopy region = {
 			buffer_offset,
@@ -135,8 +135,8 @@ namespace Vulkan
 	}
 
 	void CommandBuffer::CopyImageToBuffer(const Buffer& buffer, const Image& image, VkDeviceSize buffer_offset,
-		const VkOffset3D& offset, const VkExtent3D& extent, unsigned row_length,
-		unsigned slice_height, const VkImageSubresourceLayers& subresource)
+		const VkOffset3D& offset, const VkExtent3D& extent, uint32_t row_length,
+		uint32_t slice_height, const VkImageSubresourceLayers& subresource)
 	{
 		const VkBufferImageCopy region = {
 			buffer_offset,
@@ -177,7 +177,7 @@ namespace Vulkan
 		}
 	}
 
-	void CommandBuffer::ClearQuad(unsigned attachment, const VkClearRect& rect, const VkClearValue& value,
+	void CommandBuffer::ClearQuad(uint32_t attachment, const VkClearRect& rect, const VkClearValue& value,
 		VkImageAspectFlags aspect)
 	{
 		VK_ASSERT(framebuffer);
@@ -189,7 +189,7 @@ namespace Vulkan
 		table.vkCmdClearAttachments(cmd, 1, &att, 1, &rect);
 	}
 
-	void CommandBuffer::ClearQuad(const VkClearRect& rect, const VkClearAttachment* attachments, unsigned num_attachments)
+	void CommandBuffer::ClearQuad(const VkClearRect& rect, uint32_t num_attachments, const VkClearAttachment* attachments)
 	{
 		VK_ASSERT(framebuffer);
 		VK_ASSERT(actual_render_pass);
@@ -246,9 +246,9 @@ namespace Vulkan
 	}
 
 	void CommandBuffer::Barrier(VkPipelineStageFlags src_stages, VkPipelineStageFlags dst_stages, 
-		unsigned barriers, const VkMemoryBarrier* globals, 
-		unsigned buffer_barriers, const VkBufferMemoryBarrier* buffers, 
-		unsigned image_barriers, const VkImageMemoryBarrier* images)
+		uint32_t barriers, const VkMemoryBarrier* globals,
+		uint32_t buffer_barriers, const VkBufferMemoryBarrier* buffers,
+		uint32_t image_barriers, const VkImageMemoryBarrier* images)
 	{
 		VK_ASSERT(!actual_render_pass);
 		VK_ASSERT(!framebuffer);
@@ -295,12 +295,11 @@ namespace Vulkan
 		table.vkCmdPipelineBarrier(cmd, src_stages, dst_stages, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 	}
 
-	void CommandBuffer::WaitEvents(unsigned num_events, const VkEvent* events,
+	void CommandBuffer::WaitEvents(uint32_t num_events, const VkEvent* events,
 		VkPipelineStageFlags src_stages, VkPipelineStageFlags dst_stages,
-		unsigned barriers,
-		const VkMemoryBarrier* globals, unsigned buffer_barriers,
-		const VkBufferMemoryBarrier* buffers, unsigned image_barriers,
-		const VkImageMemoryBarrier* images)
+		uint32_t barriers, const VkMemoryBarrier* globals, 
+		uint32_t buffer_barriers, const VkBufferMemoryBarrier* buffers, 
+		uint32_t image_barriers, const VkImageMemoryBarrier* images)
 	{
 		VK_ASSERT(!framebuffer);
 		VK_ASSERT(!actual_render_pass);
@@ -332,8 +331,8 @@ namespace Vulkan
 
 	void CommandBuffer::BlitImage(const Image& dst, const Image& src,
 		const VkOffset3D& dst_offset, const VkOffset3D& dst_extent, const VkOffset3D& src_offset, const VkOffset3D& src_extent,
-		unsigned dst_level, unsigned src_level, unsigned dst_base_layer, unsigned src_base_layer,
-		unsigned num_layers, VkFilter filter)
+		uint32_t dst_level, uint32_t src_level, uint32_t dst_base_layer, uint32_t src_base_layer,
+		uint32_t num_layers, VkFilter filter)
 	{
 		const auto add_offset = [](const VkOffset3D& a, const VkOffset3D& b) -> VkOffset3D {
 			return { a.x + b.x, a.y + b.y, a.z + b.z };
@@ -502,7 +501,7 @@ namespace Vulkan
 		scissor = rect;
 	}
 
-	CommandBufferHandle CommandBuffer::RequestSecondaryCommandBuffer(Device& device, const RenderPassInfo& info, unsigned thread_index, unsigned subpass)
+	CommandBufferHandle CommandBuffer::RequestSecondaryCommandBuffer(Device& device, const RenderPassInfo& info, uint32_t thread_index, uint32_t subpass)
 	{
 		auto* fb = &device.RequestFramebuffer(info);
 		auto cmd = device.RequestSecondaryCommandBufferForThread(thread_index, fb, subpass);
@@ -525,7 +524,7 @@ namespace Vulkan
 		return cmd;
 	}
 
-	CommandBufferHandle CommandBuffer::RequestSecondaryCommandBuffer(unsigned thread_index_, unsigned subpass_)
+	CommandBufferHandle CommandBuffer::RequestSecondaryCommandBuffer(uint32_t thread_index_, uint32_t subpass_)
 	{
 		VK_ASSERT(framebuffer);
 		VK_ASSERT(!is_secondary);
@@ -1318,7 +1317,7 @@ namespace Vulkan
 		current_uniform_layout = program.GetUniforms().GetUniformLayout();
 	}
 
-	void* CommandBuffer::AllocateConstantData(unsigned set, unsigned binding, unsigned array_index, VkDeviceSize size)
+	void* CommandBuffer::AllocateConstantData(uint32_t set, uint32_t binding, uint32_t array_index, VkDeviceSize size)
 	{
 		VK_ASSERT(size <= VULKAN_MAX_UBO_SIZE);
 		auto data = ubo_block.Allocate(size);
@@ -1343,7 +1342,7 @@ namespace Vulkan
 		return data.host;
 	}
 
-	void* CommandBuffer::AllocateVertexData(unsigned binding, VkDeviceSize size)
+	void* CommandBuffer::AllocateVertexData(uint32_t binding, VkDeviceSize size)
 	{
 		auto data = vbo_block.Allocate(size);
 		if (!data.host)
@@ -1386,7 +1385,7 @@ namespace Vulkan
 
 		uint32_t blocks_x = row_length;
 		uint32_t blocks_y = image_height;
-		format_num_blocks(create_info.format, blocks_x, blocks_y);
+		FormatNumBlocks(create_info.format, blocks_x, blocks_y);
 
 		VkDeviceSize size = TextureFormatLayout::FormatBlockSize(create_info.format, subresource.aspectMask) * subresource.layerCount * depth * blocks_x * blocks_y;
 
@@ -1580,7 +1579,7 @@ namespace Vulkan
 	}*/
 
 
-	void CommandBuffer::SetSeparateTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view)
+	void CommandBuffer::SetSeparateTexture(uint32_t set, uint32_t binding, uint32_t array_index, const ImageView& view)
 	{
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_SAMPLED_BIT);
 		SetTexture(set, binding, array_index, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL), view.GetCookie());
@@ -1592,13 +1591,13 @@ namespace Vulkan
 		COOKIE_BIT_SRGB = 1 << 1
 	};
 
-	void CommandBuffer::SetSampledTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view, const Sampler& sampler)
+	void CommandBuffer::SetSampledTexture(uint32_t set, uint32_t binding, uint32_t array_index, const ImageView& view, const Sampler& sampler)
 	{
 		SetSampler(set, binding, array_index, sampler);
 		SetSeparateTexture(set, binding, array_index, view);
 	}
 
-	void CommandBuffer::SetSampledTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view, StockSampler stock)
+	void CommandBuffer::SetSampledTexture(uint32_t set, uint32_t binding, uint32_t array_index, const ImageView& view, StockSampler stock)
 	{
 		VK_ASSERT(set < VULKAN_NUM_DESCRIPTOR_SETS);
 		VK_ASSERT(binding < VULKAN_NUM_BINDINGS);
@@ -1607,13 +1606,13 @@ namespace Vulkan
 		SetSampledTexture(set, binding, array_index, view, sampler);
 	}
 
-	void CommandBuffer::SetSampler(unsigned set, unsigned binding, unsigned array_index, StockSampler stock)
+	void CommandBuffer::SetSampler(uint32_t set, uint32_t binding, uint32_t array_index, StockSampler stock)
 	{
 		const auto& sampler = device->GetStockSampler(stock);
 		SetSampler(set, binding, array_index, sampler);
 	}
 
-	void CommandBuffer::SetStorageTexture(unsigned set, unsigned binding, unsigned array_index, const ImageView& view)
+	void CommandBuffer::SetStorageTexture(uint32_t set, uint32_t binding, uint32_t array_index, const ImageView& view)
 	{
 		VK_ASSERT(view.GetImage().GetCreateInfo().usage & VK_IMAGE_USAGE_STORAGE_BIT);
 		SetTexture(set, binding, array_index, view.GetFloatView(), view.GetIntegerView(), view.GetImage().GetLayout(VK_IMAGE_LAYOUT_GENERAL), view.GetCookie());

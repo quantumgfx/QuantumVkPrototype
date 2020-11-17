@@ -5,9 +5,9 @@
 
 namespace Vulkan
 {
-    ShaderHandle Device::CreateShader(const uint32_t* code, size_t size)
+    ShaderHandle Device::CreateShader(size_t num_words, const uint32_t* code)
     {
-        return ShaderHandle(handle_pool.shaders.allocate(this, code, size));
+        return ShaderHandle(handle_pool.shaders.allocate(this, code, num_words));
     }
 
 	ProgramHandle Device::CreateGraphicsProgram(const GraphicsProgramShaders& shaders)

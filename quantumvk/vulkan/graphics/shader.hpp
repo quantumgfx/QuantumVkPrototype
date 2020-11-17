@@ -89,7 +89,7 @@ namespace Vulkan
 
 		friend class Util::ObjectPool<Shader>;
 
-		Shader(Device* device, const uint32_t* data, size_t size);
+		Shader(Device* device, const uint32_t* data, size_t num_words);
 
 		Util::Hash hash;
 

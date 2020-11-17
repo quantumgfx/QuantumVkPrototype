@@ -311,33 +311,33 @@ namespace Vulkan
 		//Dst Image must be in layout VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL_BIT
 		//Equivelent vulkan function: vkCmdCopyBufferToImage()
 		void CopyBufferToImage(const Image& image, const Buffer& buffer, VkDeviceSize buffer_offset,
-			const VkOffset3D& offset, const VkExtent3D& extent, unsigned row_length,
-			unsigned slice_height, const VkImageSubresourceLayers& subresrouce);
+			const VkOffset3D& offset, const VkExtent3D& extent, uint32_t row_length,
+			uint32_t slice_height, const VkImageSubresourceLayers& subresrouce);
 		//Copy a buffer to an image
 		//Executes in: VK_PIPELINE_STAGE_TRANSFER_BIT.
 		//Src Buffer must have usage VK_BUFFER_USAGE_TRANSFER_SRC_BIT.
 		//Dst Image must be in layout VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL_BIT
 		//Equivelent vulkan function: vkCmdCopyBufferToImage()
-		void CopyBufferToImage(const Image& image, const Buffer& buffer, unsigned num_blits, const VkBufferImageCopy* blits);
+		void CopyBufferToImage(const Image& image, const Buffer& buffer, uint32_t num_blits, const VkBufferImageCopy* blits);
 		//Copy an image to a buffer
 		//Executes in: VK_PIPELINE_STAGE_TRANSFER_BIT.
 		//Src Image must be in layout VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL_BIT
 		//Dst Buffer must have usage VK_BUFFER_USAGE_TRANSFER_DST_BIT.
 		//Equivelent vulkan function: vkCmdCopyImageToBuffer()
-		void CopyImageToBuffer(const Buffer& buffer, const Image& image, unsigned num_blits, const VkBufferImageCopy* blits);
+		void CopyImageToBuffer(const Buffer& buffer, const Image& image, uint32_t num_blits, const VkBufferImageCopy* blits);
 		//Copy an image to a buffer
 		//Executes in: VK_PIPELINE_STAGE_TRANSFER_BIT.
 		//Src Image must be in layout VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL_BIT
 		//Dst Buffer must have usage VK_BUFFER_USAGE_TRANSFER_DST_BIT.
 		//Equivelent vulkan function: vkCmdCopyImageToBuffer()
 		void CopyImageToBuffer(const Buffer& buffer, const Image& image, VkDeviceSize buffer_offset, const VkOffset3D& offset,
-			const VkExtent3D& extent, unsigned row_length, unsigned slice_height,
+			const VkExtent3D& extent, uint32_t row_length, uint32_t slice_height,
 			const VkImageSubresourceLayers& subresrouce);
 
 		void ClearImage(const Image& image, const VkClearValue& value);
 		void ClearImage(const Image& image, const VkClearValue& value, VkImageAspectFlags aspect);
-		void ClearQuad(unsigned attachment, const VkClearRect& rect, const VkClearValue& value, VkImageAspectFlags = VK_IMAGE_ASPECT_COLOR_BIT);
-		void ClearQuad(const VkClearRect& rect, const VkClearAttachment* attachments, unsigned num_attachments);
+		void ClearQuad(uint32_t attachment, const VkClearRect& rect, const VkClearValue& value, VkImageAspectFlags = VK_IMAGE_ASPECT_COLOR_BIT);
+		void ClearQuad(const VkClearRect& rect, uint32_t num_attachments, const VkClearAttachment* attachments);
 
 		//Ensures that all commands before this one will be finished before any commands after the barrier.
 		void FullBarrier();
@@ -347,9 +347,9 @@ namespace Vulkan
 		void Barrier(VkPipelineStageFlags src_stage, VkAccessFlags src_access, VkPipelineStageFlags dst_stage, VkAccessFlags dst_access);
 		//Inserts a pipeline barrier
 		void Barrier(VkPipelineStageFlags src_stages, VkPipelineStageFlags dst_stages,
-			unsigned barriers, const VkMemoryBarrier* globals,
-			unsigned buffer_barriers, const VkBufferMemoryBarrier* buffers,
-			unsigned image_barriers, const VkImageMemoryBarrier* images);
+			uint32_t barriers, const VkMemoryBarrier* globals,
+			uint32_t buffer_barriers, const VkBufferMemoryBarrier* buffers,
+			uint32_t image_barriers, const VkImageMemoryBarrier* images);
 		//Inserts a pipeline buffer barrier
 		void BufferBarrier(const Buffer& buffer, VkPipelineStageFlags src_stage, VkAccessFlags src_access, VkPipelineStageFlags dst_stage, VkAccessFlags dst_access);
 		//Inserts a pipeline image barrier
@@ -358,16 +358,16 @@ namespace Vulkan
 			VkAccessFlags dst_access);
 
 		PipelineEvent SignalEvent(VkPipelineStageFlags stages);
-		void WaitEvents(unsigned num_events, const VkEvent* events,
+		void WaitEvents(uint32_t num_events, const VkEvent* events,
 			VkPipelineStageFlags src_stages, VkPipelineStageFlags dst_stages,
-			unsigned barriers, const VkMemoryBarrier* globals,
-			unsigned buffer_barriers, const VkBufferMemoryBarrier* buffers,
-			unsigned image_barriers, const VkImageMemoryBarrier* images);
+			uint32_t barriers, const VkMemoryBarrier* globals,
+			uint32_t buffer_barriers, const VkBufferMemoryBarrier* buffers,
+			uint32_t image_barriers, const VkImageMemoryBarrier* images);
 
 		// Blits one image into another
 		void BlitImage(const Image& dst, const Image& src,
 			const VkOffset3D& dst_offset, const VkOffset3D& dst_extent, const VkOffset3D& src_offset, const VkOffset3D& src_extent, 
-			unsigned dst_level, unsigned src_level, unsigned dst_base_layer = 0, uint32_t src_base_layer = 0, unsigned num_layers = 1,
+			uint32_t dst_level, uint32_t src_level, uint32_t dst_base_layer = 0, uint32_t src_base_layer = 0, uint32_t num_layers = 1,
 			VkFilter filter = VK_FILTER_LINEAR);
 
 		// Prepares an image to have its mipmap generated.
@@ -391,8 +391,8 @@ namespace Vulkan
 			return pipeline_state.subpass_index;
 		}
 
-		Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(unsigned thread_index, unsigned subpass);
-		static Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(Device& device, const RenderPassInfo& rp, unsigned thread_index, unsigned subpass);
+		Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(uint32_t thread_index, uint32_t subpass);
+		static Util::IntrusivePtr<CommandBuffer> RequestSecondaryCommandBuffer(Device& device, const RenderPassInfo& rp, uint32_t thread_index, uint32_t subpass);
 
         // A program MUST NOT be set by multiple command buffers at once.
 		// No uniforms are retained between submissions (though common descriptor sets are hashed, so don't worry about calling
@@ -439,15 +439,15 @@ namespace Vulkan
 		//-----------------------------------------------------------------
 
 		//Allocates a uniform buffer from the command buffers internal pool. Binds it to the set and binding, than returns it's mapped data.
-		void* AllocateConstantData(unsigned set, unsigned binding, unsigned array_index, VkDeviceSize size);
+		void* AllocateConstantData(uint32_t set, uint32_t binding, uint32_t array_index, VkDeviceSize size);
 		//Allocates a uniform buffer from the command buffers internal pool. Binds it to the set and binding, than returns it's mapped data.
 		template <typename T>
-		T* AllocateTypedConstantData(unsigned set, unsigned binding, unsigned array_index, unsigned count)
+		T* AllocateTypedConstantData(uint32_t set, uint32_t binding, uint32_t array_index, unsigned count)
 		{
 			return static_cast<T*>(AllocateConstantData(set, binding, array_index, count * sizeof(T)));
 		}
 		//Allocates a vertex buffer from the command buffers internal pool. Binds it to the binding than returns it's mapped data.
-		void* AllocateVertexData(unsigned binding, VkDeviceSize size);
+		void* AllocateVertexData(uint32_t binding, VkDeviceSize size);
 		//Allocates an index buffer from the command buffers internal pool. Binds then returns it's mapped data.
 		void* AllocateIndexData(VkDeviceSize size, VkIndexType index_type);
 		//Allocates a staging buffer from the command buffers internal pool. Returns a pointer to this staging buffer
@@ -775,7 +775,7 @@ namespace Vulkan
 		ProgramLayout* current_layout = nullptr;
 		UniformManager* current_uniforms = nullptr;
 		VkSubpassContents current_contents = VK_SUBPASS_CONTENTS_INLINE;
-		unsigned thread_index = 0;
+		uint32_t thread_index = 0;
 
 		VkViewport viewport = {};
 		VkRect2D scissor = {};
@@ -830,7 +830,7 @@ namespace Vulkan
 		BufferBlock staging_block;
 
 		// Unless image is depth_stencil float_view and integer_view will be identical
-		void SetTexture(unsigned set, unsigned binding, unsigned array_index, VkImageView float_view, VkImageView integer_view, VkImageLayout layout, uint64_t cookie);
+		void SetTexture(uint32_t set, uint32_t binding, uint32_t array_index, VkImageView float_view, VkImageView integer_view, VkImageLayout layout, uint64_t cookie);
 
 		void InitViewportScissor(const RenderPassInfo& info, const Framebuffer* framebuffer);
 
@@ -841,6 +841,4 @@ namespace Vulkan
 	};
 
 	using CommandBufferHandle = Util::IntrusivePtr<CommandBuffer>;
-
-	constexpr int size = sizeof(CommandBuffer);
 }

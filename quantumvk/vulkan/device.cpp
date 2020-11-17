@@ -117,7 +117,7 @@ namespace Vulkan
 		static const auto uuid_size = sizeof(gpu_props.pipelineCacheUUID);
 
 		VkPipelineCacheCreateInfo info = { VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
-		if (!initial_cache_data || size == 0)
+		if (!initial_cache_data || initial_cache_size == 0)
 		{
 			QM_LOG_INFO("Creating a fresh pipeline cache.\n");
 		}
@@ -127,7 +127,7 @@ namespace Vulkan
 		}
 		else
 		{
-			info.initialDataSize = size;
+			info.initialDataSize = initial_cache_size;
 			info.pInitialData = initial_cache_data;
 			QM_LOG_INFO("Initializing pipeline cache.\n");
 		}

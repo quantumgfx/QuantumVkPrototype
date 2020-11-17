@@ -165,18 +165,18 @@ namespace Vulkan
 		}
 	}
 
-	Shader::Shader(Device* device_, const uint32_t* data, size_t size)
+	Shader::Shader(Device* device_, const uint32_t* data, size_t num_words)
 		: device(device_)
 	{
 		// Compute shader hash
 		Util::Hasher hasher;
-		hasher.data(data, size);
+		hasher.data(data, num_words * sizeof(uint32_t));
 		hash = hasher.get();
 		// -------------------
 
 
 		VkShaderModuleCreateInfo info = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-		info.codeSize = size;
+		info.codeSize = num_words * sizeof(uint32_t);
 		info.pCode = data;
 
 #ifdef VULKAN_DEBUG
@@ -186,7 +186,7 @@ namespace Vulkan
 		if (table.vkCreateShaderModule(device->GetDevice(), &info, nullptr, &module) != VK_SUCCESS)
 			QM_LOG_ERROR("Failed to create shader module.\n");
 
-		Compiler compiler(data, size / sizeof(uint32_t));
+		Compiler compiler(data, num_words);
 
 		auto resources = compiler.get_shader_resources();
 		for (auto& image : resources.sampled_images)
