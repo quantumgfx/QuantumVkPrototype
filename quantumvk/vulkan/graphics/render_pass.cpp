@@ -114,7 +114,7 @@ namespace Vulkan
 		// Want to make load/store to transient a very explicit thing to do, since it will kill performance.
 		bool enable_transient_store = (info.op_flags & RENDER_PASS_OP_ENABLE_TRANSIENT_STORE_BIT) != 0;
 		bool enable_transient_load = (info.op_flags & RENDER_PASS_OP_ENABLE_TRANSIENT_LOAD_BIT) != 0;
-		bool multiview = info.num_layers > 1;
+		bool multiview = (info.multiview_mask != 0);
 
 		// Set up default subpass info structure if we don't have it.
 		auto* subpass_infos = info.subpasses;
@@ -755,18 +755,16 @@ namespace Vulkan
 		SetupSubpasses(rp_info);
 
 		VkRenderPassMultiviewCreateInfoKHR multiview_info = { VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO_KHR };
-		vector<uint32_t> multiview_view_mask;
+		std::vector<uint32_t> multiview_view_mask;
 		if (multiview && device->GetDeviceExtensions().multiview_features.multiview)
 		{
-			multiview_view_mask.resize(num_subpasses);
+			multiview_view_mask.resize(num_subpasses, info.multiview_mask);
 			multiview_info.subpassCount = num_subpasses;
-			for (auto& mask : multiview_view_mask)
-				mask = ((1u << info.num_layers) - 1u) << info.base_layer;
 			multiview_info.pViewMasks = multiview_view_mask.data();
 			rp_info.pNext = &multiview_info;
 		}
 		else if (multiview)
-			QM_LOG_ERROR("Multiview not supported. Pertending render pass is not multiview.");
+			QM_LOG_ERROR("Multiview not supported. Pretending render pass is not multiview.");
 
 		// Fixup after, we want the Fossilize render pass to be generic.
 		VkAttachmentDescription fixup_attachments[VULKAN_NUM_ATTACHMENTS + 1];
@@ -833,25 +831,33 @@ namespace Vulkan
 
 	unsigned Framebuffer::SetupRawViews(VkImageView* views, const RenderPassInfo& info)
 	{
+		uint32_t multiview_layer_count = 0;
+
+#ifdef VULKAN_DEBUG
+		if (info.multiview_mask)
+		{
+			multiview_layer_count = Util::GetMostSignificantBitSet(info.multiview_mask);
+		}
+
+#endif
+
+
 		unsigned num_views = 0;
 		for (unsigned i = 0; i < info.num_color_attachments; i++)
 		{
 			VK_ASSERT(info.color_attachments[i].view);
+			VK_ASSERT(info.color_attachments[i].view->GetCreateInfo().levels == 1);
+			VK_ASSERT(info.color_attachments[i].view->GetCreateInfo().layers > multiview_layer_count);
 
-			// For multiview, we use view indices to pick right layers.
-			if (info.num_layers > 1)
-				views[num_views++] = info.color_attachments[i].view->GetView();
-			else
-				views[num_views++] = info.color_attachments[i].view->GetRenderTargetView(info.base_layer);
+			views[num_views++] = info.color_attachments[i].view->GetView();
 		}
 
 		if (info.depth_stencil.view)
 		{
-			// For multiview, we use view indices to pick right layers.
-			if(info.num_layers > 1)
-				views[num_views++] = info.depth_stencil.view->GetView();
-			else
-				views[num_views++] = info.depth_stencil.view->GetRenderTargetView(info.base_layer);
+			VK_ASSERT(info.depth_stencil.view->GetCreateInfo().levels == 1);
+			VK_ASSERT(info.depth_stencil.view->GetCreateInfo().layers > multiview_layer_count);
+
+			views[num_views++] = info.depth_stencil.view->GetView();
 		}
 
 		return num_views;
@@ -962,10 +968,10 @@ namespace Vulkan
 			h.u64(info.depth_stencil.view->GetCookie());
 
 		// For multiview we bind the whole attachment, and base layer is encoded in the render pass.
-		if (info.num_layers > 1)
+		/*if (info.num_layers > 1)
 			h.u32(0);
 		else
-			h.u32(info.base_layer);
+			h.u32(info.base_layer);*/
 
 		auto hash = h.get();
 
@@ -1002,7 +1008,7 @@ namespace Vulkan
 		LOCK();
 		auto* node = attachments.request(hash);
 		if (node)
-			return node->handle->GetView();
+			return *node->view;
 
 		ImageCreateInfo image_info;
 		if (transient)
@@ -1018,9 +1024,26 @@ namespace Vulkan
 
 		image_info.samples = samples;
 		image_info.layers = layers;
-		node = attachments.emplace(hash, device->CreateImage(image_info, RESOURCE_EXCLUSIVE_GENERIC));
-		node->handle->SetInternalSyncObject();
-		node->handle->GetView().SetInternalSyncObject();
-		return node->handle->GetView();
+		image_info.sharing_mode = ImageSharingMode::Concurrent;
+		image_info.concurrent_owners = IMAGE_COMMAND_QUEUE_GENERIC | IMAGE_COMMAND_QUEUE_ASYNC_COMPUTE | IMAGE_COMMAND_QUEUE_ASYNC_GRAPHICS | IMAGE_COMMAND_QUEUE_ASYNC_TRANSFER;
+
+		ImageHandle image = device->CreateImage(image_info);
+
+		ImageViewCreateInfo view_info{};
+		view_info.image = image;
+		view_info.base_layer = 0;
+		view_info.base_level = 0;
+		view_info.levels = 1;
+		view_info.layers = layers;
+		view_info.view_type = (layers > 1) ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+
+		ImageViewHandle view = device->CreateImageView(view_info);
+
+		node = attachments.emplace(hash, image, view);
+
+		node->image->SetInternalSyncObject();
+		node->view->SetInternalSyncObject();
+
+		return *node->view;
 	}
 }

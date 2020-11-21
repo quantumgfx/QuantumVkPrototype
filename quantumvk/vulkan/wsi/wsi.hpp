@@ -138,7 +138,7 @@ namespace Vulkan
 		bool Init(unsigned num_thread_indices, uint8_t* initial_cache_data, size_t initial_cache_size, const char** instance_ext, uint32_t instance_ext_count, const char** device_ext, uint32_t device_ext_count);
 		// Inits the WSI using an external context, passing cache data directly to Device::SetContext
 		bool InitExternalContext(std::unique_ptr<Context> context, uint8_t* initial_cache_data, size_t initial_cache_size);
-		bool InitExternalSwapchain(std::vector<Vulkan::ImageHandle> external_images);
+		bool InitExternalSwapchain(std::vector<SwapchainImages> external_images);
 		void DeinitExternal();
 
 		// Inits the WSI for a certain number of threads, passing cache data directly to Device::SetContext.
@@ -221,7 +221,7 @@ namespace Vulkan
 
 		WSIPlatform* platform = nullptr;
 
-		std::vector<Vulkan::ImageHandle> external_swapchain_images;
+		std::vector<Vulkan::SwapchainImages> external_swapchain_images;
 
 		unsigned external_frame_index = 0;
 		Vulkan::Semaphore external_acquire;

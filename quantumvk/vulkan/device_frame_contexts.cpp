@@ -93,14 +93,6 @@ namespace Vulkan
 	{
 		UpdateInvalidProgramsNoLock();
 
-		// Kept handles alive until end-of-frame, free now if appropriate.
-		for (auto& image : Frame().keep_alive_images)
-		{
-			image->SetInternalSyncObject();
-			image->GetView().SetInternalSyncObject();
-		}
-		Frame().keep_alive_images.clear();
-
 		// Make sure we have a fence which covers all submissions in the frame.
 		InternalFence fence;
 
@@ -175,12 +167,6 @@ namespace Vulkan
 			compute_cmd_pool.emplace_back(device_, device_->compute_queue_family_index);
 			transfer_cmd_pool.emplace_back(device_, device_->transfer_queue_family_index);
 		}
-	}
-
-	void Device::KeepHandleAlive(ImageHandle handle)
-	{
-		LOCK();
-		Frame().keep_alive_images.push_back(std::move(handle));
 	}
 
 #ifdef VULKAN_DEBUG

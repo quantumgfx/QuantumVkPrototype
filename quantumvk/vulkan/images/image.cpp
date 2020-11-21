@@ -7,29 +7,14 @@ using namespace std;
 namespace Vulkan
 {
 
-	ImageView::ImageView(Device* device_, VkImageView view_, const ImageViewCreateInfo& info_)
+	ImageView::ImageView(Device* device_, VkImageView view_, VkImageView depth_, VkImageView stencil_, const ImageViewCreateInfo& info_)
 		: Cookie(device_)
 		, device(device_)
 		, view(view_)
+		, depth_view(depth_)
+		, stencil_view(stencil_)
 		, info(info_)
 	{
-	}
-
-	VkImageView ImageView::GetRenderTargetView(uint32_t layer) const
-	{
-		// Transient images just have one layer.
-		if (info.image->GetCreateInfo().domain == ImageDomain::Transient)
-			return view;
-
-		VK_ASSERT(layer < GetCreateInfo().layers);
-
-		if (render_target_views.empty())
-			return view;
-		else
-		{
-			VK_ASSERT(layer < render_target_views.size());
-			return render_target_views[layer];
-		}
 	}
 
 	ImageView::~ImageView()
@@ -41,8 +26,6 @@ namespace Vulkan
 				device->DestroyImageViewNolock(depth_view);
 			if (stencil_view != VK_NULL_HANDLE)
 				device->DestroyImageViewNolock(stencil_view);
-			for (auto& v : render_target_views)
-				device->DestroyImageViewNolock(v);
 		}
 		else
 		{
@@ -51,36 +34,49 @@ namespace Vulkan
 				device->DestroyImageView(depth_view);
 			if (stencil_view != VK_NULL_HANDLE)
 				device->DestroyImageView(stencil_view);
-			for (auto& v : render_target_views)
-				device->DestroyImageView(v);
 		}
 	}
 
-	Image::Image(Device* device_, VkImage image_, VkImageView default_view, const DeviceAllocation& alloc_,
-		const ImageCreateInfo& create_info_, VkImageViewType view_type)
+	Image::Image(Device* device_, VkImage image_, const DeviceAllocation& alloc_, const ImageCreateInfo& create_info_)
 		: Cookie(device_)
 		, device(device_)
 		, image(image_)
 		, alloc(alloc_)
 		, create_info(create_info_)
 	{
-		if (default_view != VK_NULL_HANDLE)
-		{
-			ImageViewCreateInfo info;
-			info.image = this;
-			info.view_type = view_type;
-			info.format = create_info.format;
-			info.base_level = 0;
-			info.levels = create_info.levels;
-			info.base_layer = 0;
-			info.layers = create_info.layers;
-			view = ImageViewHandle(device->handle_pool.image_views.allocate(device, default_view, info));
-		}
+
+		custom_view_formats.reserve(create_info_.num_custom_view_formats);
+		for (uint32_t i = 0; i < create_info_.num_custom_view_formats; i++)
+			custom_view_formats.push_back(create_info_.custom_view_formats[i]);
+
+		if (create_info.num_custom_view_formats > 0)
+			create_info.custom_view_formats = custom_view_formats.data();
+		else
+			create_info.custom_view_formats = nullptr;
 	}
 
 	void Image::DisownImage()
 	{
 		owns_image = false;
+	}
+
+	bool Image::ImageViewFormatSupported(VkFormat view_format) const
+	{
+		if (create_info.view_formats == ImageViewFormats::Same)
+			return create_info.format == view_format;
+		
+		if (create_info.view_formats == ImageViewFormats::Custom)
+		{
+			for (const VkFormat& format : custom_view_formats)
+			{
+				if (format == view_format)
+					return true;
+			}
+
+			return false;
+		}
+		
+		return false;
 	}
 
 	Image::~Image()
@@ -109,10 +105,10 @@ namespace Vulkan
 		return NeedStagingCopy() ? cpu_image->GetAllocation() : gpu_image->GetAllocation();
 	}
 
-	const ImageView& LinearHostImage::GetView() const
+	/*const ImageView& LinearHostImage::GetView() const
 	{
 		return gpu_image->GetView();
-	}
+	}*/
 
 	const Image& LinearHostImage::GetImage() const
 	{

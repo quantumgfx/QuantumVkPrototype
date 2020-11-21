@@ -65,8 +65,7 @@ namespace Vulkan
 		DepthStencilAttachment depth_stencil;
 		RenderPassOpFlags op_flags = 0;
 
-		uint32_t base_layer = 0;
-		uint32_t num_layers = 1;
+		uint32_t multiview_mask = 0;
 
 		// Render area will be clipped to the actual framebuffer.
 		VkRect2D render_area = { { 0, 0 }, { UINT32_MAX, UINT32_MAX } };
@@ -267,12 +266,13 @@ namespace Vulkan
 	private:
 		struct TransientNode : Util::TemporaryHashmapEnabled<TransientNode>, Util::IntrusiveListEnabled<TransientNode>
 		{
-			explicit TransientNode(ImageHandle handle_)
-				: handle(std::move(handle_))
+			explicit TransientNode(ImageHandle image_, ImageViewHandle view_)
+				: image(std::move(image_)), view(std::move(view_))
 			{
 			}
 
-			ImageHandle handle;
+			ImageHandle image;
+			ImageViewHandle view;
 		};
 
 		Device* device;

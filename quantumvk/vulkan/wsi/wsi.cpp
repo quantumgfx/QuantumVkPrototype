@@ -74,13 +74,13 @@ namespace Vulkan
 		// Need to have a dummy swapchain in place before we issue create device events.
 		device.reset(new Device());
 		device->SetContext(context.get(), initial_cache_data, initial_cache_size);
-		device->InitExternalSwapchain({ ImageHandle(nullptr) });
+		device->InitExternalSwapchain({ SwapchainImages{ ImageHandle(nullptr), ImageViewHandle(nullptr)} });
 		platform->EventDeviceCreated(device.get());
 		table = &context->GetDeviceTable();
 		return true;
 	}
 
-	bool WSI::InitExternalSwapchain(vector<ImageHandle> swapchain_images_)
+	bool WSI::InitExternalSwapchain(std::vector<SwapchainImages> swapchain_images_)
 	{
 		swapchain_width = platform->GetSurfaceWidth();
 		swapchain_height = platform->GetSurfaceHeight();
@@ -88,9 +88,9 @@ namespace Vulkan
 
 		external_swapchain_images = move(swapchain_images_);
 
-		swapchain_width = external_swapchain_images.front()->GetWidth();
-		swapchain_height = external_swapchain_images.front()->GetHeight();
-		swapchain_format = external_swapchain_images.front()->GetFormat();
+		swapchain_width = external_swapchain_images.front().image->GetWidth();
+		swapchain_height = external_swapchain_images.front().image->GetHeight();
+		swapchain_format = external_swapchain_images.front().image->GetFormat();
 
 		QM_LOG_INFO("Created swapchain %u x %u (fmt: %u).\n",
 			swapchain_width, swapchain_height, static_cast<unsigned>(swapchain_format));

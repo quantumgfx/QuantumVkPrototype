@@ -518,7 +518,7 @@ namespace Vulkan
 		}
 	}
 
-	void Device::InitExternalSwapchain(const std::vector<ImageHandle>& swapchain_images)
+	void Device::InitExternalSwapchain(const std::vector<SwapchainImages>& swapchain_images)
 	{
 		DRAIN_FRAME_LOCK();
 		wsi.swapchain.clear();
@@ -529,16 +529,19 @@ namespace Vulkan
 		wsi.consumed = false;
 		for (auto& image : swapchain_images)
 		{
+			VK_ASSERT(image.image);
+			VK_ASSERT(image.view);
+
 			wsi.swapchain.push_back(image);
-			if (image)
-			{
-				wsi.swapchain.back()->SetInternalSyncObject();
-				wsi.swapchain.back()->GetView().SetInternalSyncObject();
-			}
+			
+			if(image.image)
+				wsi.swapchain.back().image->SetInternalSyncObject();
+			if(image.view)
+				wsi.swapchain.back().view->SetInternalSyncObject();
 		}
 	}
 
-	void Device::InitSwapchain(const std::vector<VkImage>& swapchain_images, unsigned width, unsigned height, VkFormat format)
+	void Device::InitSwapchain(const std::vector<VkImage>& swapchain_images, uint32_t width, uint32_t height, VkFormat format)
 	{
 		DRAIN_FRAME_LOCK();
 		wsi.swapchain.clear();
@@ -551,30 +554,28 @@ namespace Vulkan
 		wsi.consumed = false;
 		for (auto& image : swapchain_images)
 		{
-			VkImageViewCreateInfo view_info = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-			view_info.image = image;
-			view_info.format = format;
-			view_info.components.r = VK_COMPONENT_SWIZZLE_R;
-			view_info.components.g = VK_COMPONENT_SWIZZLE_G;
-			view_info.components.b = VK_COMPONENT_SWIZZLE_B;
-			view_info.components.a = VK_COMPONENT_SWIZZLE_A;
-			view_info.subresourceRange.aspectMask = FormatToAspectMask(format);
-			view_info.subresourceRange.baseMipLevel = 0;
-			view_info.subresourceRange.baseArrayLayer = 0;
-			view_info.subresourceRange.levelCount = 1;
-			view_info.subresourceRange.layerCount = 1;
-			view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-
-			VkImageView image_view;
-			if (table->vkCreateImageView(device, &view_info, nullptr, &image_view) != VK_SUCCESS)
-				QM_LOG_ERROR("Failed to create view for backbuffer.");
-
-			auto backbuffer = ImageHandle(handle_pool.images.allocate(this, image, image_view, DeviceAllocation{}, info, VK_IMAGE_VIEW_TYPE_2D));
+			ImageHandle backbuffer{ handle_pool.images.allocate(this, image, DeviceAllocation{}, info) };
 			backbuffer->SetInternalSyncObject();
 			backbuffer->DisownImage();
-			backbuffer->GetView().SetInternalSyncObject();
-			wsi.swapchain.push_back(backbuffer);
 			backbuffer->SetSwapchainLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+			ImageViewCreateInfo view_info{};
+			view_info.image = backbuffer;
+			view_info.swizzle.r = VK_COMPONENT_SWIZZLE_R;
+			view_info.swizzle.g = VK_COMPONENT_SWIZZLE_G;
+			view_info.swizzle.b = VK_COMPONENT_SWIZZLE_B;
+			view_info.swizzle.a = VK_COMPONENT_SWIZZLE_A;
+			view_info.aspect = FormatToAspectMask(format);
+			view_info.base_level = 0;
+			view_info.base_layer = 0;
+			view_info.levels = 1;
+			view_info.layers = 1;
+			view_info.view_type = VK_IMAGE_VIEW_TYPE_2D;
+
+			ImageViewHandle backbuffer_view = CreateImageView(view_info);
+			backbuffer_view->SetInternalSyncObject();
+
+			wsi.swapchain.push_back({ backbuffer, backbuffer_view });
 		}
 	}
 
@@ -731,16 +732,7 @@ namespace Vulkan
 		}
 
 		// For multiview, base layer is encoded into the view mask.
-		if (info.num_layers > 1)
-		{
-			h.u32(info.base_layer);
-			h.u32(info.num_layers);
-		}
-		else
-		{
-			h.u32(0);
-			h.u32(info.num_layers);
-		}
+		h.u32(info.multiview_mask);
 
 		h.u32(info.num_subpasses);
 		for (unsigned i = 0; i < info.num_subpasses; i++)
@@ -803,13 +795,13 @@ namespace Vulkan
 	ImageView& Device::GetSwapchainView()
 	{
 		VK_ASSERT(wsi.index < wsi.swapchain.size());
-		return wsi.swapchain[wsi.index]->GetView();
+		return *wsi.swapchain[wsi.index].view;
 	}
 
 	ImageView& Device::GetSwapchainView(unsigned index)
 	{
 		VK_ASSERT(index < wsi.swapchain.size());
-		return wsi.swapchain[index]->GetView();
+		return *wsi.swapchain[index].view;
 	}
 
 	unsigned Device::GetNumFrameContexts() const
@@ -834,12 +826,12 @@ namespace Vulkan
 
 	uint32_t Device::GetSwapchainWidth() const
 	{
-		return wsi.swapchain[wsi.index]->GetCreateInfo().width;
+		return wsi.swapchain[wsi.index].image->GetCreateInfo().width;
 	}
 
 	uint32_t Device::GetSwapchainHeight() const
 	{
-		return wsi.swapchain[wsi.index]->GetCreateInfo().height;
+		return wsi.swapchain[wsi.index].image->GetCreateInfo().height;
 	}
 
 	RenderPassInfo Device::GetSwapchainRenderPass(SwapchainRenderPass style)

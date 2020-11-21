@@ -83,6 +83,12 @@ namespace Vulkan
 		std::vector<BufferBlock> ibo;
 		std::vector<BufferBlock> ubo;
 	};
+	
+	struct SwapchainImages
+	{
+		ImageHandle image;
+		ImageViewHandle view;
+	};
 
 	struct WSIData
 	{
@@ -90,7 +96,7 @@ namespace Vulkan
 		Semaphore release;
 		bool touched = false;
 		bool consumed = false;
-		std::vector<ImageHandle> swapchain;
+		std::vector<SwapchainImages> swapchain;
 		unsigned index = 0;
 	};
 
@@ -184,8 +190,6 @@ namespace Vulkan
 		std::vector<Program*> destroyed_programs;
 		std::vector<Shader*> destroyed_shaders;
 
-		std::vector<ImageHandle> keep_alive_images;
-
 		Util::SmallVector<CommandBufferHandle> graphics_submissions;
 		Util::SmallVector<CommandBufferHandle> compute_submissions;
 		Util::SmallVector<CommandBufferHandle> transfer_submissions;
@@ -250,8 +254,8 @@ namespace Vulkan
 		// Sets context and initializes device
 		void SetContext(Context* context, uint8_t* initial_cache_data, size_t initial_cache_size);
 
-		void InitSwapchain(const std::vector<VkImage>& swapchain_images, unsigned width, unsigned height, VkFormat format);
-		void InitExternalSwapchain(const std::vector<ImageHandle>& swapchain_images);
+		void InitSwapchain(const std::vector<VkImage>& swapchain_images, uint32_t width, uint32_t height, VkFormat format);
+		void InitExternalSwapchain(const std::vector<SwapchainImages>& swapchain_images);
 		// This is done automatically for us in Device::SetContext().
 		// The default for desktop is 2 frame contexts, and 3 frame contexts on Android
 		// (since TBDR renderers typically require a bit more buffering for optimal performance).
@@ -334,14 +338,14 @@ namespace Vulkan
 		}
 
 		// Creates and allocates a buffer and images.
-		BufferHandle CreateBuffer(const BufferCreateInfo& info, ResourceQueueOwnershipFlags ownership = RESOURCE_CONCURRENT_GENERIC | RESOURCE_CONCURRENT_ASYNC_TRANSFER | RESOURCE_CONCURRENT_ASYNC_GRAPHICS | RESOURCE_CONCURRENT_ASYNC_COMPUTE, const void* initial = nullptr);
+		BufferHandle CreateBuffer(const BufferCreateInfo& info,  const void* initial = nullptr);
 		// Creates and allocates an image
-		ImageHandle CreateImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership);
-		ImageHandle CreateImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, size_t buffer_size, void* buffer, uint32_t num_copies, ImageStagingCopyInfo* copies);
-		ImageHandle CreateUncompressedImage(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, InitialImageData initial);
+		ImageHandle CreateImage(const ImageCreateInfo& info);
+		ImageHandle CreateImage(const ImageCreateInfo& info, size_t buffer_size, void* buffer, uint32_t num_copies, ImageStagingCopyInfo* copies);
+		ImageHandle CreateUncompressedImage(const ImageCreateInfo& info, InitialImageData initial);
 
 		// Creates an image using a staging buffer
-		ImageHandle CreateImageFromStagingBuffer(const ImageCreateInfo& info, ResourceQueueOwnershipFlags ownership, const InitialImageBuffer* buffer);
+		ImageHandle CreateImageFromStagingBuffer(const ImageCreateInfo& info, const InitialImageBuffer* buffer);
 		// Essentially an image that can be sampled on the GPU as a vk image, but it also has a vkbuffer conterpart on the cpu
 		LinearHostImageHandle CreateLinearHostImage(const LinearHostImageCreateInfo& info);
 
@@ -438,8 +442,6 @@ namespace Vulkan
 
 		// Returns the queue family index associated with a particular command buffer type
 		uint32_t GetQueueFamilyIndex(CommandBuffer::Type type) const;
-		// Returns the queue associated with a particular command buffer type
-		VkQueue GetQueue(CommandBuffer::Type type) const;
 
 	private:
 
@@ -504,6 +506,7 @@ namespace Vulkan
 		DmaQueues dma;
 		//Flush all pending submission to a certain queue type. 
 		void SubmitQueue(CommandBuffer::Type type, InternalFence* fence,  unsigned semaphore_count = 0, Semaphore* semaphore = nullptr);
+
 		//Return the current PerFrame object
 		PerFrame& Frame()
 		{
@@ -561,7 +564,10 @@ namespace Vulkan
 		VkQueue GetVkQueue(CommandBuffer::Type type) const;
 		Util::SmallVector<CommandBufferHandle>& GetQueueSubmission(CommandBuffer::Type type);
 		void ClearWaitSemaphores();
-		//Submit staging buffer commands (basically just vkCmdCopyBuffers) and ensures no queue will use those resources until this submission is compelete
+
+		// Submit CommandBuffer and ensure that all of its commands are visible to all toggled command queues
+		void SubmitVisible(CommandBufferHandle& cmd, VkPipelineStageFlags visible_stages, bool graphics_visible, bool compute_visible, bool transfer_visible);
+		// Submit staging buffer commands (basically just vkCmdCopyBuffers) and ensures no queue will use those resources until this submission is compelete
 		void SubmitStaging(CommandBufferHandle& cmd, VkBufferUsageFlags usage, bool flush);
 		PipelineEvent RequestPipelineEvent();
 
@@ -584,7 +590,6 @@ namespace Vulkan
 		void RecycleSemaphore(VkSemaphore semaphore);
 		void DestroyEvent(VkEvent event);
 		void ResetFence(VkFence fence, bool observed_wait);
-		void KeepHandleAlive(ImageHandle handle);
 
 		void DestroyProgramNoLock(Program* program);
 

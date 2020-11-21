@@ -67,6 +67,22 @@ namespace Vulkan
 
 	using BufferMiscFlags = uint32_t;
 
+	enum BufferCommandQueueFlagBits
+	{
+		BUFFER_COMMAND_QUEUE_GENERIC = 1 << 0,
+		BUFFER_COMMAND_QUEUE_ASYNC_GRAPHICS = 1 << 1,
+		BUFFER_COMMAND_QUEUE_ASYNC_COMPUTE = 1 << 2,
+		BUFFER_COMMAND_QUEUE_ASYNC_TRANSFER = 1 << 3,
+	};
+
+	using BufferCommandQueueFlags = uint32_t;
+
+	enum class BufferSharingMode
+	{
+		Concurrent = 0,
+		Exclusive
+	};
+
 	//Info on how to create a buffer
 	struct BufferCreateInfo
 	{
@@ -78,6 +94,10 @@ namespace Vulkan
 		VkBufferUsageFlags usage = 0;
 		//Misc buffer flags
 		BufferMiscFlags misc = 0;
+
+		BufferSharingMode sharing_mode = BufferSharingMode::Concurrent;
+		BufferCommandQueueFlagBits exclusive_owner = BUFFER_COMMAND_QUEUE_GENERIC;
+		BufferCommandQueueFlags concurrent_owners = BUFFER_COMMAND_QUEUE_GENERIC | BUFFER_COMMAND_QUEUE_ASYNC_GRAPHICS | BUFFER_COMMAND_QUEUE_ASYNC_COMPUTE | BUFFER_COMMAND_QUEUE_ASYNC_TRANSFER;
 	};
 
 	struct BufferAllocation

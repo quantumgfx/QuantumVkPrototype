@@ -154,30 +154,14 @@ namespace Vulkan
 
 	uint32_t Device::GetQueueFamilyIndex(CommandBuffer::Type type) const
 	{
-		CommandBuffer::Type physical_type = GetPhysicalQueueType(type);
-		switch (physical_type)
+		switch (GetPhysicalQueueType(type))
 		{
+		default:
 		case Vulkan::CommandBuffer::Type::Generic:       return graphics_queue_family_index;
 		case Vulkan::CommandBuffer::Type::AsyncCompute:  return compute_queue_family_index;
 		case Vulkan::CommandBuffer::Type::AsyncTransfer: return transfer_queue_family_index;
 		}
 
-		QM_LOG_ERROR("Unrecognized command buffer type");
-		return graphics_queue_family_index;
-	}
-
-	VkQueue Device::GetQueue(CommandBuffer::Type type) const
-	{
-		CommandBuffer::Type physical_type = GetPhysicalQueueType(type);
-		switch (physical_type)
-		{
-		case Vulkan::CommandBuffer::Type::Generic:       return graphics_queue;
-		case Vulkan::CommandBuffer::Type::AsyncCompute:  return compute_queue;
-		case Vulkan::CommandBuffer::Type::AsyncTransfer: return transfer_queue;
-		}
-
-		QM_LOG_ERROR("Unrecognized command buffer type");
-		return graphics_queue;
 	}
 
 	void Device::AddWaitSemaphore(CommandBuffer::Type type, Semaphore semaphore, VkPipelineStageFlags stages, bool flush)
@@ -470,6 +454,29 @@ namespace Vulkan
 				reinterpret_cast<unsigned long long>(submit.pSignalSemaphores[i]));
 		}
 #endif
+	}
+
+	void Device::SubmitVisible(CommandBufferHandle& cmd, VkPipelineStageFlags visible_stages, bool graphics_visible, bool compute_visible, bool transfer_visible)
+	{
+		VkQueue src_queue = GetVkQueue(cmd->GetCommandBufferType());
+
+		bool graphics_sem_needed = (src_queue != graphics_queue) && graphics_visible;
+		bool compute_sem_needed = (src_queue != compute_queue) && compute_visible;
+		bool transfer_sem_needed = (src_queue != transfer_queue) && transfer_visible;
+
+		uint32_t sem_count = uint32_t(graphics_sem_needed) + uint32_t(compute_sem_needed) + uint32_t(transfer_sem_needed);
+
+		Semaphore sem[3];
+		Submit(cmd, nullptr, sem_count, sem);
+
+		uint32_t sem_index = 0;
+		if (graphics_sem_needed)
+			AddWaitSemaphore(CommandBuffer::Type::Generic, sem[sem_index++], visible_stages, true);
+		if (compute_sem_needed)
+			AddWaitSemaphore(CommandBuffer::Type::AsyncCompute, sem[sem_index++], visible_stages & (VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT), true);
+		if (transfer_sem_needed)
+			AddWaitSemaphore(CommandBuffer::Type::AsyncTransfer, sem[sem_index++], visible_stages & VK_PIPELINE_STAGE_TRANSFER_BIT, true);
+
 	}
 
 	void Device::SubmitStaging(CommandBufferHandle& cmd, VkBufferUsageFlags usage, bool flush)
