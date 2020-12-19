@@ -66,6 +66,7 @@ set(QM_GLOBAL_HPP_FILES
 	${QM_SRC_DIR}/quantumvk.hpp)
 	
 set(QM_CORE_HPP_FILES 
+	${QM_SRC_DIR}/core/debug.hpp
 	${QM_SRC_DIR}/core/loader.hpp
 	${QM_SRC_DIR}/core/instance.hpp)
 	
@@ -73,6 +74,7 @@ set(QM_HEADERS_HPP_FILES
 	${QM_SRC_DIR}/headers/vk.hpp)
 	
 set(QM_CPP_FILES
+	${QM_SRC_DIR}/core/debug.cpp
 	${QM_SRC_DIR}/core/loader.cpp
 	${QM_SRC_DIR}/core/instance.cpp)
 

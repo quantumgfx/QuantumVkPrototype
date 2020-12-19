@@ -26,8 +26,10 @@ namespace vkq
 	{
 #ifdef VK_VERSION_1_1
 		return vk::enumerateInstanceVersion(type->dispatch);
-#endif
+
+#else
 		return VK_MAKE_VERSION(1, 0, 0);
+#endif
 	}
 
 	std::vector<vk::LayerProperties> Loader::enumerateInstanceLayerProperties() const
@@ -40,9 +42,9 @@ namespace vkq
 		return vk::enumerateInstanceExtensionProperties(nullptr, type->dispatch);
 	}
 
-	std::vector<vk::ExtensionProperties> Loader::enumerateInstanceExtensionProperties(const std::string& layerName) const
+	std::vector<vk::ExtensionProperties> Loader::enumerateInstanceExtensionProperties(const char* layerName) const
 	{
-		return vk::enumerateInstanceExtensionProperties(layerName, type->dispatch);
+		return vk::enumerateInstanceExtensionProperties(std::string{ layerName }, type->dispatch);
 	}
 
 	vk::Instance Loader::createInstance(const vk::InstanceCreateInfo& createInfo, vk::Optional<const vk::AllocationCallbacks> allocator) const

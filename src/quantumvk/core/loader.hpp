@@ -33,7 +33,7 @@ namespace vkq
 		uint32_t enumerateInstanceVersion() const;
 		std::vector<vk::LayerProperties> enumerateInstanceLayerProperties() const;
 		std::vector<vk::ExtensionProperties> enumerateInstanceExtensionProperties() const;
-		std::vector<vk::ExtensionProperties> enumerateInstanceExtensionProperties(const std::string& layerName) const;
+		std::vector<vk::ExtensionProperties> enumerateInstanceExtensionProperties(const char* layerName) const;
 		vk::Instance createInstance(const vk::InstanceCreateInfo& create_info, vk::Optional<const vk::AllocationCallbacks> allocator = nullptr) const;
 
 	private:

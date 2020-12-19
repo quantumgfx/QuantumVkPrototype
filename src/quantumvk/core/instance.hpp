@@ -25,6 +25,11 @@ namespace vkq
 
 		void destroy();
 
+		vk::DebugUtilsMessengerEXT createDebugUtilsMessengerEXT();
+
+		void destroyDebugUtilsMessengerEXT();
+
+
 		const vk::DispatchLoaderDynamic& getInstanceDispatch() const { return type->dispatch; }
 
 		vk::Instance vkInstance() const { return type->instance; }
@@ -53,14 +58,13 @@ namespace vkq
 		explicit InstanceFactory(Loader loader);
 		~InstanceFactory() = default;
 
-		
 		InstanceFactory& requireApiVersion(uint32_t version);
 		InstanceFactory& requestApiVersion(uint32_t version);
 		InstanceFactory& requireApiVersion(uint32_t major, uint32_t minor, uint32_t patch = 0) { return requireApiVersion(VK_MAKE_VERSION(major, minor, patch)); }
 		InstanceFactory& requestApiVersion(uint32_t major, uint32_t minor, uint32_t patch = 0) { return requestApiVersion(VK_MAKE_VERSION(major, minor, patch)); }
 
-		InstanceFactory& setAppName(const char* appName) { appName_ = appName; return *this; }
-		InstanceFactory& setEngineName(const char* engineName) { engineName_ = engineName; return *this; }
+		InstanceFactory& setAppName(const char* name) { appName = name; return *this; }
+		InstanceFactory& setEngineName(const char* name) { engineName = name; return *this; }
 		InstanceFactory& setAppVersion(uint32_t version) { appVersion = version; return *this; }
 		InstanceFactory& setEngineVersion(uint32_t version) { engineVersion = version; return *this; }
 		InstanceFactory& setAppVersion(uint32_t major, uint32_t minor, uint32_t patch = 0) { return setAppVersion(VK_MAKE_VERSION(major, minor, patch)); }
@@ -69,11 +73,14 @@ namespace vkq
 		InstanceFactory& enableLayer(const char* layerName);
 		InstanceFactory& enableExtension(const char* extensionName);
 
+		Instance build();
+		vk::Instance buildVk();
+
 
 	private:
 
-		const char* appName_ = nullptr;
-		const char* engineName_ = nullptr;
+		const char* appName = nullptr;
+		const char* engineName = nullptr;
 		uint32_t appVersion = 0;
 		uint32_t engineVersion = 0;
 		uint32_t requiredApiVersion = VK_MAKE_VERSION(1, 0, 0);
