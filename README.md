@@ -10,7 +10,7 @@ For examples of QuantumVk in use, check out the [QuantumVkExamples](https://gith
 In order to build QuantumVk, you must have downloaded the following, regardless of platform:
 - [Git](https://git-scm.com/downloads): To retrieve the repository.
 - [Cmake](https://cmake.org/): QuantumVk uses Cmake as a build system.
-- [Vulkan SDK](https://vulkan.lunarg.com/): The vulkan sdk is used to access vulkan functionality. QuantumVk doesn't link directly to the vulkan library. Instead [volk](https://github.com/zeux/volk) is used to link dynamically to the vulkan .dll/.so/.dylib depending on the platform.
+- [Vulkan SDK](https://vulkan.lunarg.com/): The vulkan sdk is used to access vulkan functionality. 
 
 #### Windows
 Windows is currently the only tested platform, though Linux, Andriod, Mac OSX and ios support is currently being worked on (Mac and ios via MoltenVk).

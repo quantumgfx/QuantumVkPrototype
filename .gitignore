@@ -1,7 +1,6 @@
 # cmake output thingy
 
-tests/extern/
-tests/build/
+.vscode
 
 # Visual Studio files and folder
 .vs/

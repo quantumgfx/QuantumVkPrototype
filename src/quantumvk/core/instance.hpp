@@ -6,6 +6,75 @@
 namespace vkq
 {
 
+#ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+
+	class DebugUtilsMessengerEXT
+	{
+	public:
+
+		DebugUtilsMessengerEXT(const DebugUtilsMessengerEXT&) = default;
+
+		DebugUtilsMessengerEXT(vk::DebugUtilsMessengerEXT messenger)
+		: messenger(messenger)
+		{
+		}
+
+		~DebugUtilsMessengerEXT() = default;
+
+		DebugUtilsMessengerEXT& operator =(const DebugUtilsMessengerEXT&) = default;
+		DebugUtilsMessengerEXT& operator =(vk::DebugUtilsMessengerEXT messenger_) 
+		{ 
+			messenger = messenger_; 
+			return *this; 
+		}
+
+		vk::DebugUtilsMessengerEXT vkMessenger() const { return messenger; }
+		vk::DebugUtilsMessengerEXT vkHandle() const { return messenger; }
+
+		operator vk::DebugUtilsMessengerEXT() const { return messenger; }
+
+	private:
+
+		vk::DebugUtilsMessengerEXT messenger;
+
+	};
+
+#endif
+
+#ifdef VK_KHR_SURFACE_EXTENSION_NAME
+
+	class SurfaceKHR
+	{
+	public:
+
+		SurfaceKHR(const SurfaceKHR&) = default;
+		SurfaceKHR(vk::SurfaceKHR surface)
+			: surface(surface)
+		{
+		}
+
+		~SurfaceKHR() = default;
+
+		SurfaceKHR& operator =(const SurfaceKHR&) = default;
+		SurfaceKHR& operator =(vk::SurfaceKHR surface_) 
+		{ 
+			surface = surface_; 
+			return *this; 
+		}
+
+		vk::SurfaceKHR vkSurface() const { return surface; }
+		vk::SurfaceKHR vkHandle() const { return surface; }
+
+		operator vk::SurfaceKHR() const { return surface; }
+
+	private:
+
+		vk::SurfaceKHR surface;
+
+	};
+
+#endif
+
 	class Instance
 	{
 		struct VkqType
@@ -25,10 +94,12 @@ namespace vkq
 
 		void destroy();
 
-		vk::DebugUtilsMessengerEXT createDebugUtilsMessengerEXT();
+#ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 
-		void destroyDebugUtilsMessengerEXT();
-
+		DebugUtilsMessengerEXT createDebugUtilsMessengerEXT(const vk::DebugUtilsMessengerCreateInfoEXT& createInfo, vk::Optional<const vk::AllocationCallbacks> allocator = nullptr);
+		void destroyDebugUtilsMessengerEXT(DebugUtilsMessengerEXT messenger, vk::Optional<const vk::AllocationCallbacks> allocator = nullptr);
+		
+#endif
 
 		const vk::DispatchLoaderDynamic& getInstanceDispatch() const { return type->dispatch; }
 
@@ -47,49 +118,6 @@ namespace vkq
 		}
 
 		VkqType* type = nullptr;
-
-
-	};
-
-	class InstanceFactory
-	{
-	public:
-
-		explicit InstanceFactory(Loader loader);
-		~InstanceFactory() = default;
-
-		InstanceFactory& requireApiVersion(uint32_t version);
-		InstanceFactory& requestApiVersion(uint32_t version);
-		InstanceFactory& requireApiVersion(uint32_t major, uint32_t minor, uint32_t patch = 0) { return requireApiVersion(VK_MAKE_VERSION(major, minor, patch)); }
-		InstanceFactory& requestApiVersion(uint32_t major, uint32_t minor, uint32_t patch = 0) { return requestApiVersion(VK_MAKE_VERSION(major, minor, patch)); }
-
-		InstanceFactory& setAppName(const char* name) { appName = name; return *this; }
-		InstanceFactory& setEngineName(const char* name) { engineName = name; return *this; }
-		InstanceFactory& setAppVersion(uint32_t version) { appVersion = version; return *this; }
-		InstanceFactory& setEngineVersion(uint32_t version) { engineVersion = version; return *this; }
-		InstanceFactory& setAppVersion(uint32_t major, uint32_t minor, uint32_t patch = 0) { return setAppVersion(VK_MAKE_VERSION(major, minor, patch)); }
-		InstanceFactory& setEngineVersion(uint32_t major, uint32_t minor, uint32_t patch = 0) { return setEngineVersion(VK_MAKE_VERSION(major, minor, patch)); }
-
-		InstanceFactory& enableLayer(const char* layerName);
-		InstanceFactory& enableExtension(const char* extensionName);
-
-		Instance build();
-		vk::Instance buildVk();
-
-
-	private:
-
-		const char* appName = nullptr;
-		const char* engineName = nullptr;
-		uint32_t appVersion = 0;
-		uint32_t engineVersion = 0;
-		uint32_t requiredApiVersion = VK_MAKE_VERSION(1, 0, 0);
-		uint32_t requestedApiVersion = VK_MAKE_VERSION(1, 0, 0);
-
-		std::vector<const char*> layers;
-		std::vector<const char*> extensions;
-
-		Loader loader;
 
 	};
 

@@ -28,167 +28,18 @@ namespace vkq
 
     }
 
-    /////////////////////////////////
-    // Instance Factory /////////////
-    /////////////////////////////////
+#ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 
-    InstanceFactory::InstanceFactory(Loader loader)
-        : loader(loader)
+    DebugUtilsMessengerEXT Instance::createDebugUtilsMessengerEXT(const vk::DebugUtilsMessengerCreateInfoEXT& createInfo, vk::Optional<const vk::AllocationCallbacks> allocator)
     {
+        return DebugUtilsMessengerEXT{ type->instance.createDebugUtilsMessengerEXT(createInfo, allocator, type->dispatch) };
     }
 
-    InstanceFactory& InstanceFactory::requireApiVersion(uint32_t version)
+    void Instance::destroyDebugUtilsMessengerEXT(DebugUtilsMessengerEXT messenger, vk::Optional<const vk::AllocationCallbacks> allocator)
     {
-        if (version < VK_MAKE_VERSION(1, 0, 0))
-            return *this;
-        requiredApiVersion = version;
-        return *this;
+        type->instance.destroyDebugUtilsMessengerEXT(static_cast<vk::DebugUtilsMessengerEXT>(messenger), allocator, type->dispatch);
     }
 
-    InstanceFactory& InstanceFactory::requestApiVersion(uint32_t version)
-    {
-        if (version < VK_MAKE_VERSION(1, 0, 0))
-            return *this;
-        requestedApiVersion = version;
-        return *this;
-    }
-
-    InstanceFactory& InstanceFactory::enableLayer(const char* layerName)
-    {
-        if (!layerName) 
-            return *this; 
-        layers.push_back(layerName); 
-        return *this;
-    }
-
-    InstanceFactory& InstanceFactory::enableExtension(const char* extensionName)
-    {
-        if (!extensionName) 
-            return *this;
-        extensions.push_back(extensionName);
-        return *this;
-    }
-
-    static bool checkLayerSupported(const std::vector<vk::LayerProperties>& queriedlayers, const char* layer)
-    {
-        for (auto& queriedLayer : queriedlayers)
-        {
-            if (strcmp(queriedLayer.layerName, layer) == 0)
-                return true;
-        }
-        return false;
-    }
-
-    static bool checkInstanceExtensionSupported(const std::vector<vk::ExtensionProperties>& queriedExtensions, const char* extension)
-    {
-        for (auto& queriedExtension : queriedExtensions)
-        {
-            if (strcmp(queriedExtension.extensionName, extension) == 0)
-                return true;
-        }
-        return false;
-    }
-
-    Instance InstanceFactory::build()
-    {
-
-        vk::ApplicationInfo appInfo{};
-        vk::InstanceCreateInfo createInfo{};
-
-        // Retrieve the highest available instance version
-        uint32_t apiVersion = loader.enumerateInstanceVersion();
-
-        // If the highest available version is less than the required version, throw an error
-        if (requiredApiVersion > apiVersion)
-            throw std::runtime_error("Required API version is not available");
-
-        // If the requested version is available, use that. Else just use the minimum required version
-        if ((requiredApiVersion < requestedApiVersion) && (requestedApiVersion <= apiVersion))
-            apiVersion = requestedApiVersion;
-        else
-            apiVersion = requiredApiVersion;
-
-        appInfo.applicationVersion = appVersion;
-        appInfo.engineVersion = engineVersion;
-        appInfo.pApplicationName = appName != nullptr ? appName : "";
-        appInfo.pEngineName = engineName != nullptr ? engineName : "";
-        appInfo.apiVersion = apiVersion;
-        
-        {
-            std::vector<vk::LayerProperties> queriedLayers = loader.enumerateInstanceLayerProperties();
-
-            for (const char* layer : layers)
-                if (!checkLayerSupported(queriedLayers, layer))
-                    throw std::runtime_error("Layer is enabled but not available");
-        }
-       
-        {
-            std::vector<vk::ExtensionProperties> queriedExtensions = loader.enumerateInstanceExtensionProperties();
-
-            for (const char* extension : extensions)
-                if (!checkInstanceExtensionSupported(queriedExtensions, extension))
-                    throw std::runtime_error("Extension is enabled but not available");
-        }
-
-
-        vk::InstanceCreateInfo createInfo{};
-        createInfo.pApplicationInfo = &appInfo;
-        createInfo.setPApplicationInfo(&appInfo);
-        createInfo.setPEnabledLayerNames(layers);
-        createInfo.setPEnabledExtensionNames(extensions);
-
-        return Instance::create(loader, createInfo);
-        
-    }
-
-    vk::Instance InstanceFactory::buildVk()
-    {
-        vk::ApplicationInfo appInfo{};
-        vk::InstanceCreateInfo createInfo{};
-
-        // Retrieve the highest available instance version
-        uint32_t apiVersion = loader.enumerateInstanceVersion();
-
-        // If the highest available version is less than the required version, throw an error
-        if (requiredApiVersion > apiVersion)
-            throw std::runtime_error("Required API version is not available");
-
-        // If the requested version is available, use that. Else just use the minimum required version
-        if ((requiredApiVersion < requestedApiVersion) && (requestedApiVersion <= apiVersion))
-            apiVersion = requestedApiVersion;
-        else
-            apiVersion = requiredApiVersion;
-
-        appInfo.applicationVersion = appVersion;
-        appInfo.engineVersion = engineVersion;
-        appInfo.pApplicationName = appName != nullptr ? appName : "";
-        appInfo.pEngineName = engineName != nullptr ? engineName : "";
-        appInfo.apiVersion = apiVersion;
-
-        {
-            std::vector<vk::LayerProperties> queriedLayers = loader.enumerateInstanceLayerProperties();
-
-            for (const char* layer : layers)
-                if (!checkLayerSupported(queriedLayers, layer))
-                    throw std::runtime_error("Layer is enabled but not available");
-        }
-
-        {
-            std::vector<vk::ExtensionProperties> queriedExtensions = loader.enumerateInstanceExtensionProperties();
-
-            for (const char* extension : extensions)
-                if (!checkInstanceExtensionSupported(queriedExtensions, extension))
-                    throw std::runtime_error("Extension is enabled but not available");
-        }
-
-
-        vk::InstanceCreateInfo createInfo{};
-        createInfo.pApplicationInfo = &appInfo;
-        createInfo.setPApplicationInfo(&appInfo);
-        createInfo.setPEnabledLayerNames(layers);
-        createInfo.setPEnabledExtensionNames(extensions);
-
-        return loader.createInstance(createInfo);
-    }
+#endif
 
 }

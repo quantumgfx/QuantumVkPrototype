@@ -1,11 +1,9 @@
 #pragma once
 
 #include "../headers/vk.hpp"
-
-#include "loader.hpp"
+#include "../core/physicalDevice.hpp"
 
 namespace vkq
 {
-	
-
+    
 }
