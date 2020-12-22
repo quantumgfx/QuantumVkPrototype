@@ -1,9 +1,10 @@
 [submodule "extern/SPIRV-Cross"]
 	path = extern/SPIRV-Cross
 	url = https://github.com/KhronosGroup/SPIRV-Cross.git
-[submodule "extern/VulkanMemoryAllocator"]
-	path = extern/VulkanMemoryAllocator
-	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
 [submodule "extern/Vulkan-Headers"]
 	path = extern/Vulkan-Headers
 	url = https://github.com/KhronosGroup/Vulkan-Headers.git
+[submodule "extern/VulkanMemoryAllocator"]
+	path = extern/VulkanMemoryAllocator
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+	branch = master

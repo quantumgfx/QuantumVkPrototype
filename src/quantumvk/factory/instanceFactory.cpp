@@ -19,27 +19,51 @@ namespace vkq
         return *this;
     }
 
-    InstanceFactory& InstanceFactory::requestApiVersion(uint32_t version)
+    InstanceFactory& InstanceFactory::desireApiVersion(uint32_t version)
     {
         if (version < VK_MAKE_VERSION(1, 0, 0))
             return *this;
-        requestedApiVersion = version;
+        desiredApiVersion = version;
         return *this;
     }
 
     InstanceFactory& InstanceFactory::enableLayer(const char* layerName)
     {
-        if (!layerName) 
-            return *this; 
-        layers.push_back(layerName); 
+        if (!layerName)
+            return *this;
+        layers.push_back(layerName);
         return *this;
     }
 
     InstanceFactory& InstanceFactory::enableExtension(const char* extensionName)
     {
-        if (!extensionName) 
+        if (!extensionName)
             return *this;
         extensions.push_back(extensionName);
+        return *this;
+    }
+
+    InstanceFactory& InstanceFactory::enableLayers(std::vector<const char*> layerNames)
+    {
+        for (auto layerName : layerNames)
+        {
+            if (!layerName)
+                continue;
+            layers.push_back(layerName);
+        }
+
+        return *this;
+    }
+
+    InstanceFactory& InstanceFactory::enableExtensions(std::vector<const char*> extensionNames)
+    {
+        for (auto extensionName : extensionNames)
+        {
+            if (!extensionName)
+                continue;
+            extensions.push_back(extensionName);
+        }
+
         return *this;
     }
 
@@ -77,8 +101,8 @@ namespace vkq
             throw std::runtime_error("Required API version is not available");
 
         // If the requested version is available, use that. Else just use the minimum required version
-        if ((requiredApiVersion < requestedApiVersion) && (requestedApiVersion <= apiVersion))
-            apiVersion = requestedApiVersion;
+        if ((requiredApiVersion < desiredApiVersion) && (desiredApiVersion <= apiVersion))
+            apiVersion = desiredApiVersion;
         else
             apiVersion = requiredApiVersion;
 
@@ -87,7 +111,7 @@ namespace vkq
         appInfo.pApplicationName = appName != nullptr ? appName : "";
         appInfo.pEngineName = engineName != nullptr ? engineName : "";
         appInfo.apiVersion = apiVersion;
-        
+
         {
             std::vector<vk::LayerProperties> queriedLayers = loader.enumerateInstanceLayerProperties();
 
@@ -95,7 +119,7 @@ namespace vkq
                 if (!checkLayerSupported(queriedLayers, layer))
                     throw std::runtime_error("Layer is enabled but not available");
         }
-       
+
         {
             std::vector<vk::ExtensionProperties> queriedExtensions = loader.enumerateInstanceExtensionProperties();
 
@@ -104,7 +128,6 @@ namespace vkq
                     throw std::runtime_error("Extension is enabled but not available");
         }
 
-
         vk::InstanceCreateInfo createInfo{};
         createInfo.pApplicationInfo = &appInfo;
         createInfo.setPApplicationInfo(&appInfo);
@@ -112,6 +135,5 @@ namespace vkq
         createInfo.setPEnabledExtensionNames(extensions);
 
         return Instance::create(loader, createInfo);
-        
     }
-}
+} // namespace vkq
