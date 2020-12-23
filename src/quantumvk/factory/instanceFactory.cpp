@@ -43,7 +43,7 @@ namespace vkq
         return *this;
     }
 
-    InstanceFactory& InstanceFactory::enableLayers(std::vector<const char*> layerNames)
+    InstanceFactory& InstanceFactory::enableLayers(const std::vector<const char*>& layerNames)
     {
         for (auto layerName : layerNames)
         {
@@ -55,7 +55,7 @@ namespace vkq
         return *this;
     }
 
-    InstanceFactory& InstanceFactory::enableExtensions(std::vector<const char*> extensionNames)
+    InstanceFactory& InstanceFactory::enableExtensions(const std::vector<const char*>& extensionNames)
     {
         for (auto extensionName : extensionNames)
         {

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vk.hpp"
 #include "instance.hpp"
+#include "vk.hpp"
 
 namespace vkq
 {
@@ -13,8 +13,12 @@ namespace vkq
         ~PhysicalDevice() = default;
 
     public:
-        static PhysicalDevice create(Instance instance, vk::PhysicalDevice physicalDevice);
+        PhysicalDevice(Instance instance, vk::PhysicalDevice physicalDevice)
+            : instance(instance), physicalDevice(physicalDevice)
+        {
+        }
 
+        Instance getInstance() const { return instance; }
         const vk::DispatchLoaderDynamic& getInstanceDispatch() const { return instance.getInstanceDispatch(); }
 
         vk::PhysicalDevice vkPhysicalDevice() const { return physicalDevice; }
@@ -24,11 +28,6 @@ namespace vkq
         explicit operator bool() const noexcept { return static_cast<bool>(physicalDevice); }
 
     private:
-        PhysicalDevice(Instance instance, vk::PhysicalDevice physicalDevice)
-            : instance(instance), physicalDevice(physicalDevice)
-        {
-        }
-
         Instance instance;
         vk::PhysicalDevice physicalDevice;
     };

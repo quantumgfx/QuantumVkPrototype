@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../core/vk.hpp"
 #include "../core/instance.hpp"
 #include "../core/loader.hpp"
+#include "../core/vk.hpp"
 
 namespace vkq
 {
@@ -47,8 +47,8 @@ namespace vkq
         InstanceFactory& enableLayer(const char* layerName);
         InstanceFactory& enableExtension(const char* extensionName);
 
-        InstanceFactory& enableLayers(std::vector<const char*> layerNames);
-        InstanceFactory& enableExtensions(std::vector<const char*> extensionNames);
+        InstanceFactory& enableLayers(const std::vector<const char*>& layerNames);
+        InstanceFactory& enableExtensions(const std::vector<const char*>& extensionNames);
 
         Instance build();
 

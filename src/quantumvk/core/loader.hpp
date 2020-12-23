@@ -5,8 +5,8 @@
 namespace vkq
 {
     /**
-	 * @brief Object representing how the vulkan library is linked to the application. Loads global function pointers either 
-	 * from dynamic or static loader (via PFN_vkGetInstanceProcAddr).
+	 * @brief Object representing how the vulkan library is linked to the application. Loads global function pointers
+	 * via PFN_vkGetInstanceProcAddr.
 	*/
     class Loader
     {
@@ -25,20 +25,20 @@ namespace vkq
         void destroy();
 
         PFN_vkGetInstanceProcAddr getInstanceProcAddrLoader() const { return type->dispatch.vkGetInstanceProcAddr; }
-        const vk::DispatchLoaderDynamic &getGlobalDispatch() const { return type->dispatch; }
+        const vk::DispatchLoaderDynamic& getGlobalDispatch() const { return type->dispatch; }
 
         uint32_t enumerateInstanceVersion() const;
         std::vector<vk::LayerProperties> enumerateInstanceLayerProperties() const;
         std::vector<vk::ExtensionProperties> enumerateInstanceExtensionProperties() const;
-        std::vector<vk::ExtensionProperties> enumerateInstanceExtensionProperties(const char *layerName) const;
-        vk::Instance createInstance(const vk::InstanceCreateInfo &create_info, vk::Optional<const vk::AllocationCallbacks> allocator = nullptr) const;
+        std::vector<vk::ExtensionProperties> enumerateInstanceExtensionProperties(const char* layerName) const;
+        vk::Instance createInstance(const vk::InstanceCreateInfo& create_info, vk::Optional<const vk::AllocationCallbacks> allocator = nullptr) const;
 
     private:
-        Loader(VkqType *type)
+        Loader(VkqType* type)
             : type(type)
         {
         }
 
-        VkqType *type = nullptr;
+        VkqType* type = nullptr;
     };
 } // namespace vkq

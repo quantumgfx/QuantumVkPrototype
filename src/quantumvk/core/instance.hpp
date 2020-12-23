@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vk.hpp"
 #include "loader.hpp"
+#include "vk.hpp"
 
 namespace vkq
 {
@@ -12,6 +12,10 @@ namespace vkq
     // Debug Utils Messenger /////
     //////////////////////////////
 
+    /**
+     * @brief Simple transparent wrapper around vk::DebugUtilsMessengerEXT. 
+     * Allows for automatic conversion.
+     */
     class DebugUtilsMessengerEXT
     {
     public:
@@ -48,6 +52,10 @@ namespace vkq
     // Surface ///////////////////
     //////////////////////////////
 
+    /**
+     * @brief Simple transparent wrapper around vk::SurfaceKHR. 
+     * Allows for automatic conversion.
+     */
     class SurfaceKHR
     {
     public:
@@ -81,6 +89,10 @@ namespace vkq
     // Instance //////////////////
     //////////////////////////////
 
+    /**
+     * @brief Simple opaque handle for vk::Instance, ment to ease creation of instance
+     * and dispatching of instance level functions.
+     */
     class Instance
     {
         struct VkqType
@@ -98,6 +110,8 @@ namespace vkq
 
         void destroy();
 
+        std::vector<vk::PhysicalDevice> enumeratePhysicalDevices() const;
+
 #ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 
         DebugUtilsMessengerEXT createDebugUtilsMessengerEXT(const vk::DebugUtilsMessengerCreateInfoEXT& createInfo, vk::Optional<const vk::AllocationCallbacks> allocator = nullptr);
@@ -105,7 +119,10 @@ namespace vkq
 
 #endif
 
-        const vk::DispatchLoaderDynamic& getInstanceDispatch() const { return type->dispatch; }
+        const vk::DispatchLoaderDynamic& getInstanceDispatch() const
+        {
+            return type->dispatch;
+        }
 
         vk::Instance vkInstance() const { return type->instance; }
         vk::Instance vkHandle() const { return type->instance; }

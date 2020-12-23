@@ -3,7 +3,7 @@ IndentWidth: 4
 
 Language: Cpp
 # Force pointers to the type for C++.
-AllowShortFunctionsOnASingleLine: SFS_Inline
+AllowShortFunctionsOnASingleLine: Inline
 DerivePointerAlignment: false
 PointerAlignment: Left
 UseTab: Never 

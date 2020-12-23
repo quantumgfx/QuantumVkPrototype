@@ -10,7 +10,7 @@ namespace vkq
 
     Instance Instance::create(Loader loader, const vk::InstanceCreateInfo& createInfo)
     {
-        Instance instance{ new Instance::VkqType() };
+        Instance instance(new Instance::VkqType());
 
         instance.type->dispatch = loader.getGlobalDispatch();
         instance.type->instance = vk::createInstance(createInfo, nullptr, instance.type->dispatch);
@@ -25,14 +25,18 @@ namespace vkq
 
         delete type;
         type = nullptr;
+    }
 
+    std::vector<vk::PhysicalDevice> Instance::enumeratePhysicalDevices() const
+    {
+        return type->instance.enumeratePhysicalDevices(type->instance);
     }
 
 #ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 
     DebugUtilsMessengerEXT Instance::createDebugUtilsMessengerEXT(const vk::DebugUtilsMessengerCreateInfoEXT& createInfo, vk::Optional<const vk::AllocationCallbacks> allocator)
     {
-        return DebugUtilsMessengerEXT{ type->instance.createDebugUtilsMessengerEXT(createInfo, allocator, type->dispatch) };
+        return DebugUtilsMessengerEXT{type->instance.createDebugUtilsMessengerEXT(createInfo, allocator, type->dispatch)};
     }
 
     void Instance::destroyDebugUtilsMessengerEXT(DebugUtilsMessengerEXT messenger, vk::Optional<const vk::AllocationCallbacks> allocator)
@@ -42,4 +46,4 @@ namespace vkq
 
 #endif
 
-}
+} // namespace vkq
