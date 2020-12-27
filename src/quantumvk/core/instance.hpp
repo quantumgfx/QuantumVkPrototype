@@ -1,7 +1,7 @@
 #pragma once
 
-#include "loader.hpp"
-#include "vk.hpp"
+#include "../base/vk.hpp"
+#include "physical_device.hpp"
 
 namespace vkq
 {
@@ -19,6 +19,7 @@ namespace vkq
     class DebugUtilsMessengerEXT
     {
     public:
+        DebugUtilsMessengerEXT() = default;
         DebugUtilsMessengerEXT(const DebugUtilsMessengerEXT&) = default;
 
         DebugUtilsMessengerEXT(vk::DebugUtilsMessengerEXT messenger)
@@ -59,6 +60,7 @@ namespace vkq
     class SurfaceKHR
     {
     public:
+        SurfaceKHR() = default;
         SurfaceKHR(const SurfaceKHR&) = default;
         SurfaceKHR(vk::SurfaceKHR surface)
             : surface(surface)
@@ -79,6 +81,8 @@ namespace vkq
 
         operator vk::SurfaceKHR() const { return surface; }
 
+        explicit operator bool() const noexcept { return static_cast<bool>(surface); }
+
     private:
         vk::SurfaceKHR surface;
     };
@@ -89,28 +93,46 @@ namespace vkq
     // Instance //////////////////
     //////////////////////////////
 
+    struct InstanceImpl;
+
     /**
-     * @brief Simple opaque handle for vk::Instance, ment to ease creation of instance
-     * and dispatching of instance level functions.
+     * @brief Opaque handle for vk::Instance. Manages and holds the instance, all instance level function pointers, 
+     * as well as some additional functionality (like querying enabled layers and extensions and the like).
      */
     class Instance
     {
-        struct VkqType
-        {
-            vk::Instance instance;
-            vk::DispatchLoaderDynamic dispatch;
-        };
-
     public:
         Instance() = default;
         ~Instance() = default;
 
-    public:
-        static Instance create(Loader loader, const vk::InstanceCreateInfo& createInfo);
+        Instance(InstanceImpl* impl)
+            : impl(impl)
+        {
+        }
 
+    public:
+        /**
+         * @brief Creates a new instance object from function pointer to vkGetInstanceProcAddr and given createInfo
+         * 
+         * @param getInstanceProcAddr PFN_vkGetInstanceProcAddr retrieved from vulkan dynamic loader library.
+         * @param createInfo Info that is passed into vk::createInstance() to create the vk::Instance.
+         * @return New Instance Handle  
+         */
+        static Instance create(PFN_vkGetInstanceProcAddr getInstanceProcAddr, const vk::InstanceCreateInfo& createInfo);
+
+        /**
+         * @brief Destroys instance and frees memory allocated by this object.
+         * All created child objects must have been destroyed.
+         */
         void destroy();
 
-        std::vector<vk::PhysicalDevice> enumeratePhysicalDevices() const;
+        /**
+         * @brief Enumerates through all physical devices associated with the instance. Identical to 
+         * instance.enumeratePhysicalDevices();
+         * 
+         * @return Vector of physical devices associated with the instance.
+         */
+        std::vector<PhysicalDevice> enumeratePhysicalDevices() const;
 
 #ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 
@@ -118,25 +140,47 @@ namespace vkq
         void destroyDebugUtilsMessengerEXT(DebugUtilsMessengerEXT messenger, vk::Optional<const vk::AllocationCallbacks> allocator = nullptr);
 
 #endif
+        /**
+         * @brief Retrieves the vk::ApplicationInfo used to create instance handle.
+         * 
+         * @return vk::ApplicationInfo used to create instance handle 
+         */
+        const vk::ApplicationInfo& getApplicationInfo();
 
-        const vk::DispatchLoaderDynamic& getInstanceDispatch() const
-        {
-            return type->dispatch;
-        }
+        /**
+         * @brief Checks whether a certain extension was enabled when the instance was created.
+         * 
+         * @param extensionName Name of the extension
+         * @return True if the extension is enabled. False otherwise.
+         */
+        bool isInstanceExtensionEnabled(const char* extensionName);
 
-        vk::Instance vkInstance() const { return type->instance; }
-        vk::Instance vkHandle() const { return type->instance; }
-        operator vk::Instance() const { return type->instance; }
+        /**
+         * @brief Checks whether a certain layer was enabled when the instance was created.
+         * 
+         * @param layerName Name of the layer
+         * @return True if the layer is enabled. False otherwise.
+         */
+        bool isLayerEnabled(const char* layerName);
 
-        explicit operator bool() const noexcept { return type != nullptr; }
+        PFN_vkGetInstanceProcAddr getInstanceProcAddrLoader() const;
+
+        /**
+         * @brief Gets dynamic dispatcher suitable to call any instance or device level functions.
+         * Note: it is slightly more efficient to use a device dispatch to call device level functions.
+         * 
+         * @return vk::DispatchLoaderDynamic with all available function pointers set.
+         */
+        const vk::DispatchLoaderDynamic& getInstanceDispatch() const;
+
+        vk::Instance vkInstance() const;
+        vk::Instance vkHandle() const;
+        operator vk::Instance() const;
+
+        InstanceImpl* getImpl() const { return impl; }
 
     private:
-        Instance(VkqType* type)
-            : type(type)
-        {
-        }
-
-        VkqType* type = nullptr;
+        InstanceImpl* impl = nullptr;
     };
 
 } // namespace vkq

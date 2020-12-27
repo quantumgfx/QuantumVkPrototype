@@ -1,4 +1,4 @@
-#include "physicalDeviceSelector.hpp"
+#include "physical_device_selector.hpp"
 
 namespace vkq
 {
@@ -7,6 +7,15 @@ namespace vkq
         : instance(instance)
     {
     }
+
+#ifdef VK_KHR_SURFACE_EXTENSION_NAME
+
+    PhysicalDeviceSelector::PhysicalDeviceSelector(Instance instance, SurfaceKHR surface)
+        : instance(instance), presentSurface(surface)
+    {
+    }
+
+#endif
 
     PhysicalDeviceSelector& PhysicalDeviceSelector::setMinimumVersion(uint32_t version)
     {
@@ -38,6 +47,18 @@ namespace vkq
     PhysicalDeviceSelector& PhysicalDeviceSelector::setAllowedPhysicalDeviceTypes(const std::vector<vk::PhysicalDeviceType>& types)
     {
         allowedTypes = types;
+        return *this;
+    }
+
+    PhysicalDeviceSelector& PhysicalDeviceSelector::setSurfaceKHR(SurfaceKHR surface)
+    {
+        presentSurface = surface;
+        return *this;
+    }
+
+    PhysicalDeviceSelector& PhysicalDeviceSelector::setSupportSurfaceKHR(bool support)
+    {
+        presentSupportRequired = support;
         return *this;
     }
 
@@ -88,6 +109,19 @@ namespace vkq
             if (!extensionsSupported)
                 continue;
 
+            std::vector<vk::QueueFamilyProperties> queueProps = candidate.getQueueFamilyProperties(instance.getInstanceDispatch());
+
+#ifdef VK_KHR_SURFACE_EXTENSION_NAME
+            // If requested, surface presentation must be supported by physical device
+            bool surfaceSupported = false;
+
+            if (static_cast<bool>(presentSurface))
+                for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < queueProps.size(); queueFamilyIndex++)
+                    surfaceSupported = surfaceSupported && (VK_TRUE == candidate.getSurfaceSupportKHR(queueFamilyIndex, presentSurface, instance.getInstanceDispatch()));
+
+            if (presentSupportRequired && !surfaceSupported)
+                continue;
+#endif
             // vk::PhysicalDeviceMemoryProperties memProps = candidate.getMemoryProperties(instance.getInstanceDispatch());
 
             // Physical Device passes all requirements, and thus can be considered a candidate.

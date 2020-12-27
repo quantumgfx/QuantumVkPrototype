@@ -62,28 +62,33 @@ set(QM_SRC_DIR src/quantumvk)
 set(QM_GLOBAL_HPP_FILES 
 	${QM_SRC_DIR}/quantumvk.hpp)
 	
+set(QM_BASE_HPP_FILES 
+	${QM_SRC_DIR}/base/vk.hpp)
+
 set(QM_CORE_HPP_FILES 
-	${QM_SRC_DIR}/core/device.hpp
+	${QM_SRC_DIR}/core/forward.hpp
 	${QM_SRC_DIR}/core/loader.hpp
 	${QM_SRC_DIR}/core/instance.hpp
-	${QM_SRC_DIR}/core/physicalDevice.hpp
-	${QM_SRC_DIR}/core/vk.hpp)
-	
-set(QM_FACTORY_HPP_FILES 
-	${QM_SRC_DIR}/factory/debugFactory.hpp
-	${QM_SRC_DIR}/factory/instanceFactory.hpp
-	${QM_SRC_DIR}/factory/physicalDeviceSelector.hpp)
-	
-set(QM_CPP_FILES
-	${QM_SRC_DIR}/core/device.cpp	
+	${QM_SRC_DIR}/core/physical_device.hpp
+	${QM_SRC_DIR}/core/impl.hpp)
+
+set(QM_CORE_CPP_FILES 
 	${QM_SRC_DIR}/core/loader.cpp
 	${QM_SRC_DIR}/core/instance.cpp
-	${QM_SRC_DIR}/core/physicalDevice.cpp
-	${QM_SRC_DIR}/factory/debugFactory.cpp
-	${QM_SRC_DIR}/factory/instanceFactory.cpp
-	${QM_SRC_DIR}/factory/physicalDeviceSelector.cpp)
+	${QM_SRC_DIR}/core/physical_device.cpp)
 
-target_sources(QuantumVk PRIVATE ${QM_GLOBAL_HPP_FILES} ${QM_FACTORY_HPP_FILES} ${QM_CORE_HPP_FILES} ${QM_CPP_FILES})
+set(QM_FACTORY_HPP_FILES
+	${QM_SRC_DIR}/factory/debug_factory.hpp
+	${QM_SRC_DIR}/factory/instance_factory.hpp
+	${QM_SRC_DIR}/factory/physical_device_selector.hpp)
+
+set(QM_FACTORY_CPP_FILES
+	${QM_SRC_DIR}/factory/debug_factory.cpp
+	${QM_SRC_DIR}/factory/instance_factory.cpp
+	${QM_SRC_DIR}/factory/physical_device_selector.cpp)	
+
+
+target_sources(QuantumVk PRIVATE ${QM_GLOBAL_HPP_FILES} ${QM_BASE_HPP_FILES} ${QM_CORE_HPP_FILES} ${QM_CORE_CPP_FILES} ${QM_FACTORY_HPP_FILES} ${QM_FACTORY_CPP_FILES})
 	
 if (QM_VULKAN_MT)
     target_compile_definitions(QuantumVk PUBLIC QM_VULKAN_MT)

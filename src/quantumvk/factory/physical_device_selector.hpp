@@ -1,8 +1,8 @@
 #pragma once
 
+#include "../base/vk.hpp"
 #include "../core/instance.hpp"
-#include "../core/physicalDevice.hpp"
-#include "../core/vk.hpp"
+#include "../core/physical_device.hpp"
 
 namespace vkq
 {
@@ -22,6 +22,18 @@ namespace vkq
 			 * physical devices as well as the dynamic dispatcher.
 			 */
         explicit PhysicalDeviceSelector(Instance instance);
+
+#ifdef VK_KHR_SURFACE_EXTENSION_NAME
+
+        /**
+         * @brief Create a Physical Device Selector using an Instance and a SurfaceKHR
+         * 
+         * @param instance Instance must be referenced to obtain a list of available physical devices as well as the dynamic dispatcher.
+         * @param surface SurfaceKHR that is present support is queried with.
+         */
+        explicit PhysicalDeviceSelector(Instance instance, SurfaceKHR surface);
+
+#endif
 
         /**
 			 * @brief Default destructor of a Physical Device Selector
@@ -74,14 +86,25 @@ namespace vkq
          */
         PhysicalDeviceSelector& setAllowedPhysicalDeviceTypes(const std::vector<vk::PhysicalDeviceType>& types);
 
-        //////////////////////////////////
-        // Misc //////////////////////////
-        //////////////////////////////////
-
 #ifdef VK_KHR_SURFACE_EXTENSION_NAME
+        /**
+         * @brief Sets the surface that will be used to query physical device presentation support.
+         * 
+         * @param surface SurfaceKHR that the physical device will use to query presentation support.
+         * @return Reference to the selector object
+         */
+        PhysicalDeviceSelector& setSurfaceKHR(SurfaceKHR surface);
 
-        PhysicalDeviceSelector& setSurfaceKHR(vk::SurfaceKHR surface);
+        /**
+         * @brief Sets whether at least one of the physical device's queues must be able to present to surface. 
+         * Defaults to false.
+         * 
+         * @param support Set to true if surface presentation must be supported by at least one queue family. False otherwise.
+         * @return Reference to the selector object
+         */
+        PhysicalDeviceSelector& setSupportSurfaceKHR(bool support);
 #endif
+
         /////////////////////////////////
         // Select ///////////////////////
         /////////////////////////////////
@@ -95,6 +118,13 @@ namespace vkq
 
         std::vector<const char*> requiredExtensions = {};
         std::vector<vk::PhysicalDeviceType> allowedTypes = {vk::PhysicalDeviceType::eIntegratedGpu, vk::PhysicalDeviceType::eDiscreteGpu, vk::PhysicalDeviceType::eVirtualGpu, vk::PhysicalDeviceType::eCpu, vk::PhysicalDeviceType::eOther};
+
+#ifdef VK_KHR_SURFACE_EXTENSION_NAME
+
+        SurfaceKHR presentSurface;
+        bool presentSupportRequired = false;
+
+#endif
     };
 
 } // namespace vkq

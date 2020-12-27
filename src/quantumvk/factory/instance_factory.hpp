@@ -1,8 +1,8 @@
 #pragma once
 
+#include "../base/vk.hpp"
 #include "../core/instance.hpp"
 #include "../core/loader.hpp"
-#include "../core/vk.hpp"
 
 namespace vkq
 {

@@ -1,4 +1,6 @@
-#include "instanceFactory.hpp"
+#include "instance_factory.hpp"
+
+#include <cstring>
 
 namespace vkq
 {
@@ -134,6 +136,6 @@ namespace vkq
         createInfo.setPEnabledLayerNames(layers);
         createInfo.setPEnabledExtensionNames(extensions);
 
-        return Instance::create(loader, createInfo);
+        return loader.createInstance(createInfo);
     }
 } // namespace vkq
