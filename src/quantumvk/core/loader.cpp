@@ -1,17 +1,11 @@
 #include "loader.hpp"
-#include "impl.hpp"
 
 namespace vkq
 {
 
-    Loader createLoader(PFN_vkGetInstanceProcAddr getInstanceProcAddr)
-    {
-        return Loader::create(getInstanceProcAddr);
-    }
-
     Loader Loader::create(PFN_vkGetInstanceProcAddr getInstanceProcAddr)
     {
-        LoaderImpl* impl = new LoaderImpl();
+        Loader::Impl* impl = new Loader::Impl();
         impl->dispatch.init(getInstanceProcAddr);
         return Loader{impl};
     }
@@ -20,16 +14,6 @@ namespace vkq
     {
         delete impl;
         impl = nullptr;
-    }
-
-    PFN_vkGetInstanceProcAddr Loader::getInstanceProcAddrLoader() const
-    {
-        return impl->dispatch.vkGetInstanceProcAddr;
-    }
-
-    const vk::DispatchLoaderDynamic& Loader::getGlobalDispatch() const
-    {
-        return impl->dispatch;
     }
 
     uint32_t Loader::enumerateInstanceVersion() const
@@ -50,7 +34,7 @@ namespace vkq
 #endif
     }
 
-    std::vector<vk::LayerProperties> Loader::enumerateInstanceLayerProperties() const
+    std::vector<vk::LayerProperties> Loader::enumerateLayerProperties() const
     {
         return vk::enumerateInstanceLayerProperties(impl->dispatch);
     }
@@ -60,8 +44,33 @@ namespace vkq
         return vk::enumerateInstanceExtensionProperties(layerName, impl->dispatch);
     }
 
-    Instance Loader::createInstance(const vk::InstanceCreateInfo& createInfo)
+    bool Loader::isLayerSupported(const char* layerName) const
     {
-        return Instance::create(impl->dispatch.vkGetInstanceProcAddr, createInfo);
+        for (auto& queriedLayer : enumerateLayerProperties())
+        {
+            if (strcmp(queriedLayer.layerName, layerName) == 0)
+                return true;
+        }
+        return false;
+    }
+
+    bool Loader::isInstanceExtensionSupported(const char* extensionName, vk::Optional<const std::string> layerName) const
+    {
+        for (auto& quiriedExtension : enumerateInstanceExtensionProperties(layerName))
+        {
+            if (strcmp(quiriedExtension.extensionName, extensionName) == 0)
+                return true;
+        }
+        return false;
+    }
+
+    const vk::DispatchLoaderDynamic& Loader::getGlobalDispatch() const
+    {
+        return impl->dispatch;
+    }
+
+    PFN_vkGetInstanceProcAddr Loader::getInstanceProcAddrLoader() const
+    {
+        return impl->dispatch.vkGetInstanceProcAddr;
     }
 } // namespace vkq

@@ -8,7 +8,7 @@ namespace vkq
     {
     }
 
-    DebugUtilsMessengerEXT DebugUtilsMessengerEXTFactory::build()
+    vk::DebugUtilsMessengerEXT DebugUtilsMessengerEXTFactory::build()
     {
         vk::DebugUtilsMessengerCreateInfoEXT createInfo{};
         createInfo.messageSeverity = severityFlags;

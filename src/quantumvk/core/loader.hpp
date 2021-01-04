@@ -1,25 +1,22 @@
 #pragma once
 
 #include "../base/vk.hpp"
-#include "instance.hpp"
 
 namespace vkq
 {
-
-    struct LoaderImpl;
     /**
 	 * @brief Object explicitly representing the normally implicit Vulkan Loader object.
 	*/
     class Loader
     {
+        struct Impl
+        {
+            vk::DispatchLoaderDynamic dispatch;
+        };
+
     public:
         Loader() = default;
         ~Loader() = default;
-
-        Loader(LoaderImpl* impl)
-            : impl(impl)
-        {
-        }
 
     public:
         static Loader create(PFN_vkGetInstanceProcAddr getInstanceProcAddr);
@@ -28,20 +25,6 @@ namespace vkq
          * 
          */
         void destroy();
-
-        /**
-         * @brief Retrieves the native, implcit, loader object (aka PFN_vkGetInstanceProcAddr).
-         * 
-         * @return The PFN_vkGetInstanceProcAddr used to created the loader. 
-         */
-        PFN_vkGetInstanceProcAddr getInstanceProcAddrLoader() const;
-
-        /**
-         * @brief Retireves a dispatcher capable of calling any global-level functions.
-         * 
-         * @return Gloabl Dispatcher
-         */
-        const vk::DispatchLoaderDynamic& getGlobalDispatch() const;
 
         /**
          * @brief Enumerates all avialable instance versions. If header version is less than VK_VERSION_1_1, or 
@@ -56,7 +39,7 @@ namespace vkq
          * 
          * @return vector of layer properties.
          */
-        std::vector<vk::LayerProperties> enumerateInstanceLayerProperties() const;
+        std::vector<vk::LayerProperties> enumerateLayerProperties() const;
 
         /**
          * @brief Enumerates through all available extensions for a given layer.
@@ -67,26 +50,45 @@ namespace vkq
         std::vector<vk::ExtensionProperties> enumerateInstanceExtensionProperties(vk::Optional<const std::string> layerName = nullptr) const;
 
         /**
-         * @brief Create an instance handle given certain create info
+         * @brief Returns whether a particular layer is supported.
          * 
-         * @param createInfo info specifying creation parameters of instance
-         * @return Newly created instance handle
+         * @param layerName Name of the layer.
+         * @return true if the layerName is contained in the enumerateLayerProperties vector
+         * @return false otherwise
          */
-        Instance createInstance(const vk::InstanceCreateInfo& createInfo);
+        bool isLayerSupported(const char* layerName) const;
 
-        LoaderImpl* getImpl() const { return impl; }
+        /**
+         * @brief Returns whether a particular instance extension is supported.
+         * 
+         * @param extensionName Name of the instance extension.
+         * @param layerName Optional name of the layer who provides the instance extension
+         * @return true if the instance extension is supported
+         * @return false otherwise
+         */
+        bool isInstanceExtensionSupported(const char* extensionName, vk::Optional<const std::string> layerName = nullptr) const;
+
+        /**
+         * @brief Retireves a dispatcher capable of calling any global-level functions.
+         * 
+         * @return Gloabl Dispatcher
+         */
+        const vk::DispatchLoaderDynamic& getGlobalDispatch() const;
+
+        /**
+         * @brief Retrieves the native, implcit, loader object (aka PFN_vkGetInstanceProcAddr).
+         * 
+         * @return The PFN_vkGetInstanceProcAddr used to created the loader. 
+         */
+        PFN_vkGetInstanceProcAddr getInstanceProcAddrLoader() const;
 
     private:
-        LoaderImpl* impl = nullptr;
-    };
+        explicit Loader(Impl* impl)
+            : impl(impl)
+        {
+        }
 
-    /**
-     * @brief Global function equivelent of Loader::create();
-     * Retains consistency of vk:: namespace (where instance is created by a global function as well).
-     * 
-     * @param getInstanceProcAddr 
-     * @return Loader 
-     */
-    Loader createLoader(PFN_vkGetInstanceProcAddr getInstanceProcAddr);
+        Impl* impl = nullptr;
+    };
 
 } // namespace vkq

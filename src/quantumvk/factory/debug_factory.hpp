@@ -30,7 +30,7 @@ namespace vkq
             return *this;
         }
 
-        DebugUtilsMessengerEXT build();
+        vk::DebugUtilsMessengerEXT build();
 
     private:
         vk::DebugUtilsMessageSeverityFlagsEXT severityFlags;

@@ -1,26 +1,37 @@
 #include "physical_device.hpp"
-#include "impl.hpp"
 
 namespace vkq
 {
+    PhysicalDevice PhysicalDevice::create(const Instance& instance, vk::PhysicalDevice phdev)
+    {
+        return PhysicalDevice{instance, phdev};
+    }
+
+    void PhysicalDevice::reset()
+    {
+        instance = {};
+        phdev = nullptr;
+    }
 
     std::vector<vk::ExtensionProperties> PhysicalDevice::enumerateDeviceExtensionProperties(vk::Optional<const std::string> layerName = nullptr)
     {
-        return impl->phdev.enumerateDeviceExtensionProperties(layerName, impl->instance.getInstanceDispatch());
+        return phdev.enumerateDeviceExtensionProperties(layerName, instance.getInstanceDispatch());
     }
 
-    vk::PhysicalDevice PhysicalDevice::vkPhysicalDevice() const
+    vk::PhysicalDeviceProperties PhysicalDevice::getProperties()
     {
-        return impl->phdev;
+        return phdev.getProperties(instance.getInstanceDispatch());
     }
 
-    vk::PhysicalDevice PhysicalDevice::vkHandle() const
+    std::vector<vk::QueueFamilyProperties> PhysicalDevice::getQueueFamilyProperties()
     {
-        return impl->phdev;
+        return phdev.getQueueFamilyProperties(instance.getInstanceDispatch());
     }
 
-    PhysicalDevice::operator vk::PhysicalDevice() const
+#ifdef VK_KHR_SURFACE_EXTENSION_NAME
+    vk::Bool32 PhysicalDevice::getSurfaceSupportKHR(uint32_t queueFamilyIndex, vk::SurfaceKHR surface)
     {
-        return impl->phdev;
+        return phdev.getSurfaceSupportKHR(queueFamilyIndex, surface, instance.getInstanceDispatch());
     }
+#endif
 }

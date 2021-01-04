@@ -10,7 +10,7 @@ namespace vkq
 
 #ifdef VK_KHR_SURFACE_EXTENSION_NAME
 
-    PhysicalDeviceSelector::PhysicalDeviceSelector(Instance instance, SurfaceKHR surface)
+    PhysicalDeviceSelector::PhysicalDeviceSelector(Instance instance, vk::SurfaceKHR surface)
         : instance(instance), presentSurface(surface)
     {
     }
@@ -50,7 +50,7 @@ namespace vkq
         return *this;
     }
 
-    PhysicalDeviceSelector& PhysicalDeviceSelector::setSurfaceKHR(SurfaceKHR surface)
+    PhysicalDeviceSelector& PhysicalDeviceSelector::setSurfaceKHR(vk::SurfaceKHR surface)
     {
         presentSurface = surface;
         return *this;
@@ -59,6 +59,42 @@ namespace vkq
     PhysicalDeviceSelector& PhysicalDeviceSelector::setSupportSurfaceKHR(bool support)
     {
         presentSupportRequired = support;
+        return *this;
+    }
+
+    PhysicalDeviceSelector& PhysicalDeviceSelector::setDesiredVersion(float weight, uint32_t version)
+    {
+        desiredVersionWeight = weight;
+        desiredVersion = version;
+        return *this;
+    }
+
+    PhysicalDeviceSelector& PhysicalDeviceSelector::requestExtension(float weight, const char* extensionName)
+    {
+        requestedExtensions.emplace_back(extensionName, weight);
+        return *this;
+    }
+
+    PhysicalDeviceSelector& PhysicalDeviceSelector::requestExtensions(float weight, const std::vector<const char*>& extensionNames)
+    {
+        requestedExtensions.reserve(requestedExtensions.size() + extensionNames.size());
+        for (auto extensionName : extensionNames)
+            requestedExtensions.emplace_back(extensionName, weight);
+        return *this;
+    }
+
+    PhysicalDeviceSelector& PhysicalDeviceSelector::preferPhysicalDeviceType(float weight, vk::PhysicalDeviceType type)
+    {
+        for (auto& typePref : typePreferences)
+        {
+            if (typePref.first == type)
+            {
+                typePref.second = weight;
+                return *this;
+            }
+        }
+
+        typePreferences.emplace_back(type, weight);
         return *this;
     }
 
@@ -72,64 +108,118 @@ namespace vkq
         return false;
     }
 
-    vk::PhysicalDevice PhysicalDeviceSelector::select()
+    PhysicalDevice PhysicalDeviceSelector::select()
     {
         std::vector<vk::PhysicalDevice> candidates;
 
         for (vk::PhysicalDevice candidate : instance.enumeratePhysicalDevices())
         {
-            vk::PhysicalDeviceProperties props = candidate.getProperties(instance.getInstanceDispatch());
+            // Requirements involving physicalDeviceProps
+            {
+                vk::PhysicalDeviceProperties props = candidate.getProperties(instance.getInstanceDispatch());
 
-            // Physical Device must support minimum requested version of vulkan
-            if (props.apiVersion < minimumVersion)
-                continue;
+                // Physical Device must support minimum requested version of vulkan
+                if (props.apiVersion < minimumVersion)
+                    continue;
 
-            // Physical Device must be of an allowed type
-            bool allowedType = false;
+                // Physical Device must be of an allowed type
+                bool allowedType = false;
 
-            for (vk::PhysicalDeviceType type : allowedTypes)
-                if (props.deviceType == type)
-                {
-                    allowedType = true;
-                    break;
-                }
+                for (vk::PhysicalDeviceType type : allowedTypes)
+                    if (props.deviceType == type)
+                    {
+                        allowedType = true;
+                        break;
+                    }
 
-            if (!allowedType)
-                continue;
+                if (!allowedType)
+                    continue;
+            }
+            // Requirements involving quried extensions
+            {
+                // Physical Device must support all required extensions
+                std::vector<vk::ExtensionProperties> queriedExtensions = candidate.enumerateDeviceExtensionProperties(nullptr, instance.getInstanceDispatch());
 
-            // Physical Device must support all required extensions
-            std::vector<vk::ExtensionProperties>
-                queriedExtensions = candidate.enumerateDeviceExtensionProperties(nullptr, instance.getInstanceDispatch());
+                bool extensionsSupported = true;
 
-            bool extensionsSupported = true;
+                for (const char* extension : requiredExtensions)
+                    extensionsSupported = (extensionsSupported && checkDeviceExtensionSupported(queriedExtensions, extension));
 
-            for (const char* extension : requiredExtensions)
-                extensionsSupported = (extensionsSupported && checkDeviceExtensionSupported(queriedExtensions, extension));
+                if (!extensionsSupported)
+                    continue;
+            }
 
-            if (!extensionsSupported)
-                continue;
-
-            std::vector<vk::QueueFamilyProperties> queueProps = candidate.getQueueFamilyProperties(instance.getInstanceDispatch());
+            // Queue requirements
+            {
+                std::vector<vk::QueueFamilyProperties> queueProps = candidate.getQueueFamilyProperties(instance.getInstanceDispatch());
 
 #ifdef VK_KHR_SURFACE_EXTENSION_NAME
-            // If requested, surface presentation must be supported by physical device
-            bool surfaceSupported = false;
+                // If requested, surface presentation must be supported by physical device
+                bool surfaceSupported = false;
 
-            if (static_cast<bool>(presentSurface))
-                for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < queueProps.size(); queueFamilyIndex++)
-                    surfaceSupported = surfaceSupported && (VK_TRUE == candidate.getSurfaceSupportKHR(queueFamilyIndex, presentSurface, instance.getInstanceDispatch()));
+                if (static_cast<bool>(presentSurface))
+                    for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < queueProps.size(); queueFamilyIndex++)
+                        surfaceSupported = surfaceSupported && (VK_TRUE == candidate.getSurfaceSupportKHR(queueFamilyIndex, presentSurface, instance.getInstanceDispatch()));
 
-            if (presentSupportRequired && !surfaceSupported)
-                continue;
+                if (presentSupportRequired && !surfaceSupported)
+                    continue;
 #endif
+            }
+
             // vk::PhysicalDeviceMemoryProperties memProps = candidate.getMemoryProperties(instance.getInstanceDispatch());
 
             // Physical Device passes all requirements, and thus can be considered a candidate.
             candidates.push_back(candidate);
         }
 
-        // TEMP
-        return candidates.front();
+        if (candidates.size() == 0)
+        {
+            throw std::runtime_error("No suitable gpu found");
+        }
+
+        bool set = false;
+        float bestWeight = 0;
+        vk::PhysicalDevice bestCandidate;
+
+        for (vk::PhysicalDevice candidate : candidates)
+        {
+            float candidateWeight = 0.0f;
+
+            // Preferences involving physicalDeviceProperties
+            {
+                vk::PhysicalDeviceProperties props = candidate.getProperties(instance.getInstanceDispatch());
+
+                if (props.apiVersion >= desiredVersion)
+                    candidateWeight += desiredVersionWeight;
+
+                for (auto type : typePreferences)
+                {
+                    if (type.first == props.deviceType)
+                    {
+                        candidateWeight += type.second;
+                        break;
+                    }
+                }
+            }
+
+            // Prefernces involving extensions
+            {
+                std::vector<vk::ExtensionProperties> queriedExtensions = candidate.enumerateDeviceExtensionProperties(nullptr, instance.getInstanceDispatch());
+
+                for (auto extension : requestedExtensions)
+                    if (checkDeviceExtensionSupported(queriedExtensions, extension.first))
+                        candidateWeight += extension.second;
+            }
+
+            if (candidateWeight >= bestWeight || !set)
+            {
+                set = true;
+                bestWeight = candidateWeight;
+                bestCandidate = candidate;
+            }
+        }
+
+        return PhysicalDevice::create(instance, bestCandidate);
     }
 
 } // namespace vkq

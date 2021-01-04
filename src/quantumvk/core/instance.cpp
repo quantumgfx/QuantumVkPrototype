@@ -1,5 +1,4 @@
 #include "instance.hpp"
-#include "impl.hpp"
 
 #include <cstring>
 
@@ -11,7 +10,7 @@ namespace vkq
 
     Instance Instance::create(PFN_vkGetInstanceProcAddr getInstanceProcAddr, const vk::InstanceCreateInfo& createInfo)
     {
-        InstanceImpl* impl = new InstanceImpl();
+        Instance::Impl* impl = new Instance::Impl();
         impl->dispatch.init(getInstanceProcAddr);
         impl->instance = vk::createInstance(createInfo, nullptr, impl->dispatch);
         impl->dispatch.init(impl->instance);
@@ -22,14 +21,18 @@ namespace vkq
 
         std::vector<vk::PhysicalDevice> vkPhysicalDevices = impl->instance.enumeratePhysicalDevices(impl->dispatch);
 
-        impl->physicalDevices.reserve(vkPhysicalDevices.size());
+        ExtensionSupport& support = impl->extensionSupport;
 
-        for (auto phdev : vkPhysicalDevices)
+        for (const char* extension : impl->enabledExtensions)
         {
-            PhysicalDeviceImpl* phdevImpl = new PhysicalDeviceImpl();
-            phdevImpl->instance = Instance(impl);
-            phdevImpl->phdev = phdev;
-            impl->physicalDevices.emplace_back(phdevImpl);
+#ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+            if (strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, extension) == 0)
+                support.debugUtilsEXT = true;
+#endif
+#ifdef VK_KHR_SURFACE_EXTENSION_NAME
+            if (strcmp(VK_KHR_SURFACE_EXTENSION_NAME, extension) == 0)
+                support.surfaceKHR = true;
+#endif
         }
 
         return Instance{impl};
@@ -37,43 +40,37 @@ namespace vkq
 
     void Instance::destroy()
     {
-        for (auto phdev : impl->physicalDevices)
-        {
-            PhysicalDeviceImpl* phdevImpl = phdev.getImpl();
-            delete phdevImpl;
-        }
-
         impl->instance.destroy(nullptr, impl->dispatch);
 
         delete impl;
         impl = nullptr;
     }
 
-    std::vector<PhysicalDevice> Instance::enumeratePhysicalDevices() const
-    {
-        return impl->physicalDevices;
-    }
-
 #ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 
-    DebugUtilsMessengerEXT Instance::createDebugUtilsMessengerEXT(const vk::DebugUtilsMessengerCreateInfoEXT& createInfo, vk::Optional<const vk::AllocationCallbacks> allocator)
+    vk::DebugUtilsMessengerEXT Instance::createDebugUtilsMessengerEXT(const vk::DebugUtilsMessengerCreateInfoEXT& createInfo, vk::Optional<const vk::AllocationCallbacks> allocator)
     {
-        return DebugUtilsMessengerEXT{impl->instance.createDebugUtilsMessengerEXT(createInfo, allocator, impl->dispatch)};
+        return impl->instance.createDebugUtilsMessengerEXT(createInfo, allocator, impl->dispatch);
     }
 
-    void Instance::destroyDebugUtilsMessengerEXT(DebugUtilsMessengerEXT messenger, vk::Optional<const vk::AllocationCallbacks> allocator)
+    void Instance::destroyDebugUtilsMessengerEXT(vk::DebugUtilsMessengerEXT messenger, vk::Optional<const vk::AllocationCallbacks> allocator)
     {
-        impl->instance.destroyDebugUtilsMessengerEXT(static_cast<vk::DebugUtilsMessengerEXT>(messenger), allocator, impl->dispatch);
+        impl->instance.destroyDebugUtilsMessengerEXT(messenger, allocator, impl->dispatch);
     }
 
 #endif
 
-    const vk::ApplicationInfo& Instance::getApplicationInfo()
+    std::vector<vk::PhysicalDevice> Instance::enumeratePhysicalDevices() const
+    {
+        return impl->instance.enumeratePhysicalDevices(impl->dispatch);
+    }
+
+    const vk::ApplicationInfo& Instance::getApplicationInfo() const
     {
         return impl->appInfo;
     }
 
-    bool Instance::isInstanceExtensionEnabled(const char* extensionName)
+    bool Instance::isInstanceExtensionEnabled(const char* extensionName) const
     {
         for (const char* extension : impl->enabledExtensions)
             if (strcmp(extensionName, extension) == 0)
@@ -81,7 +78,7 @@ namespace vkq
         return false;
     }
 
-    bool Instance::isLayerEnabled(const char* layerName)
+    bool Instance::isLayerEnabled(const char* layerName) const
     {
         for (const char* layer : impl->enabledLayers)
             if (strcmp(layerName, layer) == 0)
@@ -89,14 +86,19 @@ namespace vkq
         return false;
     }
 
-    PFN_vkGetInstanceProcAddr Instance::getInstanceProcAddrLoader() const
+    const Instance::ExtensionSupport& Instance::getInstanceExtensionSupport() const
     {
-        return impl->dispatch.vkGetInstanceProcAddr;
+        return impl->extensionSupport;
     }
 
     const vk::DispatchLoaderDynamic& Instance::getInstanceDispatch() const
     {
         return impl->dispatch;
+    }
+
+    PFN_vkGetInstanceProcAddr Instance::getInstanceProcAddrLoader() const
+    {
+        return impl->dispatch.vkGetInstanceProcAddr;
     }
 
     vk::Instance Instance::vkInstance() const

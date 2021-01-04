@@ -1,99 +1,14 @@
 #pragma once
 
 #include "../base/vk.hpp"
-#include "physical_device.hpp"
+#include "loader.hpp"
 
 namespace vkq
 {
 
-#ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
-
-    //////////////////////////////
-    // Debug Utils Messenger /////
-    //////////////////////////////
-
-    /**
-     * @brief Simple transparent wrapper around vk::DebugUtilsMessengerEXT. 
-     * Allows for automatic conversion.
-     */
-    class DebugUtilsMessengerEXT
-    {
-    public:
-        DebugUtilsMessengerEXT() = default;
-        DebugUtilsMessengerEXT(const DebugUtilsMessengerEXT&) = default;
-
-        DebugUtilsMessengerEXT(vk::DebugUtilsMessengerEXT messenger)
-            : messenger(messenger)
-        {
-        }
-
-        ~DebugUtilsMessengerEXT() = default;
-
-        DebugUtilsMessengerEXT& operator=(const DebugUtilsMessengerEXT&) = default;
-        DebugUtilsMessengerEXT& operator=(vk::DebugUtilsMessengerEXT messenger_)
-        {
-            messenger = messenger_;
-            return *this;
-        }
-
-        vk::DebugUtilsMessengerEXT vkMessenger() const { return messenger; }
-        vk::DebugUtilsMessengerEXT vkHandle() const { return messenger; }
-
-        operator vk::DebugUtilsMessengerEXT() const { return messenger; }
-
-    private:
-        vk::DebugUtilsMessengerEXT messenger;
-    };
-
-#endif
-
-#ifdef VK_KHR_SURFACE_EXTENSION_NAME
-
-    //////////////////////////////
-    // Surface ///////////////////
-    //////////////////////////////
-
-    /**
-     * @brief Simple transparent wrapper around vk::SurfaceKHR. 
-     * Allows for automatic conversion.
-     */
-    class SurfaceKHR
-    {
-    public:
-        SurfaceKHR() = default;
-        SurfaceKHR(const SurfaceKHR&) = default;
-        SurfaceKHR(vk::SurfaceKHR surface)
-            : surface(surface)
-        {
-        }
-
-        ~SurfaceKHR() = default;
-
-        SurfaceKHR& operator=(const SurfaceKHR&) = default;
-        SurfaceKHR& operator=(vk::SurfaceKHR surface_)
-        {
-            surface = surface_;
-            return *this;
-        }
-
-        vk::SurfaceKHR vkSurface() const { return surface; }
-        vk::SurfaceKHR vkHandle() const { return surface; }
-
-        operator vk::SurfaceKHR() const { return surface; }
-
-        explicit operator bool() const noexcept { return static_cast<bool>(surface); }
-
-    private:
-        vk::SurfaceKHR surface;
-    };
-
-#endif
-
     //////////////////////////////
     // Instance //////////////////
     //////////////////////////////
-
-    struct InstanceImpl;
 
     /**
      * @brief Opaque handle for vk::Instance. Manages and holds the instance, all instance level function pointers, 
@@ -102,13 +17,32 @@ namespace vkq
     class Instance
     {
     public:
+        struct ExtensionSupport
+        {
+#ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+            bool debugUtilsEXT = false;
+#endif
+#ifdef VK_KHR_SURFACE_EXTENSION_NAME
+            bool surfaceKHR = false;
+#endif
+        };
+
+    private:
+        struct Impl
+        {
+            vk::Instance instance;
+            vk::DispatchLoaderDynamic dispatch = {};
+
+            vk::ApplicationInfo appInfo = {};
+            std::vector<const char*> enabledLayers;
+            std::vector<const char*> enabledExtensions;
+
+            Instance::ExtensionSupport extensionSupport;
+        };
+
+    public:
         Instance() = default;
         ~Instance() = default;
-
-        Instance(InstanceImpl* impl)
-            : impl(impl)
-        {
-        }
 
     public:
         /**
@@ -120,32 +54,22 @@ namespace vkq
          */
         static Instance create(PFN_vkGetInstanceProcAddr getInstanceProcAddr, const vk::InstanceCreateInfo& createInfo);
 
+        static Instance create(const Loader& loader, const vk::InstanceCreateInfo& createInfo) { return create(loader.getInstanceProcAddrLoader(), createInfo); }
+
         /**
          * @brief Destroys instance and frees memory allocated by this object.
          * All created child objects must have been destroyed.
          */
         void destroy();
 
-        /**
-         * @brief Enumerates through all physical devices associated with the instance. Identical to 
-         * instance.enumeratePhysicalDevices();
-         * 
-         * @return Vector of physical devices associated with the instance.
-         */
-        std::vector<PhysicalDevice> enumeratePhysicalDevices() const;
-
 #ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 
-        DebugUtilsMessengerEXT createDebugUtilsMessengerEXT(const vk::DebugUtilsMessengerCreateInfoEXT& createInfo, vk::Optional<const vk::AllocationCallbacks> allocator = nullptr);
-        void destroyDebugUtilsMessengerEXT(DebugUtilsMessengerEXT messenger, vk::Optional<const vk::AllocationCallbacks> allocator = nullptr);
+        vk::DebugUtilsMessengerEXT createDebugUtilsMessengerEXT(const vk::DebugUtilsMessengerCreateInfoEXT& createInfo, vk::Optional<const vk::AllocationCallbacks> allocator = nullptr);
+        void destroyDebugUtilsMessengerEXT(vk::DebugUtilsMessengerEXT messenger, vk::Optional<const vk::AllocationCallbacks> allocator = nullptr);
 
 #endif
-        /**
-         * @brief Retrieves the vk::ApplicationInfo used to create instance handle.
-         * 
-         * @return vk::ApplicationInfo used to create instance handle 
-         */
-        const vk::ApplicationInfo& getApplicationInfo();
+
+        std::vector<vk::PhysicalDevice> enumeratePhysicalDevices() const;
 
         /**
          * @brief Checks whether a certain extension was enabled when the instance was created.
@@ -153,7 +77,7 @@ namespace vkq
          * @param extensionName Name of the extension
          * @return True if the extension is enabled. False otherwise.
          */
-        bool isInstanceExtensionEnabled(const char* extensionName);
+        bool isInstanceExtensionEnabled(const char* extensionName) const;
 
         /**
          * @brief Checks whether a certain layer was enabled when the instance was created.
@@ -161,9 +85,28 @@ namespace vkq
          * @param layerName Name of the layer
          * @return True if the layer is enabled. False otherwise.
          */
-        bool isLayerEnabled(const char* layerName);
+        bool isLayerEnabled(const char* layerName) const;
 
-        PFN_vkGetInstanceProcAddr getInstanceProcAddrLoader() const;
+        /**
+         * @brief Retrieves the vk::ApplicationInfo used to create the instance handle.
+         * 
+         * @return vk::ApplicationInfo used to create the instance handle 
+         */
+        const vk::ApplicationInfo& getApplicationInfo() const;
+
+        /**
+         * @brief Retrieves the uint32_t used to create the instance handle
+         * 
+         * @return uint32_t specifing the instance version.
+         */
+        uint32_t getAPIVersion() const { return getApplicationInfo().apiVersion; }
+
+        /**
+         * @brief Retrieves information on whether certain important extensions are supported
+         * 
+         * @return Struct containing bools indicating support for certain important instance extensions.
+         */
+        const ExtensionSupport& getInstanceExtensionSupport() const;
 
         /**
          * @brief Gets dynamic dispatcher suitable to call any instance or device level functions.
@@ -173,14 +116,24 @@ namespace vkq
          */
         const vk::DispatchLoaderDynamic& getInstanceDispatch() const;
 
+        /**
+         * @brief Get the PFN_vkGetInstanceProcAddr that represents the implcit vulkan loader.
+         * 
+         * @return PFN_vkGetInstanceProcAddr pfn used to load all global and instance level functions.
+         */
+        PFN_vkGetInstanceProcAddr getInstanceProcAddrLoader() const;
+
         vk::Instance vkInstance() const;
         vk::Instance vkHandle() const;
         operator vk::Instance() const;
 
-        InstanceImpl* getImpl() const { return impl; }
-
     private:
-        InstanceImpl* impl = nullptr;
+        explicit Instance(Impl* impl)
+            : impl(impl)
+        {
+        }
+
+        Impl* impl = nullptr;
     };
 
 } // namespace vkq

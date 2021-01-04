@@ -115,7 +115,7 @@ namespace vkq
         appInfo.apiVersion = apiVersion;
 
         {
-            std::vector<vk::LayerProperties> queriedLayers = loader.enumerateInstanceLayerProperties();
+            std::vector<vk::LayerProperties> queriedLayers = loader.enumerateLayerProperties();
 
             for (const char* layer : layers)
                 if (!checkLayerSupported(queriedLayers, layer))
@@ -136,6 +136,6 @@ namespace vkq
         createInfo.setPEnabledLayerNames(layers);
         createInfo.setPEnabledExtensionNames(extensions);
 
-        return loader.createInstance(createInfo);
+        return Instance::create(loader, createInfo);
     }
 } // namespace vkq

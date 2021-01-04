@@ -8,19 +8,22 @@ namespace vkq
 {
 
     /**
-	 * @brief Helper class to select appopriate vk::PhysicalDevice based on certain criteria.
-	 * 
-	 */
+     * @brief Helper class to select appopriate vk::PhysicalDevice based on certain criteria.
+     * These criteria can be of two types. One, you can specify a list of requirenments
+     * (via setMinumumVersion(), requireExtension(), etc.) that any selected device must 
+     * satisfy. IF none do, select() throws a runtime error. The remaining devices can be 
+     * sorted by a weight score for each requested feature (setDesiredVersion(), etc.). 
+     */
     class PhysicalDeviceSelector
     {
 
     public:
         /**
-			 * @brief Construct a new Physical Device Selector. 
-			 * 
-			 * @param instance Instance must be referenced to obtain a list of available 
-			 * physical devices as well as the dynamic dispatcher.
-			 */
+	* @brief Construct a new Physical Device Selector. 
+	* 
+        * @param instance Instance must be referenced to obtain a list of available 
+	* physical devices as well as the dynamic dispatcher.
+	*/
         explicit PhysicalDeviceSelector(Instance instance);
 
 #ifdef VK_KHR_SURFACE_EXTENSION_NAME
@@ -31,14 +34,14 @@ namespace vkq
          * @param instance Instance must be referenced to obtain a list of available physical devices as well as the dynamic dispatcher.
          * @param surface SurfaceKHR that is present support is queried with.
          */
-        explicit PhysicalDeviceSelector(Instance instance, SurfaceKHR surface);
+        explicit PhysicalDeviceSelector(Instance instance, vk::SurfaceKHR surface);
 
 #endif
 
         /**
-			 * @brief Default destructor of a Physical Device Selector
-			 * 
-			 */
+	* @brief Default destructor of a Physical Device Selector
+	* 
+	*/
         ~PhysicalDeviceSelector();
 
         /////////////////////////////////////////////////////////
@@ -46,20 +49,20 @@ namespace vkq
         /////////////////////////////////////////////////////////
 
         /**
-			 * @brief Set minimum version of vulkan the Physical Device Selected must support. Defaults to 1.0.0.
-			 * 
-			 * @param version Minumum version of Vulkan
-			 * @return Reference to the selector object
-			 */
+	* @brief Set minimum version of vulkan the Physical Device Selected must support. Defaults to 1.0.0.
+	* 
+	* @param version Minumum version of Vulkan
+	* @return Reference to the selector object
+	*/
         PhysicalDeviceSelector& setMinimumVersion(uint32_t version);
 
         /**
-			 * @brief Set minimum (major, minor) version of vulkan the Physical Device Selected must support.  Defaults to 1.0.0.
-			 * 
-			 * @param major Major version of Vulkan. Currently only major version: 1 is supported
-			 * @param minor Minor version of Vulkan. Currently only minor versions: 0, 1, 2 is supported
-			 * @return Reference to the selector object
-			 */
+	* @brief Set minimum (major, minor) version of vulkan the Physical Device Selected must support.  Defaults to 1.0.0.
+	* 
+	* @param major Major version of Vulkan. Currently only major version: 1 is supported
+	* @param minor Minor version of Vulkan. Currently only minor versions: 0, 1, 2 is supported
+	* @return Reference to the selector object
+	*/
         PhysicalDeviceSelector& setMinimumVersion(uint32_t major, uint32_t minor) { return setMinimumVersion(VK_MAKE_VERSION(major, minor, 0)); }
 
         /**
@@ -93,7 +96,7 @@ namespace vkq
          * @param surface SurfaceKHR that the physical device will use to query presentation support.
          * @return Reference to the selector object
          */
-        PhysicalDeviceSelector& setSurfaceKHR(SurfaceKHR surface);
+        PhysicalDeviceSelector& setSurfaceKHR(vk::SurfaceKHR surface);
 
         /**
          * @brief Sets whether at least one of the physical device's queues must be able to present to surface. 
@@ -105,11 +108,21 @@ namespace vkq
         PhysicalDeviceSelector& setSupportSurfaceKHR(bool support);
 #endif
 
+        PhysicalDeviceSelector& setDesiredVersion(float weight, uint32_t version);
+
+        PhysicalDeviceSelector& setDesiredVersion(float weight, uint32_t major, uint32_t minor) { return setDesiredVersion(weight, VK_MAKE_VERSION(major, minor, 0)); }
+
+        PhysicalDeviceSelector& requestExtension(float weight, const char* extensionName);
+
+        PhysicalDeviceSelector& requestExtensions(float weight, const std::vector<const char*>& extensionNames);
+
+        PhysicalDeviceSelector& preferPhysicalDeviceType(float weight, vk::PhysicalDeviceType type);
+
         /////////////////////////////////
         // Select ///////////////////////
         /////////////////////////////////
 
-        vk::PhysicalDevice select();
+        PhysicalDevice select();
 
     private:
         Instance instance;
@@ -121,10 +134,16 @@ namespace vkq
 
 #ifdef VK_KHR_SURFACE_EXTENSION_NAME
 
-        SurfaceKHR presentSurface;
+        vk::SurfaceKHR presentSurface;
         bool presentSupportRequired = false;
 
 #endif
+
+        uint32_t desiredVersion = VK_MAKE_VERSION(1, 0, 0);
+        float desiredVersionWeight = 0;
+
+        std::vector<std::pair<const char*, float>> requestedExtensions;
+        std::vector<std::pair<vk::PhysicalDeviceType, float>> typePreferences;
     };
 
 } // namespace vkq

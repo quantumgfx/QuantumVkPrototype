@@ -1,36 +1,63 @@
 #pragma once
 
 #include "../base/vk.hpp"
-#include "forward.hpp"
+#include "instance.hpp"
 
 #include <string>
 
 namespace vkq
 {
-    struct PhysicalDeviceImpl;
-
+    /**
+     * @brief class representing a GPU (or "PhysicalDevice" in vulkan), 
+     * and exposing the GPU's various features and properties
+     */
     class PhysicalDevice
     {
     public:
         PhysicalDevice() = default;
         ~PhysicalDevice() = default;
 
-        PhysicalDevice(PhysicalDeviceImpl* impl)
-            : impl(impl)
+    public:
+        static PhysicalDevice create(const Instance& instance, vk::PhysicalDevice phdev);
+
+        void reset();
+
+        vk::PhysicalDeviceProperties getProperties();
+        std::vector<vk::QueueFamilyProperties> getQueueFamilyProperties();
+        std::vector<vk::ExtensionProperties> enumerateDeviceExtensionProperties(vk::Optional<const std::string> layerName = nullptr);
+
+#ifdef VK_KHR_SURFACE_EXTENSION_NAME
+        vk::Bool32 getSurfaceSupportKHR(uint32_t queueFamilyIndex, vk::SurfaceKHR surface);
+#endif
+
+        Instance getInstance() const
+        {
+            return instance;
+        }
+
+        vk::PhysicalDevice vkPhysicalDevice() const
+        {
+            return phdev;
+        }
+
+        vk::PhysicalDevice vkHandle() const
+        {
+            return phdev;
+        }
+
+        operator vk::PhysicalDevice() const
+        {
+            return phdev;
+        }
+
+    private:
+        explicit PhysicalDevice(Instance instance, vk::PhysicalDevice phdev)
+            : instance(instance), phdev(phdev)
         {
         }
 
-    public:
-        std::vector<vk::ExtensionProperties> enumerateDeviceExtensionProperties(vk::Optional<const std::string> layerName = nullptr);
-
-        vk::PhysicalDevice vkPhysicalDevice() const;
-        vk::PhysicalDevice vkHandle() const;
-        operator vk::PhysicalDevice() const;
-
-        PhysicalDeviceImpl* getImpl() const { return impl; }
-
-    private:
-        PhysicalDeviceImpl* impl;
+        Instance instance;
+        vk::PhysicalDevice phdev;
     };
 
 } // namespace vkq

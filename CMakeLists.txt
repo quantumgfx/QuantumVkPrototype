@@ -66,16 +66,20 @@ set(QM_BASE_HPP_FILES
 	${QM_SRC_DIR}/base/vk.hpp)
 
 set(QM_CORE_HPP_FILES 
-	${QM_SRC_DIR}/core/forward.hpp
 	${QM_SRC_DIR}/core/loader.hpp
 	${QM_SRC_DIR}/core/instance.hpp
 	${QM_SRC_DIR}/core/physical_device.hpp
-	${QM_SRC_DIR}/core/impl.hpp)
+	${QM_SRC_DIR}/core/device.hpp
+	${QM_SRC_DIR}/core/queue.hpp
+	${QM_SRC_DIR}/core/commands.hpp)
 
 set(QM_CORE_CPP_FILES 
 	${QM_SRC_DIR}/core/loader.cpp
 	${QM_SRC_DIR}/core/instance.cpp
-	${QM_SRC_DIR}/core/physical_device.cpp)
+	${QM_SRC_DIR}/core/physical_device.cpp
+	${QM_SRC_DIR}/core/device.cpp
+	${QM_SRC_DIR}/core/queue.cpp
+	${QM_SRC_DIR}/core/commands.cpp)
 
 set(QM_FACTORY_HPP_FILES
 	${QM_SRC_DIR}/factory/debug_factory.hpp
