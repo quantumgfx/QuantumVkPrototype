@@ -127,11 +127,11 @@ namespace vkq
          * @param pNext Pointer to extend the vk::DeviceQueueInfo2 structure
          * @return Queue 
          */
-        static Queue create2(const QueueFamily& family, uint32_t queueIndex, vk::DeviceQueueCreateFlags flags = {}, const void* pNext = nullptr)
+        static Queue create2(const QueueFamily& family, uint32_t queueIndex, vk::DeviceQueueCreateFlags flags = {}, const VkNextProxy<vk::DeviceQueueInfo2>& next = {})
         {
             vk::DeviceQueueInfo2 queueInfo{};
+            queueInfo.pNext = next;
             queueInfo.flags = flags;
-            queueInfo.pNext = pNext;
             queueInfo.queueFamilyIndex = family.getIndex();
             queueInfo.queueIndex = queueIndex;
 

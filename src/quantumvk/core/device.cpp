@@ -24,62 +24,6 @@ namespace vkq
         impl = nullptr;
     }
 
-    vk::CommandPool Device::createCommandPool(const vk::CommandPoolCreateInfo& createInfo) const
-    {
-        return impl->device.createCommandPool(createInfo, nullptr, impl->dispatch);
-    }
-
-    void Device::destroyCommandPool(vk::CommandPool commandPool) const
-    {
-        return impl->device.destroyCommandPool(commandPool, nullptr, impl->dispatch);
-    }
-
-    std::vector<vk::CommandBuffer> Device::allocateCommandBuffers(const vk::CommandBufferAllocateInfo& allocateInfo) const
-    {
-        return impl->device.allocateCommandBuffers(allocateInfo, impl->dispatch);
-    }
-
-    void Device::freeCommandBuffers(vk::CommandPool commandPool, const vk::ArrayProxy<const vk::CommandBuffer>& commandBuffers) const
-    {
-        impl->device.freeCommandBuffers(commandPool, commandBuffers, impl->dispatch);
-    }
-
-    void Device::resetCommandPool(vk::CommandPool commandPool, vk::CommandPoolResetFlags flags) const
-    {
-        impl->device.resetCommandPool(commandPool, flags, impl->dispatch);
-    }
-#ifdef VK_VERSION_1_1
-
-    void Device::trimCommandPool(vk::CommandPool commandPool, vk::CommandPoolTrimFlags flags) const
-    {
-        impl->device.trimCommandPool(commandPool, flags, impl->dispatch);
-    }
-
-#endif
-
-#ifdef VK_KHR_MAINTENANCE1_EXTENSION_NAME
-
-    void Device::trimCommandPoolKHR(vk::CommandPool commandPool, vk::CommandPoolTrimFlagsKHR flags) const
-    {
-        impl->device.trimCommandPoolKHR(commandPool, flags);
-    }
-
-#endif
-
-#ifdef VK_VERSION_1_1
-
-    vk::Queue Device::getQueue2(const vk::DeviceQueueInfo2& queueInfo) const
-    {
-        return impl->device.getQueue2(queueInfo, impl->dispatch);
-    }
-
-#endif
-
-    vk::Queue Device::getQueue(uint32_t queueFamilyIndex, uint32_t queueIndex) const
-    {
-        return impl->device.getQueue(queueFamilyIndex, queueIndex, impl->dispatch);
-    }
-
     const vk::DispatchLoaderDynamic& Device::getDeviceDispatch() const
     {
         return impl->dispatch;

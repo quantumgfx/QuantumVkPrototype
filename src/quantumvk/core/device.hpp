@@ -75,39 +75,94 @@ namespace vkq
         void destroy();
 
         //////////////////////////////////
-        // Commands //////////////////////
+        // Core Alias functions //////////
         //////////////////////////////////
 
-        vk::CommandPool createCommandPool(const vk::CommandPoolCreateInfo& createInfo) const;
-        void destroyCommandPool(vk::CommandPool commandPool) const;
+        std::vector<vk::CommandBuffer> allocateCommandBuffers(const vk::CommandBufferAllocateInfo& allocateInfo) const
+        {
+            return vkDevice().allocateCommandBuffers(allocateInfo, getDeviceDispatch());
+        }
 
-        std::vector<vk::CommandBuffer> allocateCommandBuffers(const vk::CommandBufferAllocateInfo& allocateInfo) const;
-        void freeCommandBuffers(vk::CommandPool commandPool, const vk::ArrayProxy<const vk::CommandBuffer>& commandBuffers) const;
-        void resetCommandPool(vk::CommandPool commandPool, vk::CommandPoolResetFlags flags = {}) const;
+        vk::CommandPool createCommandPool(const vk::CommandPoolCreateInfo& createInfo) const
+        {
+            return vkDevice().createCommandPool(createInfo, nullptr, getDeviceDispatch());
+        }
+
+        void destroyCommandPool(vk::CommandPool commandPool) const
+        {
+            vkDevice().destroyCommandPool(commandPool, nullptr, getDeviceDispatch());
+        }
+
+        void freeCommandBuffers(vk::CommandPool commandPool, const vk::ArrayProxy<const vk::CommandBuffer>& commandBuffers) const
+        {
+            vkDevice().freeCommandBuffers(commandPool, commandBuffers, getDeviceDispatch());
+        }
+
+        vk::Queue getQueue(uint32_t queueFamilyIndex, uint32_t queueIndex) const
+        {
+            return vkDevice().getQueue(queueFamilyIndex, queueIndex, getDeviceDispatch());
+        }
+
+        void resetCommandPool(vk::CommandPool commandPool, vk::CommandPoolResetFlags flags = {}) const
+        {
+            vkDevice().resetCommandPool(commandPool, flags, getDeviceDispatch());
+        }
+
+        ////////////////////////////////
+        // Version 1.1 /////////////////
+        ////////////////////////////////
 
 #ifdef VK_VERSION_1_1
 
-        void trimCommandPool(vk::CommandPool commandPool, vk::CommandPoolTrimFlags flags = {}) const;
+        void trimCommandPool(vk::CommandPool commandPool, vk::CommandPoolTrimFlags flags = {}) const
+        {
+            vkDevice().trimCommandPool(commandPool, flags, getDeviceDispatch());
+        }
+
+        vk::Queue getQueue2(const vk::DeviceQueueInfo2& queueInfo) const
+        {
+            vkDevice().getQueue2(queueInfo, getDeviceDispatch());
+        }
 
 #endif
+
+        ///////////////////////////////
+        // Extenstions ////////////////
+        ///////////////////////////////
 
 #ifdef VK_KHR_MAINTENANCE1_EXTENSION_NAME
 
-        void trimCommandPoolKHR(vk::CommandPool commandPool, vk::CommandPoolTrimFlagsKHR flags = {}) const;
+        void trimCommandPoolKHR(vk::CommandPool commandPool, vk::CommandPoolTrimFlagsKHR flags = {}) const
+        {
+            vkDevice().trimCommandPoolKHR(commandPool, flags, getDeviceDispatch());
+        }
 
 #endif
 
-        ////////////////////////////////
-        // Queues //////////////////////
-        ////////////////////////////////
+        ///////////////////////////////
+        // Helper Functions ///////////
+        ///////////////////////////////
 
-#ifdef VK_VERSION_1_1
+        void Device::allocateCommandBuffers(vk::CommandPool commandPool, uint32_t commandBufferCount, vk::CommandBuffer* commandBuffers, vk::CommandBufferLevel level, const VkNextProxy<vk::CommandBufferAllocateInfo>& next = {}) const
+        {
+            vk::CommandBufferAllocateInfo allocInfo{};
+            allocInfo.pNext = next;
+            allocInfo.commandPool = commandPool;
+            allocInfo.level = level;
+            allocInfo.commandBufferCount = commandBufferCount;
 
-        vk::Queue getQueue2(const vk::DeviceQueueInfo2& queueInfo) const;
+            vk::Result result = vkDevice().allocateCommandBuffers(&allocInfo, commandBuffers, getDeviceDispatch());
 
-#endif
-
-        vk::Queue getQueue(uint32_t queueFamilyIndex, uint32_t queueIndex) const;
+            switch (result)
+            {
+            case vk::Result::eErrorOutOfHostMemory:
+                throw vk::OutOfHostMemoryError("vkq::Device::allocateCommandBuffers");
+            case vk::Result::eErrorOutOfDeviceMemory:
+                throw vk::OutOfDeviceMemoryError("vkq::Device::allocateCommandBuffers");
+            default:
+                break;
+            }
+        }
 
         ///////////////////////////////
         // Native Objects /////////////
