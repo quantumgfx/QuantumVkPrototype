@@ -14,12 +14,27 @@ namespace vkq
      */
     class Device
     {
+    public:
+        struct ExtensionSupport
+        {
+#ifdef VK_KHR_SWAPCHAIN_EXTENSION_NAME
+            bool swapchainKHR = false;
+#endif
+        };
+
+    private:
         struct Impl
         {
             vk::Instance instance;
             vk::PhysicalDevice phdev;
             vk::Device device;
             vk::DispatchLoaderDynamic dispatch;
+
+            std::vector<const char*> enabledExtensions;
+
+            Device::ExtensionSupport extensionSupport;
+
+            uint32_t deviceVersion = VK_MAKE_VERSION(1, 0, 0);
         };
 
     public:
@@ -143,7 +158,7 @@ namespace vkq
         // Helper Functions ///////////
         ///////////////////////////////
 
-        void Device::allocateCommandBuffers(vk::CommandPool commandPool, uint32_t commandBufferCount, vk::CommandBuffer* commandBuffers, vk::CommandBufferLevel level, const VkNextProxy<vk::CommandBufferAllocateInfo>& next = {}) const
+        void allocateCommandBuffers(vk::CommandPool commandPool, uint32_t commandBufferCount, vk::CommandBuffer* commandBuffers, vk::CommandBufferLevel level, const VkNextProxy<vk::CommandBufferAllocateInfo>& next = {}) const
         {
             vk::CommandBufferAllocateInfo allocInfo{};
             allocInfo.pNext = next;
@@ -163,6 +178,10 @@ namespace vkq
                 break;
             }
         }
+
+        bool isDeviceExtensionEnabled(const char* extensionName) const;
+
+        const ExtensionSupport& getDeviceExtensionSupport() const;
 
         ///////////////////////////////
         // Native Objects /////////////

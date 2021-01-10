@@ -13,6 +13,16 @@ namespace vkq
         impl->device = phdev.createDevice(createInfo, nullptr, impl->dispatch);
         impl->dispatch.init(impl->device);
 
+        impl->enabledExtensions.insert(impl->enabledExtensions.begin(), createInfo.ppEnabledExtensionNames, createInfo.ppEnabledExtensionNames + createInfo.enabledExtensionCount);
+
+        for (const char* extension : impl->enabledExtensions)
+        {
+#ifdef VK_KHR_SWAPCHAIN_EXTENSION_NAME
+            if (strcmp(VK_KHR_SWAPCHAIN_EXTENSION_NAME, extension) == 0)
+                impl->extensionSupport.swapchainKHR = true;
+#endif
+        }
+
         return Device{impl};
     }
 
@@ -22,6 +32,19 @@ namespace vkq
 
         delete impl;
         impl = nullptr;
+    }
+
+    bool Device::isDeviceExtensionEnabled(const char* extensionName) const
+    {
+        for (const char* extension : impl->enabledExtensions)
+            if (strcmp(extensionName, extension) == 0)
+                return true;
+        return false;
+    }
+
+    const Device::ExtensionSupport& Device::getDeviceExtensionSupport() const
+    {
+        return impl->extensionSupport;
     }
 
     const vk::DispatchLoaderDynamic& Device::getDeviceDispatch() const

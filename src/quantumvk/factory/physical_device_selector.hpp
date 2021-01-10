@@ -118,6 +118,8 @@ namespace vkq
 
         PhysicalDeviceSelector& preferPhysicalDeviceType(float weight, vk::PhysicalDeviceType type);
 
+        // PhysicalDeviceSelector& requireQueueFamily(vk::QueueFlags requiredFlags, vk::QueueFlags excludedFlags, uint32_t queueCount);
+
         /////////////////////////////////
         // Select ///////////////////////
         /////////////////////////////////

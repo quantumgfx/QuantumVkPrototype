@@ -19,19 +19,15 @@ namespace vkq
         impl->enabledLayers.insert(impl->enabledLayers.begin(), createInfo.ppEnabledLayerNames, createInfo.ppEnabledLayerNames + createInfo.enabledLayerCount);
         impl->enabledExtensions.insert(impl->enabledExtensions.begin(), createInfo.ppEnabledExtensionNames, createInfo.ppEnabledExtensionNames + createInfo.enabledExtensionCount);
 
-        std::vector<vk::PhysicalDevice> vkPhysicalDevices = impl->instance.enumeratePhysicalDevices(impl->dispatch);
-
-        ExtensionSupport& support = impl->extensionSupport;
-
         for (const char* extension : impl->enabledExtensions)
         {
 #ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
             if (strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, extension) == 0)
-                support.debugUtilsEXT = true;
+                impl->extensionSupport.debugUtilsEXT = true;
 #endif
 #ifdef VK_KHR_SURFACE_EXTENSION_NAME
             if (strcmp(VK_KHR_SURFACE_EXTENSION_NAME, extension) == 0)
-                support.surfaceKHR = true;
+                impl->extensionSupport.surfaceKHR = true;
 #endif
         }
 
