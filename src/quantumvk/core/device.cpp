@@ -17,6 +17,26 @@ namespace vkq
 
         for (const char* extension : impl->enabledExtensions)
         {
+#ifdef VK_KHR_BIND_MEMORY_2_EXTENSION_NAME
+            if (strcmp(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, extension) == 0)
+                impl->extensionSupport.bindMemory2KHR = true;
+#endif
+#ifdef VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME
+            if (strcmp(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, extension) == 0)
+                impl->extensionSupport.bufferDeviceAddressKHR = true;
+#endif
+#ifdef VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME
+            if (strcmp(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, extension) == 0)
+                impl->extensionSupport.dedicatedAllocationKHR = true;
+#endif
+#ifdef VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME
+            if (strcmp(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME, extension) == 0)
+                impl->extensionSupport.deviceCoherentMemoryAMD = true;
+#endif
+#ifdef VK_EXT_MEMORY_BUDGET_EXTENSION_NAME
+            if (strcmp(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, extension) == 0)
+                impl->extensionSupport.memoryBudgetEXT = true;
+#endif
 #ifdef VK_KHR_SWAPCHAIN_EXTENSION_NAME
             if (strcmp(VK_KHR_SWAPCHAIN_EXTENSION_NAME, extension) == 0)
                 impl->extensionSupport.swapchainKHR = true;

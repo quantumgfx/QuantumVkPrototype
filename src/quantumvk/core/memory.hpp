@@ -13,7 +13,7 @@ namespace vkq
     class MemoryAllocator
     {
     public:
-        static MemoryAllocator create(const Device& device);
+        static MemoryAllocator create(const Device& device, vk::DeviceSize prefferedLargeHeapBlockSize = 256 * 1024 * 1024);
 
         void destroy();
 

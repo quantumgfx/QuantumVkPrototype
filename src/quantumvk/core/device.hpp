@@ -17,6 +17,21 @@ namespace vkq
     public:
         struct ExtensionSupport
         {
+#ifdef VK_KHR_BIND_MEMORY_2_EXTENSION_NAME
+            bool bindMemory2KHR = false;
+#endif
+#ifdef VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME
+            bool bufferDeviceAddressKHR = false;
+#endif
+#ifdef VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME
+            bool dedicatedAllocationKHR = false;
+#endif
+#ifdef VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME
+            bool deviceCoherentMemoryAMD = false;
+#endif
+#ifdef VK_EXT_MEMORY_BUDGET_EXTENSION_NAME
+            bool memoryBudgetEXT = false;
+#endif
 #ifdef VK_KHR_SWAPCHAIN_EXTENSION_NAME
             bool swapchainKHR = false;
 #endif
