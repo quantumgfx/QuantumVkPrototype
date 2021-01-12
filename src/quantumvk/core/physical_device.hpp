@@ -30,34 +30,31 @@ namespace vkq
         vk::Bool32 getSurfaceSupportKHR(uint32_t queueFamilyIndex, vk::SurfaceKHR surface);
 #endif
 
-        Instance getInstance() const
+        Instance instance() const
         {
-            return instance;
+            return instance_;
         }
 
         vk::PhysicalDevice vkPhysicalDevice() const
         {
-            return phdev;
+            return phdev_;
         }
 
         vk::PhysicalDevice vkHandle() const
         {
-            return phdev;
+            return phdev_;
         }
 
         operator vk::PhysicalDevice() const
         {
-            return phdev;
+            return phdev_;
         }
 
     private:
-        explicit PhysicalDevice(Instance instance, vk::PhysicalDevice phdev)
-            : instance(instance), phdev(phdev)
-        {
-        }
+        explicit PhysicalDevice(Instance instance, vk::PhysicalDevice phdev);
 
-        Instance instance;
-        vk::PhysicalDevice phdev;
+        Instance instance_;
+        vk::PhysicalDevice phdev_;
     };
 
 } // namespace vkq

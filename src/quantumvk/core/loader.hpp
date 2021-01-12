@@ -9,11 +9,6 @@ namespace vkq
 	*/
     class Loader
     {
-        struct Impl
-        {
-            vk::DispatchLoaderDynamic dispatch;
-        };
-
     public:
         Loader() = default;
         ~Loader() = default;
@@ -73,22 +68,24 @@ namespace vkq
          * 
          * @return Gloabl Dispatcher
          */
-        const vk::DispatchLoaderDynamic& getGlobalDispatch() const;
+        const vk::DispatchLoaderDynamic& dispatch() const;
 
         /**
          * @brief Retrieves the native, implcit, loader object (aka PFN_vkGetInstanceProcAddr).
          * 
          * @return The PFN_vkGetInstanceProcAddr used to created the loader. 
          */
-        PFN_vkGetInstanceProcAddr getInstanceProcAddrLoader() const;
+        PFN_vkGetInstanceProcAddr instanceProcAddrLoader() const;
 
     private:
-        explicit Loader(Impl* impl)
-            : impl(impl)
+        struct Impl
         {
-        }
+            vk::DispatchLoaderDynamic dispatch;
+        };
 
-        Impl* impl = nullptr;
+        explicit Loader(Impl* impl);
+
+        Impl* impl_ = nullptr;
     };
 
 } // namespace vkq

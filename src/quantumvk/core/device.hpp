@@ -37,21 +37,6 @@ namespace vkq
 #endif
         };
 
-    private:
-        struct Impl
-        {
-            vk::Instance instance;
-            vk::PhysicalDevice phdev;
-            vk::Device device;
-            vk::DispatchLoaderDynamic dispatch;
-
-            std::vector<const char*> enabledExtensions;
-
-            Device::ExtensionSupport extensionSupport;
-
-            uint32_t deviceVersion = VK_MAKE_VERSION(1, 0, 0);
-        };
-
     public:
         Device() = default;
         ~Device() = default;
@@ -77,7 +62,7 @@ namespace vkq
          * @param createInfo Info to be passed into vk:: createDevice() that creates the vk::Device handle
          * @return Newly created device 
          */
-        static Device create(const Loader& loader, vk::Instance instance, vk::PhysicalDevice phdev, const vk::DeviceCreateInfo& createInfo) { return create(loader.getInstanceProcAddrLoader(), instance, phdev, createInfo); }
+        static Device create(const Loader& loader, vk::Instance instance, vk::PhysicalDevice phdev, const vk::DeviceCreateInfo& createInfo) { return create(loader.instanceProcAddrLoader(), instance, phdev, createInfo); }
 
         /**
          * @brief Creates a new device given a vkq::Instance, a vk::PhysicalDevice, and vk::DeviceCreateInfo/
@@ -87,7 +72,7 @@ namespace vkq
          * @param createInfo Info to be passed into vk:: createDevice() that creates the vk::Device handle
          * @return Newly created device 
          */
-        static Device create(const Instance& instance, vk::PhysicalDevice phdev, const vk::DeviceCreateInfo& createInfo) { return create(instance.getInstanceProcAddrLoader(), instance.vkInstance(), phdev, createInfo); }
+        static Device create(const Instance& instance, vk::PhysicalDevice phdev, const vk::DeviceCreateInfo& createInfo) { return create(instance.instanceProcAddrLoader(), instance.vkInstance(), phdev, createInfo); }
 
         /**
          * @brief Creates a new device given a vkq::PhysicalDevice, and vk::DeviceCreateInfo.
@@ -96,7 +81,7 @@ namespace vkq
          * @param createInfo Info to be passed into vk:: createDevice() that creates the vk::Device handle
          * @return Newly created device 
          */
-        static Device create(const PhysicalDevice& phdev, const vk::DeviceCreateInfo& createInfo) { return create(phdev.getInstance(), phdev.vkPhysicalDevice(), createInfo); }
+        static Device create(const PhysicalDevice& phdev, const vk::DeviceCreateInfo& createInfo) { return create(phdev.instance(), phdev.vkPhysicalDevice(), createInfo); }
 
         /**
          * @brief Destroys device object and invalidates all references to it
@@ -110,32 +95,32 @@ namespace vkq
 
         std::vector<vk::CommandBuffer> allocateCommandBuffers(const vk::CommandBufferAllocateInfo& allocateInfo) const
         {
-            return vkDevice().allocateCommandBuffers(allocateInfo, getDeviceDispatch());
+            return vkDevice().allocateCommandBuffers(allocateInfo, dispatch());
         }
 
         vk::CommandPool createCommandPool(const vk::CommandPoolCreateInfo& createInfo) const
         {
-            return vkDevice().createCommandPool(createInfo, nullptr, getDeviceDispatch());
+            return vkDevice().createCommandPool(createInfo, nullptr, dispatch());
         }
 
         void destroyCommandPool(vk::CommandPool commandPool) const
         {
-            vkDevice().destroyCommandPool(commandPool, nullptr, getDeviceDispatch());
+            vkDevice().destroyCommandPool(commandPool, nullptr, dispatch());
         }
 
         void freeCommandBuffers(vk::CommandPool commandPool, const vk::ArrayProxy<const vk::CommandBuffer>& commandBuffers) const
         {
-            vkDevice().freeCommandBuffers(commandPool, commandBuffers, getDeviceDispatch());
+            vkDevice().freeCommandBuffers(commandPool, commandBuffers, dispatch());
         }
 
         vk::Queue getQueue(uint32_t queueFamilyIndex, uint32_t queueIndex) const
         {
-            return vkDevice().getQueue(queueFamilyIndex, queueIndex, getDeviceDispatch());
+            return vkDevice().getQueue(queueFamilyIndex, queueIndex, dispatch());
         }
 
         void resetCommandPool(vk::CommandPool commandPool, vk::CommandPoolResetFlags flags = {}) const
         {
-            vkDevice().resetCommandPool(commandPool, flags, getDeviceDispatch());
+            vkDevice().resetCommandPool(commandPool, flags, dispatch());
         }
 
         ////////////////////////////////
@@ -146,12 +131,12 @@ namespace vkq
 
         void trimCommandPool(vk::CommandPool commandPool, vk::CommandPoolTrimFlags flags = {}) const
         {
-            vkDevice().trimCommandPool(commandPool, flags, getDeviceDispatch());
+            vkDevice().trimCommandPool(commandPool, flags, dispatch());
         }
 
         vk::Queue getQueue2(const vk::DeviceQueueInfo2& queueInfo) const
         {
-            vkDevice().getQueue2(queueInfo, getDeviceDispatch());
+            vkDevice().getQueue2(queueInfo, dispatch());
         }
 
 #endif
@@ -164,7 +149,7 @@ namespace vkq
 
         void trimCommandPoolKHR(vk::CommandPool commandPool, vk::CommandPoolTrimFlagsKHR flags = {}) const
         {
-            vkDevice().trimCommandPoolKHR(commandPool, flags, getDeviceDispatch());
+            vkDevice().trimCommandPoolKHR(commandPool, flags, dispatch());
         }
 
 #endif
@@ -173,30 +158,26 @@ namespace vkq
         // Helper Functions ///////////
         ///////////////////////////////
 
-        void allocateCommandBuffers(vk::CommandPool commandPool, uint32_t commandBufferCount, vk::CommandBuffer* commandBuffers, vk::CommandBufferLevel level, const VkNextProxy<vk::CommandBufferAllocateInfo>& next = {}) const
-        {
-            vk::CommandBufferAllocateInfo allocInfo{};
-            allocInfo.pNext = next;
-            allocInfo.commandPool = commandPool;
-            allocInfo.level = level;
-            allocInfo.commandBufferCount = commandBufferCount;
+        void allocateCommandBuffers(vk::CommandPool commandPool, uint32_t commandBufferCount, vk::CommandBuffer* commandBuffers, vk::CommandBufferLevel level, const VkNextProxy<vk::CommandBufferAllocateInfo>& next = {}) const;
 
-            vk::Result result = vkDevice().allocateCommandBuffers(&allocInfo, commandBuffers, getDeviceDispatch());
+        ///////////////////////////////
+        // Properties helpers /////////
+        ///////////////////////////////
 
-            switch (result)
-            {
-            case vk::Result::eErrorOutOfHostMemory:
-                throw vk::OutOfHostMemoryError("vkq::Device::allocateCommandBuffers");
-            case vk::Result::eErrorOutOfDeviceMemory:
-                throw vk::OutOfDeviceMemoryError("vkq::Device::allocateCommandBuffers");
-            default:
-                break;
-            }
-        }
-
+        /**
+         * @brief Returns whether a particular device extension is enabled
+         * 
+         * @param extensionName 
+         * @return true 
+         * @return false 
+         */
         bool isDeviceExtensionEnabled(const char* extensionName) const;
 
-        const ExtensionSupport& getDeviceExtensionSupport() const;
+        const ExtensionSupport& extensionSupport() const;
+
+        const vk::PhysicalDeviceMemoryProperties& memoryProperties() const;
+        vk::MemoryType memoryTypeProperties(uint32_t memoryTypeIndex) const;
+        vk::MemoryHeap memoryHeapProperties(uint32_t memoryHeapIndex) const;
 
         ///////////////////////////////
         // Native Objects /////////////
@@ -208,21 +189,21 @@ namespace vkq
          * @return A vk::DispatchLoaderDynamic capable of running all global, instance, and device level functions
          * (associated with this device or the parent instance).
          */
-        const vk::DispatchLoaderDynamic& getDeviceDispatch() const;
+        const vk::DispatchLoaderDynamic& dispatch() const;
 
         /**
          * @brief Get the PFN_vkGetInstanceProcAddr used to load instance level function pointers.
          * 
          * @return The PFN_vkGetInstanceProcAddr used to load instance level function pointers.
          */
-        PFN_vkGetInstanceProcAddr getInstanceProcAddrLoader() const { return getDeviceDispatch().vkGetInstanceProcAddr; }
+        PFN_vkGetInstanceProcAddr instanceProcAddrLoader() const { return dispatch().vkGetInstanceProcAddr; }
 
         /**
          * @brief Get the PFN_vkGetDeviceProcAddr used to load device level function pointers.
          * 
          * @return The PFN_vkGetDeviceProcAddr used to load device level function pointers.
          */
-        PFN_vkGetDeviceProcAddr getDeviceProcAddrLoader() const { return getDeviceDispatch().vkGetDeviceProcAddr; }
+        PFN_vkGetDeviceProcAddr deviceProcAddrLoader() const { return dispatch().vkGetDeviceProcAddr; }
 
         vk::Instance vkInstance() const;
         vk::PhysicalDevice vkPhysicalDevice() const;
@@ -231,11 +212,22 @@ namespace vkq
         operator vk::Device() const;
 
     private:
-        explicit Device(Impl* impl)
-            : impl(impl)
+        struct Impl
         {
-        }
+            vk::Instance instance;
+            vk::PhysicalDevice phdev;
+            vk::Device device;
+            vk::DispatchLoaderDynamic dispatch;
 
-        Impl* impl = nullptr;
+            std::vector<const char*> enabledExtensions;
+
+            Device::ExtensionSupport extensionSupport;
+
+            vk::PhysicalDeviceMemoryProperties memProps;
+        };
+
+        explicit Device(Impl* impl);
+
+        Impl* impl_ = nullptr;
     };
 } // namespace vkq

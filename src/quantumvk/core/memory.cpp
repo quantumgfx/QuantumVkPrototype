@@ -3,9 +3,17 @@
 namespace vkq
 {
 
+    explicit MemoryAllocator::MemoryAllocator(MemoryAllocator::Impl* impl)
+        : impl(impl)
+    {
+    }
+
     MemoryAllocator MemoryAllocator::create(const Device& device, vk::DeviceSize prefferedLargeHeapBlockSize)
     {
-        const vk::DispatchLoaderDynamic& dispatch = device.getDeviceDispatch();
+        MemoryAllocator::Impl* impl = new MemoryAllocator::Impl();
+        impl->device = device;
+
+        const vk::DispatchLoaderDynamic& dispatch = device.dispatch();
 
         VmaVulkanFunctions funcs{};
         funcs.vkAllocateMemory = dispatch.vkAllocateMemory;
@@ -33,7 +41,7 @@ namespace vkq
 
         VmaAllocatorCreateFlags flags = 0;
 
-        const auto& support = device.getDeviceExtensionSupport();
+        const auto& support = device.extensionSupport();
 
         if (support.bindMemory2KHR)
             flags |= VMA_ALLOCATOR_CREATE_KHR_BIND_MEMORY2_BIT;
@@ -59,11 +67,9 @@ namespace vkq
         createInfo.flags = flags;
         createInfo.vulkanApiVersion = VK_MAKE_VERSION(1, 0, 0);
 
-        VmaAllocator allocator;
+        vk::Result res = static_cast<vk::Result>(vmaCreateAllocator(&createInfo, &impl->allocator));
 
-        vk::Result result = static_cast<vk::Result>(vmaCreateAllocator(&createInfo, &allocator));
-
-        switch (result)
+        switch (res)
         {
         case vk::Result::eErrorFeatureNotPresent:
             throw vk::FeatureNotPresentError("vkq::MemoryAllocator::create");
@@ -72,6 +78,67 @@ namespace vkq
         default:
             break;
         }
+
+        return MemoryAllocator{impl};
+    }
+
+    void MemoryAllocator::destroy()
+    {
+        vmaDestroyAllocator(impl->allocator);
+
+        delete impl;
+        impl = nullptr;
+    }
+
+    Device MemoryAllocator::device() const
+    {
+        return impl->device;
+    }
+
+    static void throwMapMemoryException(vk::Result result, const char* message)
+    {
+        switch (result)
+        {
+        case vk::Result::eErrorMemoryMapFailed:
+            throw vk::MemoryMapFailedError(message);
+        case vk::Result::eErrorOutOfHostMemory:
+            throw vk::OutOfHostMemoryError(message);
+        case vk::Result::eErrorOutOfDeviceMemory:
+            throw vk::OutOfDeviceMemoryError(message);
+        default:
+            break;
+        }
+    }
+
+    void Buffer::mapMemory(MapMemoryAccessFlags flags)
+    {
+        vk::Result res = static_cast<vk::Result>(vmaMapMemory(allocator_, allocation_, nullptr));
+        throwMapMemoryException(res, "vkq::Buffer:mapMemory");
+
+        if ((flags & MapMemoryAccessFlagBits::eRead) && !memoryHasPropertyFlags(vk::MemoryPropertyFlagBits::eHostCoherent))
+        {
+            res = static_cast<vk::Result>(vmaInvalidateAllocation(allocator_, allocation_, 0, VK_WHOLE_SIZE));
+            throwMapMemoryException(res, "vkq::Buffer:mapMemory");
+        }
+    }
+
+    void Buffer::unmapMemory(MapMemoryAccessFlags flags)
+    {
+        if ((flags & MapMemoryAccessFlagBits::eWrite) && !memoryHasPropertyFlags(vk::MemoryPropertyFlagBits::eHostCoherent))
+        {
+            vk::Result res = static_cast<vk::Result>(vmaFlushAllocation(allocator_, allocation_, 0, VK_WHOLE_SIZE));
+            throwMapMemoryException(res, "vkq::Buffer:mapMemory");
+        }
+
+        vmaUnmapMemory(allocator_, allocation_);
+    }
+
+    void* Buffer::hostMemory()
+    {
+        VmaAllocationInfo allocInfo;
+        vmaGetAllocationInfo(allocator_.vmaAllocator(), allocation_, &allocInfo);
+
+        return allocInfo.pMappedData;
     }
 
 } // namespace vkq

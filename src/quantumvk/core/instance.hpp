@@ -27,19 +27,6 @@ namespace vkq
 #endif
         };
 
-    private:
-        struct Impl
-        {
-            vk::Instance instance;
-            vk::DispatchLoaderDynamic dispatch = {};
-
-            vk::ApplicationInfo appInfo = {};
-            std::vector<const char*> enabledLayers;
-            std::vector<const char*> enabledExtensions;
-
-            Instance::ExtensionSupport extensionSupport;
-        };
-
     public:
         Instance() = default;
         ~Instance() = default;
@@ -54,7 +41,7 @@ namespace vkq
          */
         static Instance create(PFN_vkGetInstanceProcAddr getInstanceProcAddr, const vk::InstanceCreateInfo& createInfo);
 
-        static Instance create(const Loader& loader, const vk::InstanceCreateInfo& createInfo) { return create(loader.getInstanceProcAddrLoader(), createInfo); }
+        static Instance create(const Loader& loader, const vk::InstanceCreateInfo& createInfo) { return create(loader.instanceProcAddrLoader(), createInfo); }
 
         /**
          * @brief Destroys instance and frees memory allocated by this object.
@@ -92,21 +79,21 @@ namespace vkq
          * 
          * @return vk::ApplicationInfo used to create the instance handle 
          */
-        const vk::ApplicationInfo& getApplicationInfo() const;
+        const vk::ApplicationInfo& applicationInfo() const;
 
         /**
          * @brief Retrieves the uint32_t used to create the instance handle
          * 
          * @return uint32_t specifing the instance version.
          */
-        uint32_t getAPIVersion() const { return getApplicationInfo().apiVersion; }
+        uint32_t apiVersion() const { return applicationInfo().apiVersion; }
 
         /**
          * @brief Retrieves information on whether certain important extensions are supported
          * 
          * @return Struct containing bools indicating support for certain important instance extensions.
          */
-        const ExtensionSupport& getInstanceExtensionSupport() const;
+        const ExtensionSupport& extensionSupport() const;
 
         /**
          * @brief Gets dynamic dispatcher suitable to call any instance or device level functions.
@@ -114,26 +101,35 @@ namespace vkq
          * 
          * @return vk::DispatchLoaderDynamic with all available function pointers set.
          */
-        const vk::DispatchLoaderDynamic& getInstanceDispatch() const;
+        const vk::DispatchLoaderDynamic& dispatch() const;
 
         /**
          * @brief Get the PFN_vkGetInstanceProcAddr that represents the implcit vulkan loader.
          * 
          * @return PFN_vkGetInstanceProcAddr pfn used to load all global and instance level functions.
          */
-        PFN_vkGetInstanceProcAddr getInstanceProcAddrLoader() const;
+        PFN_vkGetInstanceProcAddr instanceProcAddrLoader() const;
 
         vk::Instance vkInstance() const;
         vk::Instance vkHandle() const;
         operator vk::Instance() const;
 
     private:
-        explicit Instance(Impl* impl)
-            : impl(impl)
+        struct Impl
         {
-        }
+            vk::Instance instance;
+            vk::DispatchLoaderDynamic dispatch = {};
 
-        Impl* impl = nullptr;
+            vk::ApplicationInfo appInfo = {};
+            std::vector<const char*> enabledLayers;
+            std::vector<const char*> enabledExtensions;
+
+            Instance::ExtensionSupport extensionSupport;
+        };
+
+        explicit Instance(Impl* impl);
+
+        Impl* impl_ = nullptr;
     };
 
 } // namespace vkq

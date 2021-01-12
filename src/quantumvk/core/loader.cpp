@@ -2,6 +2,10 @@
 
 namespace vkq
 {
+    explicit Loader::Loader(Loader::Impl* impl_)
+        : impl_(impl_)
+    {
+    }
 
     Loader Loader::create(PFN_vkGetInstanceProcAddr getInstanceProcAddr)
     {
@@ -12,17 +16,17 @@ namespace vkq
 
     void Loader::destroy()
     {
-        delete impl;
-        impl = nullptr;
+        delete impl_;
+        impl_ = nullptr;
     }
 
     uint32_t Loader::enumerateInstanceVersion() const
     {
 #ifdef VK_VERSION_1_1
 
-        if (impl->dispatch.vkGetInstanceProcAddr)
+        if (impl_->dispatch.vkGetInstanceProcAddr)
         {
-            return vk::enumerateInstanceVersion(impl->dispatch);
+            return vk::enumerateInstanceVersion(impl_->dispatch);
         }
         else
         {
@@ -36,12 +40,12 @@ namespace vkq
 
     std::vector<vk::LayerProperties> Loader::enumerateLayerProperties() const
     {
-        return vk::enumerateInstanceLayerProperties(impl->dispatch);
+        return vk::enumerateInstanceLayerProperties(impl_->dispatch);
     }
 
     std::vector<vk::ExtensionProperties> Loader::enumerateInstanceExtensionProperties(vk::Optional<const std::string> layerName) const
     {
-        return vk::enumerateInstanceExtensionProperties(layerName, impl->dispatch);
+        return vk::enumerateInstanceExtensionProperties(layerName, impl_->dispatch);
     }
 
     bool Loader::isLayerSupported(const char* layerName) const
@@ -64,13 +68,13 @@ namespace vkq
         return false;
     }
 
-    const vk::DispatchLoaderDynamic& Loader::getGlobalDispatch() const
+    const vk::DispatchLoaderDynamic& Loader::dispatch() const
     {
-        return impl->dispatch;
+        return impl_->dispatch;
     }
 
-    PFN_vkGetInstanceProcAddr Loader::getInstanceProcAddrLoader() const
+    PFN_vkGetInstanceProcAddr Loader::instanceProcAddrLoader() const
     {
-        return impl->dispatch.vkGetInstanceProcAddr;
+        return impl_->dispatch.vkGetInstanceProcAddr;
     }
 } // namespace vkq

@@ -2,6 +2,9 @@
 
 namespace vkq
 {
+    explicit Device::Device(Device::Impl* impl)
+    {
+    }
 
     Device Device::create(PFN_vkGetInstanceProcAddr getInstanceProcAddr, vk::Instance instance, vk::PhysicalDevice phdev, const vk::DeviceCreateInfo& createInfo)
     {
@@ -43,58 +46,96 @@ namespace vkq
 #endif
         }
 
+        impl->memProps = phdev.getMemoryProperties(impl->dispatch);
+
         return Device{impl};
     }
 
     void Device::destroy()
     {
-        impl->device.destroy(nullptr, impl->dispatch);
+        impl_->device.destroy(nullptr, impl_->dispatch);
 
-        delete impl;
-        impl = nullptr;
+        delete impl_;
+        impl_ = nullptr;
+    }
+
+    void Device::allocateCommandBuffers(vk::CommandPool commandPool, uint32_t commandBufferCount, vk::CommandBuffer* commandBuffers, vk::CommandBufferLevel level, const VkNextProxy<vk::CommandBufferAllocateInfo>& next = {}) const
+    {
+        vk::CommandBufferAllocateInfo allocInfo{};
+        allocInfo.pNext = next;
+        allocInfo.commandPool = commandPool;
+        allocInfo.level = level;
+        allocInfo.commandBufferCount = commandBufferCount;
+
+        vk::Result result = impl_->device.allocateCommandBuffers(&allocInfo, commandBuffers, impl_->dispatch);
+
+        switch (result)
+        {
+        case vk::Result::eErrorOutOfHostMemory:
+            throw vk::OutOfHostMemoryError("vkq::Device::allocateCommandBuffers");
+        case vk::Result::eErrorOutOfDeviceMemory:
+            throw vk::OutOfDeviceMemoryError("vkq::Device::allocateCommandBuffers");
+        default:
+            break;
+        }
     }
 
     bool Device::isDeviceExtensionEnabled(const char* extensionName) const
     {
-        for (const char* extension : impl->enabledExtensions)
+        for (const char* extension : impl_->enabledExtensions)
             if (strcmp(extensionName, extension) == 0)
                 return true;
         return false;
     }
 
-    const Device::ExtensionSupport& Device::getDeviceExtensionSupport() const
+    const Device::ExtensionSupport& Device::extensionSupport() const
     {
-        return impl->extensionSupport;
+        return impl_->extensionSupport;
     }
 
-    const vk::DispatchLoaderDynamic& Device::getDeviceDispatch() const
+    const vk::PhysicalDeviceMemoryProperties& Device::memoryProperties() const
     {
-        return impl->dispatch;
+        return impl_->memProps;
+    }
+
+    vk::MemoryType Device::memoryTypeProperties(uint32_t memoryTypeIndex) const
+    {
+        return impl_->memProps.memoryTypes[memoryTypeIndex];
+    }
+
+    vk::MemoryHeap Device::memoryHeapProperties(uint32_t memoryHeapIndex) const
+    {
+        return impl_->memProps.memoryHeaps[memoryHeapIndex];
+    }
+
+    const vk::DispatchLoaderDynamic& Device::dispatch() const
+    {
+        return impl_->dispatch;
     }
 
     vk::Instance Device::vkInstance() const
     {
-        return impl->instance;
+        return impl_->instance;
     }
 
     vk::PhysicalDevice Device::vkPhysicalDevice() const
     {
-        return impl->phdev;
+        return impl_->phdev;
     }
 
     vk::Device Device::vkDevice() const
     {
-        return impl->device;
+        return impl_->device;
     }
 
     vk::Device Device::vkHandle() const
     {
-        return impl->device;
+        return impl_->device;
     }
 
     Device::operator vk::Device() const
     {
-        return impl->device;
+        return impl_->device;
     }
 
 } // namespace vkq

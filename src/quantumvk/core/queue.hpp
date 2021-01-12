@@ -45,9 +45,9 @@ namespace vkq
          * 
          * @return Parent device of the queue family
          */
-        Device getDevice() const
+        Device device() const
         {
-            return device;
+            return device_;
         }
 
         /**
@@ -55,19 +55,16 @@ namespace vkq
          * 
          * @return The queueFamilyIndex that represents the implicit queue family object
          */
-        uint32_t getIndex() const
+        uint32_t queueFamilyIndex() const
         {
-            return queueFamilyIndex;
+            return queueFamilyIndex_;
         }
 
     private:
-        explicit QueueFamily(Device device, uint32_t queueFamilyIndex)
-            : device(device), queueFamilyIndex(queueFamilyIndex)
-        {
-        }
+        explicit QueueFamily(Device device, uint32_t queueFamilyIndex);
 
-        Device device;
-        uint32_t queueFamilyIndex;
+        Device device_;
+        uint32_t queueFamilyIndex_;
     };
 
     /**
@@ -102,7 +99,7 @@ namespace vkq
          */
         static Queue create(const QueueFamily& family, uint32_t queueIndex)
         {
-            return create(family.getDevice(), family.getIndex(), queueIndex);
+            return create(family.device(), family.queueFamilyIndex(), queueIndex);
         }
 
 #ifdef VK_VERSION_1_1
@@ -132,10 +129,10 @@ namespace vkq
             vk::DeviceQueueInfo2 queueInfo{};
             queueInfo.pNext = next;
             queueInfo.flags = flags;
-            queueInfo.queueFamilyIndex = family.getIndex();
+            queueInfo.queueFamilyIndex = family.queueFamilyIndex();
             queueInfo.queueIndex = queueIndex;
 
-            return create2(family.getDevice(), queueInfo);
+            return create2(family.device(), queueInfo);
         }
 #endif
 
@@ -148,17 +145,17 @@ namespace vkq
 
         void beginDebugUtilsLabelEXT(const vk::DebugUtilsLabelEXT& labelInfo)
         {
-            queue.beginDebugUtilsLabelEXT(labelInfo, device.getDeviceDispatch());
+            queue_.beginDebugUtilsLabelEXT(labelInfo, device_.dispatch());
         }
 
         void endDebugUtilsLabelEXT()
         {
-            queue.endDebugUtilsLabelEXT(device.getDeviceDispatch());
+            queue_.endDebugUtilsLabelEXT(device_.dispatch());
         }
 
         void insertDebugUtilsLabelEXT(const vk::DebugUtilsLabelEXT& labelInfo)
         {
-            queue.insertDebugUtilsLabelEXT(labelInfo, device.getDeviceDispatch());
+            queue_.insertDebugUtilsLabelEXT(labelInfo, device_.dispatch());
         }
 
 #endif
@@ -167,40 +164,38 @@ namespace vkq
 
         vk::Result presentKHR(const vk::PresentInfoKHR presentInfo)
         {
-            return queue.presentKHR(presentInfo, device.getDeviceDispatch());
+            return queue_.presentKHR(presentInfo, device_.dispatch());
         }
 
 #endif
 
         void bindSparse(vk::ArrayProxy<const vk::BindSparseInfo> const& bindInfo, vk::Fence fence)
         {
-            queue.bindSparse(bindInfo, fence, device.getDeviceDispatch());
+            queue_.bindSparse(bindInfo, fence, device_.dispatch());
         }
 
         void submit(vk::ArrayProxy<const vk::SubmitInfo> const& submits, vk::Fence fence)
         {
-            queue.submit(submits, fence, device.getDeviceDispatch());
+            queue_.submit(submits, fence, device_.dispatch());
         }
 
         void waitIdle()
         {
-            queue.waitIdle(device.getDeviceDispatch());
+            queue_.waitIdle(device_.dispatch());
         }
 
-        Device getDevice() const { return device; }
+        Device device() const { return device_; }
+        const vk::DispatchLoaderDynamic& dispatch() const { return device_.dispatch(); }
 
-        vk::Queue vkQueue() const { return queue; }
-        vk::Queue vkHandle() const { return queue; }
-        operator vk::Queue() const { return queue; }
+        vk::Queue vkQueue() const { return queue_; }
+        vk::Queue vkHandle() const { return queue_; }
+        operator vk::Queue() const { return queue_; }
 
     private:
-        explicit Queue(Device device, vk::Queue queue)
-            : device(device), queue(queue)
-        {
-        }
+        explicit Queue(Device device_, vk::Queue queue_);
 
-        Device device;
-        vk::Queue queue;
+        Device device_;
+        vk::Queue queue_;
     };
 
 } // namespace vkq

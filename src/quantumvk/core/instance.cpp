@@ -8,6 +8,11 @@ namespace vkq
     // Instance ////////////////////
     ////////////////////////////////
 
+    explicit Instance::Instance(Instance::Impl* impl_)
+        : impl_(impl_)
+    {
+    }
+
     Instance Instance::create(PFN_vkGetInstanceProcAddr getInstanceProcAddr, const vk::InstanceCreateInfo& createInfo)
     {
         Instance::Impl* impl = new Instance::Impl();
@@ -36,39 +41,39 @@ namespace vkq
 
     void Instance::destroy()
     {
-        impl->instance.destroy(nullptr, impl->dispatch);
+        impl_->instance.destroy(nullptr, impl_->dispatch);
 
-        delete impl;
-        impl = nullptr;
+        delete impl_;
+        impl_ = nullptr;
     }
 
 #ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 
     vk::DebugUtilsMessengerEXT Instance::createDebugUtilsMessengerEXT(const vk::DebugUtilsMessengerCreateInfoEXT& createInfo, vk::Optional<const vk::AllocationCallbacks> allocator)
     {
-        return impl->instance.createDebugUtilsMessengerEXT(createInfo, allocator, impl->dispatch);
+        return impl_->instance.createDebugUtilsMessengerEXT(createInfo, allocator, impl_->dispatch);
     }
 
     void Instance::destroyDebugUtilsMessengerEXT(vk::DebugUtilsMessengerEXT messenger, vk::Optional<const vk::AllocationCallbacks> allocator)
     {
-        impl->instance.destroyDebugUtilsMessengerEXT(messenger, allocator, impl->dispatch);
+        impl_->instance.destroyDebugUtilsMessengerEXT(messenger, allocator, impl_->dispatch);
     }
 
 #endif
 
     std::vector<vk::PhysicalDevice> Instance::enumeratePhysicalDevices() const
     {
-        return impl->instance.enumeratePhysicalDevices(impl->dispatch);
+        return impl_->instance.enumeratePhysicalDevices(impl_->dispatch);
     }
 
-    const vk::ApplicationInfo& Instance::getApplicationInfo() const
+    const vk::ApplicationInfo& Instance::applicationInfo() const
     {
-        return impl->appInfo;
+        return impl_->appInfo;
     }
 
     bool Instance::isInstanceExtensionEnabled(const char* extensionName) const
     {
-        for (const char* extension : impl->enabledExtensions)
+        for (const char* extension : impl_->enabledExtensions)
             if (strcmp(extensionName, extension) == 0)
                 return true;
         return false;
@@ -76,40 +81,40 @@ namespace vkq
 
     bool Instance::isLayerEnabled(const char* layerName) const
     {
-        for (const char* layer : impl->enabledLayers)
+        for (const char* layer : impl_->enabledLayers)
             if (strcmp(layerName, layer) == 0)
                 return true;
         return false;
     }
 
-    const Instance::ExtensionSupport& Instance::getInstanceExtensionSupport() const
+    const Instance::ExtensionSupport& Instance::extensionSupport() const
     {
-        return impl->extensionSupport;
+        return impl_->extensionSupport;
     }
 
-    const vk::DispatchLoaderDynamic& Instance::getInstanceDispatch() const
+    const vk::DispatchLoaderDynamic& Instance::dispatch() const
     {
-        return impl->dispatch;
+        return impl_->dispatch;
     }
 
-    PFN_vkGetInstanceProcAddr Instance::getInstanceProcAddrLoader() const
+    PFN_vkGetInstanceProcAddr Instance::instanceProcAddrLoader() const
     {
-        return impl->dispatch.vkGetInstanceProcAddr;
+        return impl_->dispatch.vkGetInstanceProcAddr;
     }
 
     vk::Instance Instance::vkInstance() const
     {
-        return impl->instance;
+        return impl_->instance;
     }
 
     vk::Instance Instance::vkHandle() const
     {
-        return impl->instance;
+        return impl_->instance;
     }
 
     Instance::operator vk::Instance() const
     {
-        return impl->instance;
+        return impl_->instance;
     }
 
 } // namespace vkq
