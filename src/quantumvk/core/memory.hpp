@@ -1,14 +1,20 @@
 #pragma once
 
+#include "../base/common.hpp"
 #include "../base/vk.hpp"
 #include "../base/vma.hpp"
 
 #include "device.hpp"
 
+#include <mutex>
 #include <utility>
 
 namespace vkq
 {
+    //////////////////////////////////
+    // Map Memory Access /////////////
+    //////////////////////////////////
+
     enum class MapMemoryAccessFlagBits
     {
         eRead = 0x00000001,
@@ -27,95 +33,96 @@ namespace vkq
     {
         return ~(MapMemoryAccessFlags(bits));
     }
+
+    /////////////////////////////////
+    // Linear ALlocations ///////////
+    /////////////////////////////////
+
+    enum class LinearAllocationFlagBits
+    {
+        eMapped = 0x0001,
+        eUpperAddress = 0x0002
+    };
+
+    using LinearAllocationFlags = vk::Flags<LinearAllocationFlagBits>;
+
+    LinearAllocationFlags operator|(LinearAllocationFlagBits bit0, LinearAllocationFlagBits bit1)
+    {
+        return LinearAllocationFlags(bit0) | bit1;
+    }
+
+    LinearAllocationFlags operator~(LinearAllocationFlagBits bits)
+    {
+        return ~(LinearAllocationFlags(bits));
+    }
+
+    ///////////////////////////////////
+    // Pool Allocation ////////////////
+    ///////////////////////////////////
+
+    enum class PoolAllocationFlagBits
+    {
+        eMapped = 0x0001,
+        eNeverAllocate = 0x0002,
+        eWithinBudget = 0x0004,
+    };
+
+    using PoolAllocationFlags = vk::Flags<PoolAllocationFlagBits>;
+
+    PoolAllocationFlags operator|(PoolAllocationFlagBits bit0, PoolAllocationFlagBits bit1)
+    {
+        return PoolAllocationFlags(bit0) | bit1;
+    }
+
+    PoolAllocationFlags operator~(PoolAllocationFlagBits bits)
+    {
+        return ~(PoolAllocationFlags(bits));
+    }
+
+    enum class MemoryPoolAlgorithm
+    {
+        eDefault = 0,
+        eBuddy = 1,
+    };
+
+    /////////////////////////////////
+    // General Allocation ///////////
+    /////////////////////////////////
+
+    enum class AllocationStrategy
+    {
+        eStrategyMinMemory = 0,
+        eStrategyMinTime = 1,
+        eStrategyMinFragmentation = 2,
+    };
+
+    enum class AllocationFlagBits
+    {
+        eDedicatedMemory = 0x0001,
+        eNeverAllocate = 0x0002,
+        eMapped = 0x0004,
+        eWithinBudget = 0x0008,
+    };
+
+    using AllocationFlags = vk::Flags<AllocationFlagBits>;
+
+    AllocationFlags operator|(AllocationFlagBits bit0, AllocationFlagBits bit1)
+    {
+        return AllocationFlags(bit0) | bit1;
+    }
+
+    AllocationFlags operator~(AllocationFlagBits bits)
+    {
+        return ~(AllocationFlags(bits));
+    }
 } // namespace vkq
 
 namespace vkq
 {
 
-    class MemoryAllocator
-    {
-    public:
-        MemoryAllocator() = default;
-        ~MemoryAllocator() = default;
-
-    public:
-        static MemoryAllocator create(const Device& device, vk::DeviceSize prefferedLargeHeapBlockSize = 256 * 1024 * 1024);
-
-        void destroy();
-
-        const vk::PhysicalDeviceMemoryProperties& memoryProperties() const { return device().memoryProperties(); }
-        vk::MemoryType memoryTypeProperties(uint32_t memoryTypeIndex) const { return device().memoryTypeProperties(memoryTypeIndex); }
-        vk::MemoryHeap memoryHeapProperties(uint32_t memoryHeapIndex) const { return device().memoryHeapProperties(memoryHeapIndex); }
-
-        Device device() const;
-        VmaAllocator vmaAllocator() const;
-        VmaAllocator vmaHandle() const;
-        operator VmaAllocator() const;
-
-    private:
-        struct Impl
-        {
-            Device device;
-            VmaAllocator allocator;
-        };
-
-        explicit MemoryAllocator(Impl* impl);
-
-        Impl* impl = nullptr;
-    };
-
-    class MemoryPool
-    {
-    public:
-        MemoryPool() = default;
-        ~MemoryPool() = default;
-
-    public:
-        static MemoryPool create(const MemoryAllocator& allocator, uint32_t memoryTypeIndex, vk::DeviceSize blockSize = 0, uint32_t minBlockCount = 0, uint32_t maxBlockCount = 0);
-        static MemoryPool createBuddy(const MemoryAllocator& allocator, uint32_t memoryTypeIndex, vk::DeviceSize blockSize = 0, uint32_t minBlockCount = 0, uint32_t maxBlockCount = 0);
-        static MemoryPool createLinear(const MemoryAllocator& allocator, uint32_t memoryTypeIndex, vk::DeviceSize size);
-
-        void destroy();
-
-        MemoryAllocator allocator() const { return allocator_; }
-
-        VmaPool vmaPool() const { return pool_; }
-        VmaPool vmaHandle() const { return pool_; }
-        operator VmaPool() const { return pool_; }
-
-    private:
-        MemoryAllocator allocator_;
-        VmaPool pool_;
-    };
-
-    // enum class AllocationFlagBits
-    // {
-    //     eDedicatedMemory = 0x0001,
-    //     eNeverAllocate = 0x0002,
-    //     eMapped = 0x0004
-    // };
-
-    // using AllocationFlags = vk::Flags<AllocationFlagBits>;
-
-    // AllocationFlags operator|(AllocationFlagBits bit0, AllocationFlagBits bit1)
-    // {
-    //     return AllocationFlags(bit0) | bit1;
-    // }
-
-    // AllocationFlags operator~(AllocationFlagBits bits)
-    // {
-    //     return ~(AllocationFlags(bits));
-    // }
-
-    // enum class AllocationStrategy
-    // {
-    //     eBestFit = 0x0001,
-    //     eWorstFit = 0x0002,
-    //     eFirstFit = 0x0004,
-    //     eMinMemory = 0x0008,
-    //     eMinTime = 0x0010,
-    //     eMinFragmentation = 0x0020
-    // };
+    class MemoryAllocator;
+    class MemoryPool;
+    class LinearMemoryPool;
 
     /**
      * @brief Abstracts vk::Buffer and the associated VmaAllocation object. Provides functions to 
@@ -129,7 +136,47 @@ namespace vkq
         ~Buffer() = default;
 
     public:
-        static Buffer create(const MemoryAllocator, const vk::BufferCreateInfo& createInfo, vk::MemoryPropertyFlags requiredFlags, vk::MemoryPropertyFlags preferedFlags, uint32_t allowedMemoryTypesBitMask);
+        /**
+         * @brief Creates a buffer using createInfo, and allocates memory for it from the specifed LinearMemoryPool.
+         * 
+         * @param linearPool Linear Memory Pool to allocate from.
+         * @param createInfo Info used to create buffer.
+         * @param allocFlags Flags used to specify additional allocation settings.
+         * @return Newly created and allocated buffer.  
+         */
+        static Buffer create(const LinearMemoryPool& linearPool, const vk::BufferCreateInfo& createInfo, LinearAllocationFlags allocFlags = {});
+
+        /**
+         * @brief Creates a buffer using createInfo, and allocates memory for it from the specifed MemoryPool.
+         * 
+         * @param pool Pool to allocate memory from.
+         * @param createInfo Info used to create buffer.
+         * @param allocFlags Flags used to specify additional allocation settings.
+         * @param strategy Allocation strategy.
+         * @return Newly created and allocated buffer.  
+         */
+        static Buffer create(const MemoryPool& pool, const vk::BufferCreateInfo& createInfo, PoolAllocationFlags allocFlags = {}, AllocationStrategy strategy = AllocationStrategy::eStrategyMinMemory);
+
+        /**
+         * @brief Creates a buffer using createInfo, and allocates memory for it as specified by the other parameters.
+         * 
+         * @param allocator Allocator to allocate memory from.
+         * @param createInfo Info used to create buffer.
+         * @param requiredMemFlags Property flags that the memory type the buffer is allocated from must have.
+         * @param preferredMemFlags Property flags that the memory type the buffer is allocated from is preffered (but not guaranteed) to have.
+         * @param allocFlags Flags used to specify additional allocation settings.
+         * @param strategy Allocation strategy.
+         * @param memoryTypeBits Bitmask with bits set for each allowed memory type (0 defaults to UINT32_MAX).
+         * @return Newly created and allocated buffer. 
+         */
+        static Buffer create(const MemoryAllocator& allocator, const vk::BufferCreateInfo& createInfo, vk::MemoryPropertyFlags requiredMemFlags, vk::MemoryPropertyFlags preferredMemFlags, AllocationFlags allocFlags = {}, AllocationStrategy strategy = AllocationStrategy::eStrategyMinMemory, uint32_t memoryTypeBits = UINT32_MAX);
+
+        /**
+         * @brief Destroys and deallocates the buffer. The resource must not be in use by any pending operations or commands.
+         * The buffer must not be mapped when it is destroyed.
+         * 
+         */
+        void destroy();
 
         /**
          * @brief Maps buffer memory. Pointer to memory can be retrieved using vkq::Buffer::hostMemory().
@@ -158,18 +205,148 @@ namespace vkq
          */
         void* hostMemory();
 
-        uint32_t memoryTypeIndex() const { return memoryTypeIndex_; }
-        vk::MemoryType memoryTypeProperties() const { return allocator_.memoryTypeProperties(memoryTypeIndex_); }
-        bool memoryHasPropertyFlags(vk::MemoryPropertyFlags flags) const { return uint32_t(allocator_.memoryTypeProperties(memoryTypeIndex_).propertyFlags & flags); }
+        /**
+         * @brief Retrieves size passed into vk::BufferCreateInfo when this buffer was created.
+         * 
+         * @return Size of buffer in bytes.
+         */
+        vk::DeviceSize size();
+
+        /**
+         * @brief Retrieves usage passed info vk::BufferCreateInfo when this buffer was created.
+         * 
+         * @return Usage of the buffer.
+         */
+        vk::BufferUsageFlags usage();
+
+        /**
+         * @brief Returns the index of the memory type this buffer is allocated from.
+         * 
+         * @return uint32_t 
+         */
+        uint32_t memoryTypeIndex() const;
+
+        /**
+         * @brief Returns the properties of the memory this buffer is allocated from.
+         * 
+         * @return vk::MemoryType 
+         */
+        vk::MemoryType memoryTypeProperties() const;
+
+        /**
+         * @brief Returns whether the memory this buffer is allocated from has certain properties.
+         * 
+         * @param flags
+         * @return true
+         * @return false 
+         */
+        bool memoryHasPropertyFlags(vk::MemoryPropertyFlags flags) const;
+
+    public:
+        struct Impl
+        {
+            MemoryAllocator allocator;
+            VmaAllocation allocation;
+            vk::Buffer buffer;
+
+            vk::DeviceSize size;
+            vk::BufferUsageFlags usage;
+            void* hostMemory;
+            uint32_t memoryTypeIndex;
+        };
 
     private:
-        MemoryAllocator allocator_;
-        VmaAllocation allocation_;
-        vk::Buffer buffer_;
+        explicit Buffer(Impl* impl);
 
-        vk::DeviceSize size_;
-        vk::BufferUsageFlags usage_;
-        uint32_t memoryTypeIndex_;
+        Impl* impl;
     };
 
+    class MemoryAllocator
+    {
+        friend class Buffer;
+
+    public:
+        MemoryAllocator() = default;
+        ~MemoryAllocator() = default;
+
+    public:
+        static MemoryAllocator create(const Device& device, vk::DeviceSize prefferedLargeHeapBlockSize = 256 * 1024 * 1024);
+
+        void destroy();
+
+        const vk::PhysicalDeviceMemoryProperties& memoryProperties() const { return device().memoryProperties(); }
+        vk::MemoryType memoryTypeProperties(uint32_t memoryTypeIndex) const { return device().memoryTypeProperties(memoryTypeIndex); }
+        vk::MemoryHeap memoryHeapProperties(uint32_t memoryHeapIndex) const { return device().memoryHeapProperties(memoryHeapIndex); }
+
+        Device device() const;
+        VmaAllocator vmaAllocator() const;
+        VmaAllocator vmaHandle() const;
+        operator VmaAllocator() const;
+
+    private:
+        Buffer::Impl* allocBufferHandle() const;
+        void freeBufferHandle(Buffer::Impl* handle) const;
+
+    private:
+        struct Impl
+        {
+            Device device;
+            VmaAllocator allocator;
+
+            std::mutex bufferHandleMutex;
+            ObjectPool<Buffer::Impl> bufferHandles;
+        };
+
+        explicit MemoryAllocator(Impl* impl);
+
+        Impl* impl = nullptr;
+    };
+
+    class MemoryPool
+    {
+    public:
+        MemoryPool() = default;
+        ~MemoryPool() = default;
+
+    public:
+        static MemoryPool create(const MemoryAllocator& allocator, MemoryPoolAlgorithm algorithm, uint32_t memoryTypeIndex, vk::DeviceSize blockSize = 0, uint32_t minBlockCount = 0, uint32_t maxBlockCount = 0);
+
+        void destroy();
+
+        MemoryAllocator allocator() const { return allocator_; }
+
+        VmaPool vmaPool() const { return pool_; }
+        VmaPool vmaHandle() const { return pool_; }
+        operator VmaPool() const { return pool_; }
+
+    private:
+        explicit MemoryPool(MemoryAllocator allocator, VmaPool pool);
+
+        MemoryAllocator allocator_;
+        VmaPool pool_;
+    };
+
+    class LinearMemoryPool
+    {
+    public:
+        LinearMemoryPool() = default;
+        ~LinearMemoryPool() = default;
+
+    public:
+        static LinearMemoryPool create(const MemoryAllocator& allocator, uint32_t memoryTypeIndex, vk::DeviceSize size);
+
+        void destroy();
+
+        MemoryAllocator allocator() const { allocator_; }
+
+        VmaPool vmaPool() const { return pool_; }
+        VmaPool vmaHandle() const { return pool_; }
+        operator VmaPool() const { return pool_; }
+
+    private:
+        explicit LinearMemoryPool(MemoryAllocator allocator, VmaPool pool);
+
+        MemoryAllocator allocator_;
+        VmaPool pool_;
+    };
 } // namespace vkq

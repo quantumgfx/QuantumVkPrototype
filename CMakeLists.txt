@@ -64,7 +64,8 @@ set(QM_GLOBAL_HPP_FILES
 	
 set(QM_BASE_HPP_FILES 
 	${QM_SRC_DIR}/base/vk.hpp
-	${QM_SRC_DIR}/base/vma.hpp)
+	${QM_SRC_DIR}/base/vma.hpp
+	${QM_SRC_DIR}/base/common.hpp)
 
 set(QM_CORE_HPP_FILES 
 	${QM_SRC_DIR}/core/loader.hpp

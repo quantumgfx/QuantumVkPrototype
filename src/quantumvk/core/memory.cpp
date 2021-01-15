@@ -1,7 +1,192 @@
 #include "memory.hpp"
 
+#include "../base/common.hpp"
+
+#include <mutex>
+
 namespace vkq
 {
+    ///////////////////////////////////
+    // Buffer /////////////////////////
+    ///////////////////////////////////
+
+    explicit Buffer::Buffer(Buffer::Impl* impl)
+        : impl(impl)
+    {
+    }
+
+    Buffer Buffer::create(const LinearMemoryPool& linearPool, const vk::BufferCreateInfo& createInfo, LinearAllocationFlags allocFlags)
+    {
+        const auto& allocator = linearPool.allocator();
+
+        Impl* impl = allocator.allocBufferHandle();
+        impl->hostMemory = nullptr;
+        impl->size = createInfo.size;
+        impl->usage = createInfo.usage;
+
+        VmaAllocationCreateFlags vmaAllocFlags = 0;
+
+        if (allocFlags & LinearAllocationFlagBits::eMapped)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        if (allocFlags & LinearAllocationFlagBits::eUpperAddress)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_UPPER_ADDRESS_BIT;
+
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.pool = linearPool.vmaPool();
+        allocInfo.pUserData = nullptr;
+        allocInfo.flags = vmaAllocFlags;
+
+        VmaAllocationInfo info{};
+        vk::Result res = static_cast<vk::Result>(vmaCreateBuffer(allocator.vmaAllocator(), reinterpret_cast<const VkBufferCreateInfo*>(&createInfo), &allocInfo, reinterpret_cast<VkBuffer*>(&impl->buffer), &impl->allocation, &info));
+        vk::throwResultException(res, "vkq::Buffer::create");
+
+        impl->memoryTypeIndex = info.memoryType;
+
+        return Buffer{impl};
+    }
+
+    Buffer Buffer::create(const MemoryPool& pool, const vk::BufferCreateInfo& createInfo, PoolAllocationFlags allocFlags, AllocationStrategy strategy)
+    {
+        const auto& allocator = pool.allocator();
+
+        Impl* impl = allocator.allocBufferHandle();
+        impl->hostMemory = nullptr;
+        impl->size = createInfo.size;
+        impl->usage = createInfo.usage;
+
+        VmaAllocationCreateFlags vmaAllocFlags = 0;
+
+        if (allocFlags & PoolAllocationFlagBits::eMapped)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        if (allocFlags & PoolAllocationFlagBits::eNeverAllocate)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_NEVER_ALLOCATE_BIT;
+        if (allocFlags & PoolAllocationFlagBits::eWithinBudget)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT;
+
+        if (strategy == AllocationStrategy::eStrategyMinMemory)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT;
+        else if (strategy == AllocationStrategy::eStrategyMinTime)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_STRATEGY_MIN_TIME_BIT;
+        else if (strategy == AllocationStrategy::eStrategyMinFragmentation)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_STRATEGY_MIN_FRAGMENTATION_BIT;
+        else // Default
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT;
+
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.pool = pool.vmaPool();
+        allocInfo.pUserData = nullptr;
+        allocInfo.flags = vmaAllocFlags;
+
+        VmaAllocationInfo info{};
+        vk::Result res = static_cast<vk::Result>(vmaCreateBuffer(allocator.vmaAllocator(), reinterpret_cast<const VkBufferCreateInfo*>(&createInfo), &allocInfo, reinterpret_cast<VkBuffer*>(&impl->buffer), &impl->allocation, &info));
+        vk::throwResultException(res, "vkq::Buffer::create");
+
+        impl->memoryTypeIndex = info.memoryType;
+
+        return Buffer{impl};
+    }
+
+    Buffer Buffer::create(const MemoryAllocator& allocator, const vk::BufferCreateInfo& createInfo, vk::MemoryPropertyFlags requiredMemFlags, vk::MemoryPropertyFlags preferredMemFlags, AllocationFlags allocFlags, AllocationStrategy strategy, uint32_t memoryTypeBits)
+    {
+        Impl* impl = allocator.allocBufferHandle();
+        impl->hostMemory = nullptr;
+        impl->size = createInfo.size;
+        impl->usage = createInfo.usage;
+
+        VmaAllocationCreateFlags vmaAllocFlags = 0;
+
+        if (allocFlags & AllocationFlagBits::eMapped)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        if (allocFlags & AllocationFlagBits::eNeverAllocate)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_NEVER_ALLOCATE_BIT;
+        if (allocFlags & AllocationFlagBits::eWithinBudget)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT;
+        if (allocFlags & AllocationFlagBits::eDedicatedMemory)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+
+        if (strategy == AllocationStrategy::eStrategyMinMemory)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT;
+        else if (strategy == AllocationStrategy::eStrategyMinTime)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_STRATEGY_MIN_TIME_BIT;
+        else if (strategy == AllocationStrategy::eStrategyMinFragmentation)
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_STRATEGY_MIN_FRAGMENTATION_BIT;
+        else // Default
+            vmaAllocFlags |= VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT;
+
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.pool = VMA_NULL;
+        allocInfo.pUserData = nullptr;
+        allocInfo.flags = vmaAllocFlags;
+        allocInfo.usage = VMA_MEMORY_USAGE_UNKNOWN;
+        allocInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(requiredMemFlags);
+        allocInfo.preferredFlags = static_cast<VkMemoryPropertyFlags>(preferredMemFlags);
+        allocInfo.memoryTypeBits = (memoryTypeBits == 0) ? UINT32_MAX : memoryTypeBits;
+
+        VmaAllocationInfo info{};
+        vk::Result res = static_cast<vk::Result>(vmaCreateBuffer(allocator.vmaAllocator(), reinterpret_cast<const VkBufferCreateInfo*>(&createInfo), &allocInfo, reinterpret_cast<VkBuffer*>(&impl->buffer), &impl->allocation, &info));
+        vk::throwResultException(res, "vkq::Buffer::create");
+
+        impl->memoryTypeIndex = info.memoryType;
+
+        return Buffer{impl};
+    }
+
+    void Buffer::destroy()
+    {
+        MemoryAllocator allocator = impl->allocator;
+        allocator.freeBufferHandle(impl);
+
+        impl = nullptr;
+    }
+
+    static void throwMapMemoryException(vk::Result result, const char* message)
+    {
+        switch (result)
+        {
+        case vk::Result::eErrorMemoryMapFailed:
+            throw vk::MemoryMapFailedError(message);
+        case vk::Result::eErrorOutOfHostMemory:
+            throw vk::OutOfHostMemoryError(message);
+        case vk::Result::eErrorOutOfDeviceMemory:
+            throw vk::OutOfDeviceMemoryError(message);
+        default:
+            break;
+        }
+    }
+
+    void Buffer::mapMemory(MapMemoryAccessFlags flags)
+    {
+        vk::Result res = static_cast<vk::Result>(vmaMapMemory(impl->allocator, impl->allocation, &impl->hostMemory));
+        throwMapMemoryException(res, "vkq::Buffer:mapMemory");
+
+        if ((flags & MapMemoryAccessFlagBits::eRead) && !memoryHasPropertyFlags(vk::MemoryPropertyFlagBits::eHostCoherent))
+        {
+            res = static_cast<vk::Result>(vmaInvalidateAllocation(impl->allocator, impl->allocation, 0, VK_WHOLE_SIZE));
+            throwMapMemoryException(res, "vkq::Buffer:mapMemory");
+        }
+    }
+
+    void Buffer::unmapMemory(MapMemoryAccessFlags flags)
+    {
+        if ((flags & MapMemoryAccessFlagBits::eWrite) && !memoryHasPropertyFlags(vk::MemoryPropertyFlagBits::eHostCoherent))
+        {
+            vk::Result res = static_cast<vk::Result>(vmaFlushAllocation(impl->allocator, impl->allocation, 0, VK_WHOLE_SIZE));
+            throwMapMemoryException(res, "vkq::Buffer:mapMemory");
+        }
+
+        vmaUnmapMemory(impl->allocator, impl->allocation);
+
+        impl->hostMemory = nullptr;
+    }
+
+    void* Buffer::hostMemory()
+    {
+        return impl->hostMemory;
+    }
+
+    ///////////////////////////////////
+    // Memory Allocator ///////////////
+    ///////////////////////////////////
 
     explicit MemoryAllocator::MemoryAllocator(MemoryAllocator::Impl* impl)
         : impl(impl)
@@ -74,7 +259,7 @@ namespace vkq
         case vk::Result::eErrorFeatureNotPresent:
             throw vk::FeatureNotPresentError("vkq::MemoryAllocator::create");
         case vk::Result::eErrorInitializationFailed:
-            throw vk::InitializationFailedError("vkq::MemoryAllocator::crate");
+            throw vk::InitializationFailedError("vkq::MemoryAllocator::create");
         default:
             break;
         }
@@ -95,50 +280,88 @@ namespace vkq
         return impl->device;
     }
 
-    static void throwMapMemoryException(vk::Result result, const char* message)
+    Buffer::Impl* MemoryAllocator::allocBufferHandle() const
     {
-        switch (result)
-        {
-        case vk::Result::eErrorMemoryMapFailed:
-            throw vk::MemoryMapFailedError(message);
-        case vk::Result::eErrorOutOfHostMemory:
-            throw vk::OutOfHostMemoryError(message);
-        case vk::Result::eErrorOutOfDeviceMemory:
-            throw vk::OutOfDeviceMemoryError(message);
-        default:
-            break;
-        }
+        std::lock_guard lock(impl->bufferHandleMutex);
+        return impl->bufferHandles.alloc();
     }
 
-    void Buffer::mapMemory(MapMemoryAccessFlags flags)
+    void MemoryAllocator::freeBufferHandle(Buffer::Impl* handle) const
     {
-        vk::Result res = static_cast<vk::Result>(vmaMapMemory(allocator_, allocation_, nullptr));
-        throwMapMemoryException(res, "vkq::Buffer:mapMemory");
-
-        if ((flags & MapMemoryAccessFlagBits::eRead) && !memoryHasPropertyFlags(vk::MemoryPropertyFlagBits::eHostCoherent))
-        {
-            res = static_cast<vk::Result>(vmaInvalidateAllocation(allocator_, allocation_, 0, VK_WHOLE_SIZE));
-            throwMapMemoryException(res, "vkq::Buffer:mapMemory");
-        }
+        std::lock_guard lock(impl->bufferHandleMutex);
+        impl->bufferHandles.free(handle);
     }
 
-    void Buffer::unmapMemory(MapMemoryAccessFlags flags)
-    {
-        if ((flags & MapMemoryAccessFlagBits::eWrite) && !memoryHasPropertyFlags(vk::MemoryPropertyFlagBits::eHostCoherent))
-        {
-            vk::Result res = static_cast<vk::Result>(vmaFlushAllocation(allocator_, allocation_, 0, VK_WHOLE_SIZE));
-            throwMapMemoryException(res, "vkq::Buffer:mapMemory");
-        }
+    //////////////////////////////////
+    // Memory Pools //////////////////
+    //////////////////////////////////
 
-        vmaUnmapMemory(allocator_, allocation_);
+    explicit MemoryPool::MemoryPool(MemoryAllocator allocator, VmaPool pool)
+        : allocator_(allocator), pool_(pool)
+    {
     }
 
-    void* Buffer::hostMemory()
+    MemoryPool MemoryPool::create(const MemoryAllocator& allocator, MemoryPoolAlgorithm algorithm, uint32_t memoryTypeIndex, vk::DeviceSize blockSize = 0, uint32_t minBlockCount = 0, uint32_t maxBlockCount = 0)
     {
-        VmaAllocationInfo allocInfo;
-        vmaGetAllocationInfo(allocator_.vmaAllocator(), allocation_, &allocInfo);
+        VmaPoolCreateFlags flags = 0;
+        if (algorithm == MemoryPoolAlgorithm::eBuddy)
+            flags |= VMA_POOL_CREATE_BUDDY_ALGORITHM_BIT;
 
-        return allocInfo.pMappedData;
+        VmaPoolCreateInfo createInfo{};
+        createInfo.flags = flags;
+        createInfo.blockSize = blockSize;
+        createInfo.minBlockCount = minBlockCount;
+        createInfo.maxBlockCount = maxBlockCount;
+        createInfo.memoryTypeIndex = memoryTypeIndex;
+
+        VmaPool pool;
+        vk::Result res = static_cast<vk::Result>(vmaCreatePool(allocator.vmaAllocator(), &createInfo, &pool));
+        vk::throwResultException(res, "vkq::MemoryPool::create");
+
+        return MemoryPool{allocator, pool};
+    }
+
+    void MemoryPool::destroy()
+    {
+        vmaDestroyPool(allocator_.vmaAllocator(), pool_);
+
+        allocator_ = {};
+        pool_ = {};
+    }
+
+    ///////////////////////////////
+    // Linear Memory Pool /////////
+    ///////////////////////////////
+
+    explicit LinearMemoryPool::LinearMemoryPool(MemoryAllocator allocator, VmaPool pool)
+        : allocator_(allocator), pool_(pool)
+    {
+    }
+
+    LinearMemoryPool LinearMemoryPool::create(const MemoryAllocator& allocator, uint32_t memoryTypeIndex, vk::DeviceSize size)
+    {
+        VmaPoolCreateFlags flags = VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT;
+
+        VmaPoolCreateInfo createInfo{};
+        createInfo.flags = flags;
+        createInfo.blockSize = size;
+        createInfo.minBlockCount = 1;
+        createInfo.maxBlockCount = 1;
+        createInfo.memoryTypeIndex = memoryTypeIndex;
+
+        VmaPool pool;
+        vk::Result res = static_cast<vk::Result>(vmaCreatePool(allocator.vmaAllocator(), &createInfo, &pool));
+        vk::throwResultException(res, "vkq::MemoryPool::create");
+
+        return LinearMemoryPool{allocator, pool};
+    }
+
+    void LinearMemoryPool::destroy()
+    {
+        vmaDestroyPool(allocator_.vmaAllocator(), pool_);
+
+        allocator_ = {};
+        pool_ = {};
     }
 
 } // namespace vkq
