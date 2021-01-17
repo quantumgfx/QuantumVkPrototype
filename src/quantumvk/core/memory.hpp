@@ -206,20 +206,6 @@ namespace vkq
         void* hostMemory();
 
         /**
-         * @brief Retrieves size passed into vk::BufferCreateInfo when this buffer was created.
-         * 
-         * @return Size of buffer in bytes.
-         */
-        vk::DeviceSize size();
-
-        /**
-         * @brief Retrieves usage passed info vk::BufferCreateInfo when this buffer was created.
-         * 
-         * @return Usage of the buffer.
-         */
-        vk::BufferUsageFlags usage();
-
-        /**
          * @brief Returns the index of the memory type this buffer is allocated from.
          * 
          * @return uint32_t 
@@ -242,6 +228,28 @@ namespace vkq
          */
         bool memoryHasPropertyFlags(vk::MemoryPropertyFlags flags) const;
 
+        /**
+         * @brief Retrieves size passed into vk::BufferCreateInfo when this buffer was created.
+         * 
+         * @return Size of buffer in bytes.
+         */
+        vk::DeviceSize size();
+
+        /**
+         * @brief Retrieves usage passed info vk::BufferCreateInfo when this buffer was created.
+         * 
+         * @return Usage of the buffer.
+         */
+        vk::BufferUsageFlags usage();
+
+        Device device() const;
+        MemoryAllocator allocator() const;
+
+        VmaAllocation vmaAllocation() const;
+        vk::Buffer vkBuffer() const;
+        vk::Buffer vkHandle() const;
+        operator vk::Buffer() const;
+
     public:
         struct Impl
         {
@@ -251,6 +259,7 @@ namespace vkq
 
             vk::DeviceSize size;
             vk::BufferUsageFlags usage;
+
             void* hostMemory;
             uint32_t memoryTypeIndex;
         };
@@ -261,9 +270,168 @@ namespace vkq
         Impl* impl;
     };
 
+    /**
+     * @brief Abstracts vk::Buffer and the associated VmaAllocation object. Provides functions to 
+     * retrieve the buffer's properties as well as map its memory if it is host visible.
+     * 
+     */
+    class Image
+    {
+    public:
+        Image() = default;
+        ~Image() = default;
+
+    public:
+        /**
+         * @brief Creates an image using createInfo, and allocates memory for it from the specifed LinearMemoryPool.
+         * 
+         * @param linearPool Linear Memory Pool to allocate from.
+         * @param createInfo Info used to create image.
+         * @param allocFlags Flags used to specify additional allocation settings.
+         * @return Newly created and allocated image.  
+         */
+        static Image create(const LinearMemoryPool& linearPool, const vk::ImageCreateInfo& createInfo, LinearAllocationFlags allocFlags = {});
+
+        /**
+         * @brief Creates an image using createInfo, and allocates memory for it from the specifed MemoryPool.
+         * 
+         * @param pool Pool to allocate memory from.
+         * @param createInfo Info used to create image.
+         * @param allocFlags Flags used to specify additional allocation settings.
+         * @param strategy Allocation strategy.
+         * @return Newly created and allocated image.  
+         */
+        static Image create(const MemoryPool& pool, const vk::ImageCreateInfo& createInfo, PoolAllocationFlags allocFlags = {}, AllocationStrategy strategy = AllocationStrategy::eStrategyMinMemory);
+
+        /**
+         * @brief Creates an image using createInfo, and allocates memory for it as specified by the other parameters.
+         * 
+         * @param allocator Allocator to allocate memory from.
+         * @param createInfo Info used to create image.
+         * @param requiredMemFlags Property flags that the memory type the image is allocated from must have.
+         * @param preferredMemFlags Property flags that the memory type the image is allocated from is preffered (but not guaranteed) to have.
+         * @param allocFlags Flags used to specify additional allocation settings.
+         * @param strategy Allocation strategy.
+         * @param memoryTypeBits Bitmask with bits set for each allowed memory type (0 defaults to UINT32_MAX).
+         * @return Newly created and allocated image. 
+         */
+        static Image create(const MemoryAllocator& allocator, const vk::ImageCreateInfo& createInfo, vk::MemoryPropertyFlags requiredMemFlags, vk::MemoryPropertyFlags preferredMemFlags, AllocationFlags allocFlags = {}, AllocationStrategy strategy = AllocationStrategy::eStrategyMinMemory, uint32_t memoryTypeBits = UINT32_MAX);
+
+        /**
+         * @brief Destroys and deallocates the image. The resource must not be in use by any pending operations or commands.
+         * The image must not be mapped when it is destroyed.
+         * 
+         */
+        void destroy();
+
+        /**
+         * @brief Maps image memory. Pointer to memory can be retrieved using vkq::Image::hostMemory().
+         * Throws vk::OutOfHostMemoryError(), vk::OutOfDeviceMemoryError(), or vk::MapMemoryFailedError()
+         * if underlying vkMapMemory or vkInvalidateMappedMemoryRanges function fails.
+         * 
+         * @param flags Describes how the mapped memory will be accessed. If the memory is to be read from,
+         * this will call vmaInvalidateAllocation if the memory is not host coherent.
+         */
+        void mapMemory(MapMemoryAccessFlags flags);
+
+        /**
+         * @brief Unmaps image memory. Calls to vkq::Image::hostMemory() are undefined until mapMemory() is called again.
+         * Throws vk::OutOfHostMemoryError(), or vk::OutOfDeviceMemoryError()
+         * if underlying vkFlushMappedMemoryRanges function fails.
+         * 
+         * @param flags Describes how the mapped memory was be accessed. If the memory was written to,
+         * this will call vmaFlushAllocation if the memory is not host coherent.
+         */
+        void unmapMemory(MapMemoryAccessFlags flags);
+
+        /**
+         * @brief Returns the host pointer to the image. Only defined if called between mapMemory() and unmapMemory().
+         * 
+         * @return void* pointing to image host memory.
+         */
+        void* hostMemory();
+
+        /**
+         * @brief Returns the index of the memory type this image is allocated from.
+         * 
+         * @return uint32_t 
+         */
+        uint32_t memoryTypeIndex() const;
+
+        /**
+         * @brief Returns the properties of the memory this buffer is allocated from.
+         * 
+         * @return vk::MemoryType 
+         */
+        vk::MemoryType memoryTypeProperties() const;
+
+        /**
+         * @brief Returns whether the memory this image is allocated from has certain properties.
+         * 
+         * @param flags
+         * @return true
+         * @return false 
+         */
+        bool memoryHasPropertyFlags(vk::MemoryPropertyFlags flags) const;
+
+        vk::ImageType imageType() const;
+
+        vk::Format format() const;
+
+        vk::Extent3D extent() const;
+
+        uint32_t mipLevels() const;
+
+        uint32_t arrayLayers() const;
+
+        vk::SampleCountFlagBits samples() const;
+
+        vk::ImageTiling tiling() const;
+
+        vk::ImageUsageFlags usage() const;
+
+        Device device() const;
+        MemoryAllocator allocator() const;
+
+        VmaAllocation vmaAllocation() const;
+        vk::Image vkImage() const;
+        vk::Image vkHandle() const;
+        operator vk::Image() const;
+
+    public:
+        struct Impl
+        {
+            MemoryAllocator allocator;
+            VmaAllocation allocation;
+            vk::Image image;
+
+            vk::ImageType imageType;
+            vk::Format format;
+            vk::Extent3D extent;
+            uint32_t mipLevels;
+            uint32_t arrayLayers;
+            vk::SampleCountFlagBits samples;
+            vk::ImageTiling tiling;
+            vk::ImageUsageFlags usage;
+
+            void* hostMemory;
+            uint32_t memoryTypeIndex;
+        };
+
+    private:
+        explicit Image(Impl* impl);
+
+        Impl* impl;
+    };
+
+    /**
+     * @brief Utility handle class to manage memory allocations for a device.
+     * 
+     */
     class MemoryAllocator
     {
         friend class Buffer;
+        friend class Image;
 
     public:
         MemoryAllocator() = default;
@@ -287,6 +455,9 @@ namespace vkq
         Buffer::Impl* allocBufferHandle() const;
         void freeBufferHandle(Buffer::Impl* handle) const;
 
+        Image::Impl* allocImageHandle() const;
+        void freeImageHandle(Image::Impl* handle) const;
+
     private:
         struct Impl
         {
@@ -295,6 +466,9 @@ namespace vkq
 
             std::mutex bufferHandleMutex;
             ObjectPool<Buffer::Impl> bufferHandles;
+
+            std::mutex imageHandleMutex;
+            ObjectPool<Image::Impl> imageHandles;
         };
 
         explicit MemoryAllocator(Impl* impl);

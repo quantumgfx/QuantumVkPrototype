@@ -22,6 +22,9 @@ namespace vkq
 #ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
             bool debugUtilsEXT = false;
 #endif
+#ifdef VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
+            bool getPhysicalDeviceProperties2KHR = false;
+#endif
 #ifdef VK_KHR_SURFACE_EXTENSION_NAME
             bool surfaceKHR = false;
 #endif

@@ -29,6 +29,9 @@ namespace vkq
 #ifdef VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME
             bool deviceCoherentMemoryAMD = false;
 #endif
+#ifdef VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME
+            bool getMemoryRequirements2KHR = false;
+#endif
 #ifdef VK_EXT_MEMORY_BUDGET_EXTENSION_NAME
             bool memoryBudgetEXT = false;
 #endif
@@ -98,14 +101,34 @@ namespace vkq
             return vkDevice().allocateCommandBuffers(allocateInfo, dispatch());
         }
 
+        vk::BufferView createBufferView(const vk::BufferViewCreateInfo& createInfo) const
+        {
+            return vkDevice().createBufferView(createInfo, nullptr, dispatch());
+        }
+
         vk::CommandPool createCommandPool(const vk::CommandPoolCreateInfo& createInfo) const
         {
             return vkDevice().createCommandPool(createInfo, nullptr, dispatch());
         }
 
+        vk::ImageView createImageView(const vk::ImageViewCreateInfo& createInfo) const
+        {
+            return vkDevice().createImageView(createInfo, nullptr, dispatch());
+        }
+
+        void destroyBufferView(vk::BufferView bufferView)
+        {
+            vkDevice().destroyBufferView(bufferView, nullptr, dispatch());
+        }
+
         void destroyCommandPool(vk::CommandPool commandPool) const
         {
             vkDevice().destroyCommandPool(commandPool, nullptr, dispatch());
+        }
+
+        void destroyImageView(vk::ImageView imageView) const
+        {
+            return vkDevice().destroyImageView(imageView, nullptr, dispatch());
         }
 
         void freeCommandBuffers(vk::CommandPool commandPool, const vk::ArrayProxy<const vk::CommandBuffer>& commandBuffers) const

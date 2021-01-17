@@ -36,6 +36,10 @@ namespace vkq
             if (strcmp(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME, extension) == 0)
                 impl->extensionSupport.deviceCoherentMemoryAMD = true;
 #endif
+#ifdef VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME
+            if (strcmp(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, extension) == 0)
+                impl->extensionSupport.getMemoryRequirements2KHR = true;
+#endif
 #ifdef VK_EXT_MEMORY_BUDGET_EXTENSION_NAME
             if (strcmp(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, extension) == 0)
                 impl->extensionSupport.memoryBudgetEXT = true;

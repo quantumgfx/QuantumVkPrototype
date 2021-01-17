@@ -30,6 +30,10 @@ namespace vkq
             if (strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, extension) == 0)
                 impl->extensionSupport.debugUtilsEXT = true;
 #endif
+#ifdef VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
+            if (strcmp(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, extension) == 0)
+                impl->extensionSupport.getPhysicalDeviceProperties2KHR = true;
+#endif
 #ifdef VK_KHR_SURFACE_EXTENSION_NAME
             if (strcmp(VK_KHR_SURFACE_EXTENSION_NAME, extension) == 0)
                 impl->extensionSupport.surfaceKHR = true;

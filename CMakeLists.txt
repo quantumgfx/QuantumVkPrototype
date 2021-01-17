@@ -74,7 +74,8 @@ set(QM_CORE_HPP_FILES
 	${QM_SRC_DIR}/core/device.hpp
 	${QM_SRC_DIR}/core/queue.hpp
 	${QM_SRC_DIR}/core/commands.hpp
-	${QM_SRC_DIR}/core/memory.hpp)
+	${QM_SRC_DIR}/core/memory.hpp
+	${QM_SRC_DIR}/core/view.hpp)
 
 set(QM_CORE_CPP_FILES 
 	${QM_SRC_DIR}/core/loader.cpp
@@ -83,7 +84,8 @@ set(QM_CORE_CPP_FILES
 	${QM_SRC_DIR}/core/device.cpp
 	${QM_SRC_DIR}/core/queue.cpp
 	${QM_SRC_DIR}/core/commands.cpp
-	${QM_SRC_DIR}/core/memory.cpp)
+	${QM_SRC_DIR}/core/memory.cpp
+	${QM_SRC_DIR}/core/view.cpp)
 
 set(QM_FACTORY_HPP_FILES
 	${QM_SRC_DIR}/factory/debug_factory.hpp
