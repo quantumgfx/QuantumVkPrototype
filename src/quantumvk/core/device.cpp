@@ -3,16 +3,16 @@
 namespace vkq
 {
     explicit Device::Device(Device::Impl* impl)
+        : impl(impl)
     {
     }
 
-    Device Device::create(PFN_vkGetInstanceProcAddr getInstanceProcAddr, vk::Instance instance, vk::PhysicalDevice phdev, const vk::DeviceCreateInfo& createInfo)
+    Device Device::create(const Instance& instance, vk::PhysicalDevice phdev, const vk::DeviceCreateInfo& createInfo)
     {
         Device::Impl* impl = new Device::Impl();
         impl->instance = instance;
         impl->phdev = phdev;
-        impl->dispatch.init(getInstanceProcAddr);
-        impl->dispatch.init(instance);
+        impl->dispatch = instance.dispatch();
         impl->device = phdev.createDevice(createInfo, nullptr, impl->dispatch);
         impl->dispatch.init(impl->device);
 
@@ -50,6 +50,7 @@ namespace vkq
 #endif
         }
 
+        impl->props = phdev.getProperties(impl->dispatch);
         impl->memProps = phdev.getMemoryProperties(impl->dispatch);
 
         return Device{impl};
@@ -57,10 +58,10 @@ namespace vkq
 
     void Device::destroy()
     {
-        impl_->device.destroy(nullptr, impl_->dispatch);
+        impl->device.destroy(nullptr, impl->dispatch);
 
-        delete impl_;
-        impl_ = nullptr;
+        delete impl;
+        impl = nullptr;
     }
 
     void Device::allocateCommandBuffers(vk::CommandPool commandPool, uint32_t commandBufferCount, vk::CommandBuffer* commandBuffers, vk::CommandBufferLevel level, const VkNextProxy<vk::CommandBufferAllocateInfo>& next = {}) const
@@ -71,7 +72,7 @@ namespace vkq
         allocInfo.level = level;
         allocInfo.commandBufferCount = commandBufferCount;
 
-        vk::Result result = impl_->device.allocateCommandBuffers(&allocInfo, commandBuffers, impl_->dispatch);
+        vk::Result result = impl->device.allocateCommandBuffers(&allocInfo, commandBuffers, impl->dispatch);
 
         switch (result)
         {
@@ -84,9 +85,34 @@ namespace vkq
         }
     }
 
+    uint32_t Device::apiVersion() const
+    {
+        return impl->instance.apiVersion() >= impl->props.apiVersion ? impl->props.apiVersion : impl->instance.apiVersion();
+    }
+
+    const vk::PhysicalDeviceProperties& Device::properties() const
+    {
+        return impl->props;
+    }
+
+    const vk::PhysicalDeviceMemoryProperties& Device::memoryProperties() const
+    {
+        return impl->memProps;
+    }
+
+    vk::MemoryType Device::memoryTypeProperties(uint32_t memoryTypeIndex) const
+    {
+        return impl->memProps.memoryTypes[memoryTypeIndex];
+    }
+
+    vk::MemoryHeap Device::memoryHeapProperties(uint32_t memoryHeapIndex) const
+    {
+        return impl->memProps.memoryHeaps[memoryHeapIndex];
+    }
+
     bool Device::isDeviceExtensionEnabled(const char* extensionName) const
     {
-        for (const char* extension : impl_->enabledExtensions)
+        for (const char* extension : impl->enabledExtensions)
             if (strcmp(extensionName, extension) == 0)
                 return true;
         return false;
@@ -94,52 +120,42 @@ namespace vkq
 
     const Device::ExtensionSupport& Device::extensionSupport() const
     {
-        return impl_->extensionSupport;
-    }
-
-    const vk::PhysicalDeviceMemoryProperties& Device::memoryProperties() const
-    {
-        return impl_->memProps;
-    }
-
-    vk::MemoryType Device::memoryTypeProperties(uint32_t memoryTypeIndex) const
-    {
-        return impl_->memProps.memoryTypes[memoryTypeIndex];
-    }
-
-    vk::MemoryHeap Device::memoryHeapProperties(uint32_t memoryHeapIndex) const
-    {
-        return impl_->memProps.memoryHeaps[memoryHeapIndex];
+        return impl->extensionSupport;
     }
 
     const vk::DispatchLoaderDynamic& Device::dispatch() const
     {
-        return impl_->dispatch;
+        return impl->dispatch;
+    }
+
+    Instance Device::instance() const
+    {
+        return impl->instance;
     }
 
     vk::Instance Device::vkInstance() const
     {
-        return impl_->instance;
+        return impl->instance.vkInstance();
     }
 
     vk::PhysicalDevice Device::vkPhysicalDevice() const
     {
-        return impl_->phdev;
+        return impl->phdev;
     }
 
     vk::Device Device::vkDevice() const
     {
-        return impl_->device;
+        return impl->device;
     }
 
     vk::Device Device::vkHandle() const
     {
-        return impl_->device;
+        return impl->device;
     }
 
     Device::operator vk::Device() const
     {
-        return impl_->device;
+        return impl->device;
     }
 
 } // namespace vkq

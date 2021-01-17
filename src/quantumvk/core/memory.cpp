@@ -227,7 +227,7 @@ namespace vkq
     {
         const auto& allocator = linearPool.allocator();
 
-        Impl* impl = allocator.allocImageHandle();
+        Image::Impl* impl = allocator.allocImageHandle();
         impl->hostMemory = nullptr;
         impl->imageType = createInfo.imageType;
         impl->format = createInfo.format;
@@ -263,7 +263,7 @@ namespace vkq
     {
         const auto& allocator = pool.allocator();
 
-        Impl* impl = allocator.allocImageHandle();
+        Image::Impl* impl = allocator.allocImageHandle();
         impl->hostMemory = nullptr;
         impl->imageType = createInfo.imageType;
         impl->format = createInfo.format;
@@ -308,7 +308,7 @@ namespace vkq
 
     Image Image::create(const MemoryAllocator& allocator, const vk::ImageCreateInfo& createInfo, vk::MemoryPropertyFlags requiredMemFlags, vk::MemoryPropertyFlags preferredMemFlags, AllocationFlags allocFlags, AllocationStrategy strategy, uint32_t memoryTypeBits)
     {
-        Impl* impl = allocator.allocImageHandle();
+        Image::Impl* impl = allocator.allocImageHandle();
         impl->hostMemory = nullptr;
         impl->imageType = createInfo.imageType;
         impl->format = createInfo.format;
@@ -476,8 +476,6 @@ namespace vkq
 
     MemoryAllocator MemoryAllocator::create(const Device& device, vk::DeviceSize prefferedLargeHeapBlockSize)
     {
-        uint32_t vulkanApiVersion = VK_MAKE_VERSION(1, 0, 0);
-
         MemoryAllocator::Impl* impl = new MemoryAllocator::Impl();
         impl->device = device;
 
@@ -501,40 +499,61 @@ namespace vkq
         funcs.vkMapMemory = dispatch.vkMapMemory;
         funcs.vkUnmapMemory = dispatch.vkUnmapMemory;
 
-        if (vulkanApiVersion < VK_MAKE_VERSION(1, 1, 0))
+        uint32_t instanceApiVersion = device.instance().apiVersion();
+        uint32_t deviceApiVersion = device.apiVersion();
+        const auto& instanceSupport = device.instance().extensionSupport();
+        const auto& deviceSupport = device.extensionSupport();
+
+        if (instanceApiVersion < VK_MAKE_VERSION(1, 1, 0))
         {
+            if (instanceSupport.getPhysicalDeviceProperties2KHR)
+            {
+                funcs.vkGetPhysicalDeviceMemoryProperties2KHR = dispatch.vkGetPhysicalDeviceMemoryProperties2KHR;
+            }
+        }
+#ifdef VK_VERSION_1_1
+        else
+        {
+            funcs.vkGetPhysicalDeviceMemoryProperties2KHR = dispatch.vkGetPhysicalDeviceMemoryProperties2;
         }
 
+#endif
+
+        if (deviceApiVersion < VK_MAKE_VERSION(1, 1, 0))
+        {
+            if (deviceSupport.bindMemory2KHR)
+            {
+                funcs.vkBindBufferMemory2KHR = dispatch.vkBindBufferMemory2KHR;
+                funcs.vkBindImageMemory2KHR = dispatch.vkBindImageMemory2KHR;
+            }
+
+            if (deviceSupport.getMemoryRequirements2KHR)
+            {
+                funcs.vkGetBufferMemoryRequirements2KHR = dispatch.vkGetBufferMemoryRequirements2KHR;
+                funcs.vkGetImageMemoryRequirements2KHR = dispatch.vkGetImageMemoryRequirements2KHR;
+            }
+        }
 #ifdef VK_VERSION_1_1
-        if (vulkanApiVersion >= VK_MAKE_VERSION(1, 1, 0))
+        else
         {
             funcs.vkBindBufferMemory2KHR = dispatch.vkBindBufferMemory2;
             funcs.vkBindImageMemory2KHR = dispatch.vkBindImageMemory2;
             funcs.vkGetBufferMemoryRequirements2KHR = dispatch.vkGetBufferMemoryRequirements2;
             funcs.vkGetImageMemoryRequirements2KHR = dispatch.vkGetImageMemoryRequirements2;
-            funcs.vkGetPhysicalDeviceMemoryProperties2KHR = dispatch.vkGetPhysicalDeviceMemoryProperties2;
         }
 #endif
 
-        //funcs.vkBindBufferMemory2KHR = dispatch.vkBindBufferMemory2KHR;
-        //funcs.vkBindImageMemory2KHR = dispatch.vkBindImageMemory2KHR;
-        //funcs.vkGetBufferMemoryRequirements2KHR = dispatch.vkGetBufferMemoryRequirements2KHR;
-        //funcs.vkGetImageMemoryRequirements2KHR = dispatch.vkGetImageMemoryRequirements2KHR;
-        //funcs.vkGetPhysicalDeviceMemoryProperties2KHR = dispatch.vkGetPhysicalDeviceMemoryProperties2KHR;
-
         VmaAllocatorCreateFlags flags = 0;
 
-        const auto& support = device.extensionSupport();
-
-        if (support.bindMemory2KHR)
+        if (deviceSupport.bindMemory2KHR)
             flags |= VMA_ALLOCATOR_CREATE_KHR_BIND_MEMORY2_BIT;
-        if (support.bufferDeviceAddressKHR)
+        if (deviceSupport.bufferDeviceAddressKHR)
             flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
-        if (support.dedicatedAllocationKHR)
+        if (deviceSupport.dedicatedAllocationKHR)
             flags |= VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
-        if (support.deviceCoherentMemoryAMD)
+        if (deviceSupport.deviceCoherentMemoryAMD)
             flags |= VMA_ALLOCATOR_CREATE_AMD_DEVICE_COHERENT_MEMORY_BIT;
-        if (support.memoryBudgetEXT)
+        if (deviceSupport.memoryBudgetEXT)
             flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
 
         VmaAllocatorCreateInfo createInfo{};
@@ -548,7 +567,7 @@ namespace vkq
         createInfo.frameInUseCount = 0;
         createInfo.preferredLargeHeapBlockSize = prefferedLargeHeapBlockSize;
         createInfo.flags = flags;
-        createInfo.vulkanApiVersion = VK_MAKE_VERSION(1, 0, 0);
+        createInfo.vulkanApiVersion = deviceApiVersion;
 
         vk::Result res = static_cast<vk::Result>(vmaCreateAllocator(&createInfo, &impl->allocator));
 

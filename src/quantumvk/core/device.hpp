@@ -46,36 +46,14 @@ namespace vkq
 
     public:
         /**
-         * @brief Creates a new device given native vk:: handles and createInfo.
-         * 
-         * @param getInstanceProcAddr PFN_vkGetInstanceProcAddr that connects the application to the vulkan loader
-         * @param instance Vulkan instance
-         * @param phdev Physical Device that the logical device will interface with.
-         * @param createInfo Info to be passed into vk:: createDevice() that creates the vk::Device handle
-         * @return Newly created device
-         */
-        static Device create(PFN_vkGetInstanceProcAddr getInstanceProcAddr, vk::Instance instance, vk::PhysicalDevice phdev, const vk::DeviceCreateInfo& createInfo);
-
-        /**
-         * @brief Creates a new device given a vkq::Loader and a series of vk:: handles and createInfo.
-         * 
-         * @param loader vkq::Loader object
-         * @param instance Vulkan instance
-         * @param phdev Physical Device that the logical device will interface with.
-         * @param createInfo Info to be passed into vk:: createDevice() that creates the vk::Device handle
-         * @return Newly created device 
-         */
-        static Device create(const Loader& loader, vk::Instance instance, vk::PhysicalDevice phdev, const vk::DeviceCreateInfo& createInfo) { return create(loader.instanceProcAddrLoader(), instance, phdev, createInfo); }
-
-        /**
-         * @brief Creates a new device given a vkq::Instance, a vk::PhysicalDevice, and vk::DeviceCreateInfo/
+         * @brief Creates a new device given a vkq::Instance, a vk::PhysicalDevice, and vk::DeviceCreateInfo
          * 
          * @param instance Parent instance of device
          * @param phdev Physical Device that the logical device will interface with.
          * @param createInfo Info to be passed into vk:: createDevice() that creates the vk::Device handle
          * @return Newly created device 
          */
-        static Device create(const Instance& instance, vk::PhysicalDevice phdev, const vk::DeviceCreateInfo& createInfo) { return create(instance.instanceProcAddrLoader(), instance.vkInstance(), phdev, createInfo); }
+        static Device create(const Instance& instance, vk::PhysicalDevice phdev, const vk::DeviceCreateInfo& createInfo);
 
         /**
          * @brief Creates a new device given a vkq::PhysicalDevice, and vk::DeviceCreateInfo.
@@ -188,6 +166,18 @@ namespace vkq
         ///////////////////////////////
 
         /**
+         * @brief Gets the device api version. This is essentially just min(instanceApiVersion, physicalDeviceApiVersion)
+         * 
+         * @return uint32_t containing the device api version
+         */
+        uint32_t apiVersion() const;
+
+        const vk::PhysicalDeviceProperties& properties() const;
+        const vk::PhysicalDeviceMemoryProperties& memoryProperties() const;
+        vk::MemoryType memoryTypeProperties(uint32_t memoryTypeIndex) const;
+        vk::MemoryHeap memoryHeapProperties(uint32_t memoryHeapIndex) const;
+
+        /**
          * @brief Returns whether a particular device extension is enabled
          * 
          * @param extensionName 
@@ -198,10 +188,7 @@ namespace vkq
 
         const ExtensionSupport& extensionSupport() const;
 
-        const vk::PhysicalDeviceMemoryProperties& memoryProperties() const;
-        vk::MemoryType memoryTypeProperties(uint32_t memoryTypeIndex) const;
-        vk::MemoryHeap memoryHeapProperties(uint32_t memoryHeapIndex) const;
-
+        
         ///////////////////////////////
         // Native Objects /////////////
         ///////////////////////////////
@@ -215,18 +202,18 @@ namespace vkq
         const vk::DispatchLoaderDynamic& dispatch() const;
 
         /**
-         * @brief Get the PFN_vkGetInstanceProcAddr used to load instance level function pointers.
-         * 
-         * @return The PFN_vkGetInstanceProcAddr used to load instance level function pointers.
-         */
-        PFN_vkGetInstanceProcAddr instanceProcAddrLoader() const { return dispatch().vkGetInstanceProcAddr; }
-
-        /**
          * @brief Get the PFN_vkGetDeviceProcAddr used to load device level function pointers.
          * 
          * @return The PFN_vkGetDeviceProcAddr used to load device level function pointers.
          */
         PFN_vkGetDeviceProcAddr deviceProcAddrLoader() const { return dispatch().vkGetDeviceProcAddr; }
+
+        /**
+         * @brief Get the parent instance of device. 
+         * 
+         * @return The vkq::Instance used to create the device.
+         */
+        Instance instance() const;
 
         vk::Instance vkInstance() const;
         vk::PhysicalDevice vkPhysicalDevice() const;
@@ -237,20 +224,20 @@ namespace vkq
     private:
         struct Impl
         {
-            vk::Instance instance;
+            Instance instance;
             vk::PhysicalDevice phdev;
             vk::Device device;
             vk::DispatchLoaderDynamic dispatch;
 
-            std::vector<const char*> enabledExtensions;
-
-            Device::ExtensionSupport extensionSupport;
-
+            // Properties
+            vk::PhysicalDeviceProperties props;
             vk::PhysicalDeviceMemoryProperties memProps;
+            std::vector<const char*> enabledExtensions;
+            Device::ExtensionSupport extensionSupport;
         };
 
         explicit Device(Impl* impl);
 
-        Impl* impl_ = nullptr;
+        Impl* impl = nullptr;
     };
 } // namespace vkq
